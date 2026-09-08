@@ -1,0 +1,70 @@
+###OS###
+PRETTY_NAME="Ubuntu 24.04.3 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION="24.04.3 LTS (Noble Numbat)"
+ID=ubuntu
+ID_LIKE=debian
+
+###KERNEL###
+Linux
+6.8.0-51-generic
+x86_64
+
+###CPU###
+4
+AMD EPYC Processor
+
+###MEM###
+MemTotal:        8142848 kB
+MemFree:         6200000 kB
+MemAvailable:    7300000 kB
+
+###DISK###
+/dev/sda1       80530636800  2150000000 78380636800   3% /
+
+###HOST###
+vps-2
+203.0.113.10
+
+###PORTS###
+Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port
+tcp   LISTEN 0      128          0.0.0.0:22        0.0.0.0:*
+tcp   LISTEN 0      128             [::]:22           [::]:*
+
+###SERVICES###
+ssh.service
+cron.service
+systemd-networkd.service
+
+###DOCKER###
+ABSENT
+
+###NGINX###
+ABSENT
+
+###MARIADB###
+ABSENT
+
+###REDIS###
+ABSENT
+
+###TRAEFIK###
+ABSENT
+
+###UFW###
+Status: inactive
+
+###FAIL2BAN###
+ABSENT
+
+###SSHD###
+permitrootlogin yes
+passwordauthentication yes
+pubkeyauthentication yes
+port 22
+
+###WHO###
+root
+root
+root sudo

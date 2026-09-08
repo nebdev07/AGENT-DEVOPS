@@ -1,0 +1,19 @@
+---
+description: Guide utilisateur Aide #help — à jour à chaque changement UI/fonction
+alwaysApply: true
+---
+
+# Guide utilisateur — obligatoire dans le même chantier
+
+Toute évolution **visible ou utilisable** (UI, copie, bouton, rôle d’install, plan SKIP/READY, loader, pile, cockpit) met à jour **sans attendre une demande** :
+
+1. `src/main/resources/static/index.html` — page **Aide** (`#view-help` / `#help`)
+2. Les hints du cockpit si le geste change (`#stackCard`, `#installCard`, accueil)
+3. Cache-bust `?v=` sur `console.js` / `console.css` si ces fichiers bougent
+4. `.docs/changelog.md` + `current_state.md` (jamais effacer)
+
+Le guide s’adresse au **visiteur public** (ADR-022) : pas de noms de projets personnels, pas d’IP de lab.
+
+« Déjà installé » / SKIP = **cet hôte**, pas un jalon produit. Distinguer traitements **disponibles pour toute IP** vs état du serveur analysé.
+
+Clôturer une livraison UI/fonction **sans** l’Aide à jour est incomplet.

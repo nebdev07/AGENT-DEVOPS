@@ -1,0 +1,13 @@
+server.port: 8088
+
+devops:
+  state-dir: ./state
+  lab-fixture: classpath:fixtures/ubuntu-vps2-blank.txt
+  ssh:
+    host: ${DEVOPS_SSH_HOST:}
+    port: ${DEVOPS_SSH_PORT:22}
+    user: ${DEVOPS_SSH_USER:}
+    private-key-path: ${DEVOPS_SSH_KEY:}
+    passphrase: ${DEVOPS_SSH_PASSPHRASE:}
+    trust-unknown: ${DEVOPS_SSH_TRUST_UNKNOWN:false}
+    timeout-seconds: 45

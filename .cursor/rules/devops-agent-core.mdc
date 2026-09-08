@@ -1,0 +1,16 @@
+---
+description: Règles cœur VPS Autopilot — risque, docs, cibles, secrets
+alwaysApply: true
+---
+
+# VPS Autopilot — règle cœur
+
+1. Lire `.docs/` (`current_state`, `architecture`, `decisions`) avant de modifier.
+2. L’IA ne génère pas de shell root libre. Plan → validation → executor déterministe (whitelist READ, Ansible pour CHANGE).
+3. READ auto. CHANGE = plan + confirmation. DESTRUCTIVE = confirmation + liste. CHANGE whitelist : `install-agent-pubkey`, `install-security`, `install-docker`, `install-traefik`, `install-mariadb`, `install-deploy`, `deploy-app`.
+4. Idempotence : consulter l’état avant d’agir. Ne pas réinstaller ce qui est déjà correct.
+5. Secrets hors git. Pas d’IP SSH par défaut. Lab = VPS perso, jamais ARC `54.37.156.11` ni DTSI `154.0.30.233`.
+6. Docs **et guide Aide** (`#help` dans `index.html`) dans le même chantier. Ne jamais effacer une info.
+7. Tests du parseur et d’`ActionGuard` avant de clôturer une phase qui touche le protocole discovery/risque.
+8. Pas d’install manuelle Docker/MariaDB/Traefik/compte deploy/apps sur le VPS-2 : ça passe par l’agent (V1+).
+9. Ce dépôt est `AGENTS/devops-agent`. Un agent = un projet. Ne pas fusionner d’autres agents ici ; les ajouter à côté sous `AGENTS/`.

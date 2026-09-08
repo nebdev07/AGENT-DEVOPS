@@ -1,0 +1,7 @@
+services:
+  vps-lab:
+    build: .
+    container_name: vps-autopilot-lab
+    ports:
+      - "2222:22"
+    restart: unless-stopped

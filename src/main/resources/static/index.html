@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VPS Autopilot</title>
+  <link rel="stylesheet" href="/console.css?v=app4" />
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+
+  <header class="top">
+    <a class="brand" href="#home" data-view="home">
+      <span class="mark"></span>
+      <div>
+        <strong>VPS Autopilot</strong>
+        <span class="sub">Agent DevOps · plan + confirmation</span>
+      </div>
+    </a>
+    <nav class="nav">
+      <a href="#home" data-view="home">Accueil</a>
+      <a href="#help" data-view="help">Aide</a>
+      <a href="#cockpit" data-view="cockpit" class="nav-cta">Cockpit</a>
+    </nav>
+    <div class="top-meta">
+      <span id="modePill" class="pill">…</span>
+      <span id="phasePill" class="pill mute">V0</span>
+    </div>
+  </header>
+
+  <section id="view-home" class="view home">
+    <div class="hero">
+      <p class="kicker rise d1">Produit</p>
+      <h1 class="rise d2">Voir le serveur<br>avant de le toucher.</h1>
+      <p class="lede rise d3">
+        Tu fournis l’IP. L’agent lit le VPS, propose une pile, n’installe que ce que tu confirmes.
+        Chaque serveur a son propre état : déjà posé chez l’un, à installer chez l’autre.
+      </p>
+      <div class="hero-actions rise d4">
+        <a class="btn" href="#cockpit" data-view="cockpit">Ouvrir le cockpit</a>
+        <a class="btn ghost" href="#help" data-view="help">Aide utilisateur</a>
+      </div>
+    </div>
+
+    <div class="pillars">
+      <article class="pillar rise d3">
+        <i class="dot read"></i>
+        <h3>READ</h3>
+        <p>OS, CPU, RAM, ports, logiciels. Automatique. Aucune écriture.</p>
+      </article>
+      <article class="pillar rise d4">
+        <i class="dot change"></i>
+        <h3>CHANGE</h3>
+        <p>Modifier : clé SSH, sécurité, Docker, Traefik, MariaDB, compte deploy, une app. Toujours un plan + ta confirmation.</p>
+      </article>
+      <article class="pillar rise d5">
+        <i class="dot dest"></i>
+        <h3>DESTRUCTIVE</h3>
+        <p>Réinstall, rm, drop : refusés. Plus tard, confirmation + liste de ce qui part.</p>
+      </article>
+    </div>
+
+  </section>
+
+  <section id="view-help" class="view hidden">
+    <article class="guide help" aria-labelledby="helpTitle">
+      <p class="kicker">Aide utilisateur</p>
+      <h2 id="helpTitle">Tout faire, dans l’ordre, sans surprise</h2>
+      <p class="lede">
+        Tu colles l’IP de ton VPS. L’agent lit ce serveur, puis n’installe que ce que tu confirmes.
+        Ce qui est déjà posé <em>sur cette machine</em> n’est pas reproposé. Un autre VPS reprend les mêmes traitements depuis le début.
+      </p>
+
+      <ol class="steps">
+        <li class="step">
+          <h3>1. À quoi sert l’agent</h3>
+          <p>Tu as un VPS. Au lieu d’installer Docker, un reverse-proxy ou une base « à la main », tu passes par cet outil.</p>
+          <ul>
+            <li><strong>READ</strong> — lire (OS, CPU, RAM, logiciels). Automatique.</li>
+            <li><strong>CHANGE</strong> — modifier (clé SSH, sécurité, Docker, Traefik, MariaDB, compte deploy, une app). Plan + tu confirmes.</li>
+            <li><strong>DESTRUCTIVE</strong> — détruire. Refusé pour l’instant.</li>
+          </ul>
+          <p class="hint">L’IA ne reçoit jamais un accès root libre. Les scripts sont versionnés, pas inventés à la volée.</p>
+        </li>
+
+        <li class="step">
+          <h3>2. Ouvrir le cockpit et remplir les paramètres</h3>
+          <p>Menu <a href="#cockpit" data-view="cockpit">Cockpit</a>. Renseigne au minimum :</p>
+          <ul>
+            <li><strong>Hôte / IP</strong> — l’adresse de ton VPS</li>
+            <li><strong>Utilisateur</strong> — souvent <code>ubuntu</code>, parfois <code>root</code></li>
+            <li><strong>Port</strong> — <code>22</code> sauf si tu l’as changé</li>
+            <li><strong>Système</strong> — <code>Auto</code> convient</li>
+          </ul>
+          <p>Tant que tu n’as pas cliqué <strong>Analyser le VPS</strong> avec succès, le tableau reste vide. Pas de données d’exemple.</p>
+        </li>
+
+        <li class="step">
+          <h3>3. Clé SSH (obligatoire pour analyser)</h3>
+          <p>
+            L’agent se présente avec une <strong>paire de clés</strong> : privée sur ce PC,
+            publique <strong>sur le VPS</strong> (fichier <code>~/.ssh/authorized_keys</code>).
+          </p>
+          <div class="callout">
+            <strong>Piège OVH :</strong> « Mes clés SSH publiques » dans le compte n’installe
+            rien sur un VPS déjà créé. Ça ne sert qu’à la création ou une réinstall.
+            Ne réinstalle pas le serveur pour ça.
+          </div>
+          <p>Générer la clé une fois, sur <em>ce</em> PC (PowerShell) :</p>
+          <div class="copyrow">
+            <pre id="genCmd">ssh-keygen -t ed25519 -f $HOME\.ssh\vps-autopilot -C "vps-autopilot-personal" -N ""</pre>
+            <button id="btnCopyGen" type="button" class="ghost slim">Copier</button>
+          </div>
+          <p class="hint">
+            S’il demande d’écraser : <strong>n</strong>.
+            Fichiers : <code>vps-autopilot</code> (secret) et <code>vps-autopilot.pub</code> (à coller sur le serveur).
+          </p>
+          <p id="genStatus" class="ok-line hidden">Clé déjà présente sur ce PC.</p>
+          <p>Clé publique de cet agent (une seule ligne) :</p>
+          <div class="copyrow">
+            <pre id="guidePubKey">Chargement…</pre>
+            <button id="btnCopyKey" type="button" class="ghost slim">Copier</button>
+          </div>
+          <p>Trois façons de la poser <em>sur le VPS</em> :</p>
+          <div class="methods">
+            <section class="method">
+              <h4>A — Cockpit (le plus simple)</h4>
+              <ol>
+                <li>IP + utilisateur (<code>ubuntu</code> ou <code>root</code>).</li>
+                <li>Mot de passe du <strong>mail de livraison OVH</strong>.</li>
+                <li><strong>Installer la clé (CHANGE)</strong> → confirme.</li>
+              </ol>
+              <p class="hint">Le mot de passe n’est pas enregistré. Une ligne dans <code>authorized_keys</code>.</p>
+            </section>
+            <section class="method">
+              <h4>B — Console KVM OVH</h4>
+              <p>Fiche du VPS (pas « Mes clés SSH ») → Console KVM → login mail, puis :</p>
+              <div class="copyrow">
+                <pre id="kvmCmd">mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+touch ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+nano ~/.ssh/authorized_keys</pre>
+                <button id="btnCopyKvm" type="button" class="ghost slim">Copier</button>
+              </div>
+              <p class="hint">Colle la clé, une ligne. Enregistrer : Ctrl+O, Entrée, Ctrl+X.</p>
+            </section>
+            <section class="method">
+              <h4>C — PowerShell</h4>
+              <div class="copyrow">
+                <pre id="pwshCmd">ssh ubuntu@IP "mkdir -p ~/.ssh; chmod 700 ~/.ssh; touch ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys"
+type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys"</pre>
+                <button id="btnCopyPwsh" type="button" class="ghost slim">Copier</button>
+              </div>
+            </section>
+          </div>
+        </li>
+
+        <li class="step">
+          <h3>4. Analyser</h3>
+          <p>
+            Bouton <strong>Analyser le VPS</strong>. L’empreinte SSH est enregistrée, puis lecture seule.
+            Si « Authentification refusée » : la clé n’est pas sur ce compte — étape 3.
+          </p>
+          <p>Ensuite seulement : OS, CPU, RAM, disque, logiciels <strong>de ce VPS</strong>.</p>
+        </li>
+
+        <li class="step">
+          <h3>5. Choisir quoi installer (après l’analyse)</h3>
+          <p>
+            La carte <strong>Installations</strong> (le bouton Installer) est juste sous le tableau. La liste <strong>« Que doit installer l’agent ? »</strong> est en dessous, dans un menu <strong>fermé</strong> : clique le titre pour déplier. Elle décrit ce que tu <em>veux</em> sur <em>ce VPS</em>, ce n’est pas le bouton.
+          </p>
+          <ul>
+            <li>Coche la <strong>section</strong> (Sécurité, Docker, Traefik, MariaDB, Compte deploy…). Ce menu décrit ce que tu <em>veux</em>. Le bouton <strong>Installer</strong> n’est pas dans les cases : il est dans la carte <strong>Installations</strong>, au-dessus.</li>
+            <li>Une nouvelle section par défaut (ex. Compte deploy) est ajoutée toute seule à une pile déjà enregistrée. Décocher reste possible et n’est pas recassé au rechargement.</li>
+            <li>Les <strong>détails</strong> (UFW, Compose, groupe docker…) sont dans un menu fermé. « 2 à installer » = encore cochés et pas détectés sur ce VPS → bouton Installer du <em>composant</em> dans Installations (pas dans ce menu).</li>
+            <li>Le <strong>pourquoi</strong> et <strong>ce que ça fera</strong> sont dans un second menu, fermé par défaut.</li>
+            <li>Déjà présent sur <em>ce</em> serveur : case grisée, mention « déjà installé », non recochable.</li>
+            <li>Décocher est permis. Si ça casse la politique (sécurité, Docker, Traefik, backups), tu es prévenu.</li>
+            <li>Redis est optionnel. Nginx sur l’hôte n’est <strong>pas proposé</strong> (risque webshell) : pas de case.</li>
+            <li>Rien n’est installé tant que tu n’as pas confirmé un CHANGE.</li>
+          </ul>
+        </li>
+
+        <li class="step">
+          <h3>6. Bouton Installer</h3>
+          <ul>
+            <li>Il n’apparaît que dans la carte <strong>Installations</strong>, si le composant (ou un détail encore coché) manque <em>sur ce VPS</em>. Les actions <strong>READY</strong> sont en premier. Exemple : moteur Docker déjà là mais Compose / groupe docker encore cochés et non détectés → bouton Installer Docker (idempotent, ne réinstalle pas le moteur).</li>
+            <li>S’il est déjà conforme ici : pas de bouton, mention « déjà installé ». Une IP neuve reverra le bouton.</li>
+            <li>Exécutable aujourd’hui : <strong>Sécurité</strong>, <strong>Docker</strong>, <strong>Traefik</strong>, <strong>MariaDB</strong>, <strong>Compte deploy</strong>.</li>
+            <li>Sécurité n’est complète que si UFW est actif, fail2ban tourne, le mot de passe SSH est coupé et root SSH est fermé. fail2ban seul ne suffit pas.</li>
+            <li>Traefik et MariaDB : seulement après une sécurité complète <em>sur ce VPS</em>, et Docker présent. Traefik ouvre 80/443 sans exposer d’app. MariaDB n’écoute pas sur Internet.</li>
+            <li>Compte deploy : même prérequis. Utilisateur <code>deploy</code>, groupe docker, pas de sudo, clé de l’agent copiée. Aucune app n’est lancée.</li>
+            <li>Redis et backups : prévus, pas encore de bouton. Une app : bande <strong>Applications</strong> après analyse (Git HTTPS + Dockerfile).</li>
+            <li>Pendant analyse, clé ou install : un écran décrit le traitement. Ne ferme pas la page. Traefik / MariaDB : jusqu’à ~5 min (téléchargement d’image).</li>
+            <li>À la fin, une fenêtre indique <strong>succès</strong> ou <strong>échec</strong> (et pourquoi). Clique <strong>Fermer</strong>. En cas d’échec, l’état déjà connu du VPS n’est pas effacé.</li>
+          </ul>
+          <p class="hint">Ordre conseillé : clé SSH → analyser → sécurité → Docker → Traefik → MariaDB → compte deploy → app (Git).</p>
+        </li>
+
+        <li class="step">
+          <h3>7. Déployer une app</h3>
+          <ul>
+            <li>Prérequis <em>sur ce VPS</em> : sécurité SKIP, Docker, Traefik, compte deploy. Tant que deploy est absent, un bandeau l’indique : installe d’abord le compte (bouton Installer), ensuite seulement Enregistrer / Déployer.</li>
+            <li>Le dépôt doit être <strong>HTTPS public</strong> et contenir un <strong>Dockerfile</strong> à la racine. L’agent écrit le compose (Traefik, pas de port publié).</li>
+            <li>Identifiant, Git, branche, nom d’hôte, port interne → Enregistrer dans la liste, puis le bouton <strong>Déployer</strong> apparaît sur cette ligne (confirmation CHANGE). Sans enregistrement, la liste reste vide — ce n’est pas un bug.</li>
+            <li>Premier test prévu : déployer <strong>ce produit</strong> (même dépôt, Dockerfile à la racine, port <code>8080</code>, identifiant <code>vps-autopilot</code>). Il faut un Git <strong>HTTPS public</strong> (pousser ce dépôt). Nom d’hôte : DNS vers le VPS, ou un nom du type <code>app.&lt;IP&gt;.sslip.io</code>.</li>
+            <li>L’instance publique est <strong>cargo</strong> : page de preuve + <code>/api/v1/health</code>. <strong>Aucun CHANGE</strong> depuis Internet. Le cockpit reste sur <code>127.0.0.1:8088</code>.</li>
+            <li>Le DNS du nom d’hôte vers l’IP du VPS est à toi (sauf astuce sslip). Grants SQL par projet : pas encore.</li>
+          </ul>
+        </li>
+
+        <li class="step">
+          <h3>8. Couleurs du tableau</h3>
+          <ul>
+            <li><strong>Vert doux</strong> — présent / sain</li>
+            <li><strong>Gris</strong> — absent (pas encore installé)</li>
+            <li><strong>Ambre</strong> — inconnu</li>
+            <li><strong>Rouge doux</strong> — à surveiller (SSH trop ouvert, pare-feu inactif, disque plein)</li>
+          </ul>
+          <p class="hint">Le tableau est découpé en bandes : <strong>État du serveur</strong>, <strong>Logiciels</strong>, <strong>Applications</strong>, <strong>Pile et installations</strong>, <strong>Rapport</strong>. Filet à gauche, teintes calmes.</p>
+        </li>
+
+        <li class="step">
+          <h3>9. Ce que l’agent ne fera pas</h3>
+          <ul>
+            <li>Cibler un serveur interdit ou déjà bloqué par l’agent.</li>
+            <li>Installer Apache, PHP ou Nginx directement sur l’hôte.</li>
+            <li>Lancer un shell root inventé par une IA.</li>
+            <li>Afficher un faux serveur (4 vCPU « démo ») à la place du tien.</li>
+          </ul>
+        </li>
+      </ol>
+    </article>
+  </section>
+
+  <main id="view-cockpit" class="view layout hidden">
+    <aside class="rail">
+      <p class="kicker">Cockpit</p>
+      <h1>Paramètres du VPS</h1>
+      <p class="lede">
+        L’OS n’est pas figé : auto-détection, ou tu le déclares.
+        <a href="#help" data-view="help">Aide</a> si tu bloques (clé SSH, analyse, install).
+      </p>
+      <label class="field">Nom
+        <input id="vpsName" type="text" placeholder="ex. vps-perso" />
+      </label>
+      <label class="field">Hôte / IP
+        <input id="sshHost" type="text" autocomplete="off" placeholder="IP ou nom DNS" />
+      </label>
+      <label class="field">Système
+        <select id="vpsOs">
+          <option value="auto" selected>Auto (détecté à l’analyse)</option>
+          <option value="ubuntu">Ubuntu</option>
+          <option value="debian">Debian</option>
+          <option value="rhel">RHEL</option>
+          <option value="rocky">Rocky Linux</option>
+          <option value="alma">AlmaLinux</option>
+          <option value="fedora">Fedora</option>
+          <option value="alpine">Alpine</option>
+          <option value="amazon">Amazon Linux</option>
+        </select>
+      </label>
+      <div class="row2">
+        <label class="field">Utilisateur SSH
+          <input id="sshUser" type="text" placeholder="selon l’OS" />
+        </label>
+        <label class="field">Port
+          <input id="sshPort" type="number" value="22" min="1" max="65535" />
+        </label>
+      </div>
+      <label class="field">Mot de passe SSH (mail OVH, jamais enregistré)
+        <input id="sshPassword" type="password" autocomplete="off" placeholder="requis pour installer la clé" />
+      </label>
+      <div class="key-mini">
+        <p class="hint" id="pubKeyHint">Clé publique : voir l’aide.</p>
+        <button id="btnCopyRail" type="button" class="ghost slim hidden">Copier la clé</button>
+      </div>
+      <button id="btnInstallKey" type="button" class="change">Installer la clé (CHANGE)</button>
+      <button id="btnTrust" type="button" class="ghost">Enregistrer l’empreinte SSH</button>
+      <button id="btnDiscover" type="button">Analyser le VPS</button>
+      <p id="statusLine" class="status">Prêt.</p>
+      <div class="legend">
+        <div><i class="dot read"></i> Vert — présent / sain</div>
+        <div><i class="dot mute"></i> Gris — absent (pas encore installé)</div>
+        <div><i class="dot change"></i> Ambre — inconnu</div>
+        <div><i class="dot dest"></i> Rouge — à surveiller</div>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div id="empty" class="empty">
+        <p>Aucun tableau tant que le VPS n’est pas analysé.</p>
+        <p class="hint">Renseigne IP, utilisateur, port — puis Analyser. Pas de données fictives.</p>
+      </div>
+
+      <div id="board" class="board hidden">
+        <div class="band band-observe">
+          <p class="band-label">État du serveur</p>
+          <div class="hero-row">
+            <article class="card wide">
+              <p class="kicker">Système</p>
+              <h2 id="osPretty">—</h2>
+              <p class="mono" id="hostLine">—</p>
+            </article>
+            <article class="card risk">
+              <p class="kicker">Risque</p>
+              <h2>READ</h2>
+              <p>Aucune modification du serveur</p>
+            </article>
+          </div>
+
+          <div class="metrics">
+            <article class="card" id="cardCpu"><p class="kicker">CPU</p><h2 id="cpu">—</h2><p id="cpuModel" class="muted">—</p></article>
+            <article class="card" id="cardRam"><p class="kicker">Mémoire</p><h2 id="ram">—</h2><div class="bar"><span id="ramBar"></span></div></article>
+            <article class="card" id="cardDisk"><p class="kicker">Disque</p><h2 id="disk">—</h2><div class="bar"><span id="diskBar"></span></div></article>
+            <article class="card" id="cardSsh"><p class="kicker">SSH</p><h2 id="sshListen">—</h2><p id="sshDetail" class="muted">—</p></article>
+          </div>
+
+          <article class="card live-warnings hidden" id="liveWarnings"></article>
+        </div>
+
+        <div class="band band-apps">
+          <p class="band-label">Logiciels</p>
+          <div class="software">
+            <div class="sw" data-k="docker"><span>Docker</span><b id="swDocker">—</b></div>
+            <div class="sw" data-k="nginx"><span>Nginx</span><b id="swNginx">—</b></div>
+            <div class="sw" data-k="mariadb"><span>MariaDB</span><b id="swMariadb">—</b></div>
+            <div class="sw" data-k="redis"><span>Redis</span><b id="swRedis">—</b></div>
+            <div class="sw" data-k="traefik"><span>Traefik</span><b id="swTraefik">—</b></div>
+            <div class="sw" data-k="deploy"><span>Compte deploy</span><b id="swDeploy">—</b></div>
+            <div class="sw" data-k="ufw"><span>Pare-feu</span><b id="swUfw">—</b></div>
+          </div>
+        </div>
+
+        <div class="band band-workloads">
+          <p class="band-label">Applications</p>
+          <article class="card hidden" id="appsCard">
+            <p class="kicker">CHANGE · Git → image → Traefik</p>
+            <h2>Déployer une app</h2>
+            <p class="hint app-gate" id="appsGate" hidden></p>
+            <p class="hint">Dépôt HTTPS public, <strong>Dockerfile</strong> à la racine. Premier test prévu : ce produit (identifiant <code>vps-autopilot</code>, port <code>8080</code>) — instance cargo, pas le cockpit. Compte deploy + Traefik requis. Le bouton Déployer n’apparaît qu’après <strong>Enregistrer dans la liste</strong>.</p>
+            <div class="row2 app-fields">
+              <label class="field">Identifiant
+                <input id="appId" type="text" placeholder="mon-app" autocomplete="off" />
+              </label>
+              <label class="field">Port interne
+                <input id="appPort" type="number" value="8080" min="1" max="65535" />
+              </label>
+            </div>
+            <label class="field">Git (HTTPS)
+              <input id="appGit" type="url" placeholder="https://…" autocomplete="off" />
+            </label>
+            <div class="row2 app-fields">
+              <label class="field">Branche
+                <input id="appRef" type="text" value="main" autocomplete="off" />
+              </label>
+              <label class="field">Nom d’hôte
+                <input id="appHostName" type="text" placeholder="app.exemple.org" autocomplete="off" />
+              </label>
+            </div>
+            <button id="btnAppSave" type="button" class="ghost">Enregistrer dans la liste</button>
+            <div id="appList" class="action-list"></div>
+          </article>
+        </div>
+
+        <div class="band band-actions">
+          <p class="band-label">Pile et installations</p>
+          <article class="card hidden" id="installCard">
+            <p class="kicker">Actions · CHANGE</p>
+            <h2>Installations</h2>
+            <p class="hint">Le bouton <strong>Installer</strong> est ici, pas dans le menu des cases. Il n’apparaît que si quelque chose manque <em>sur ce VPS</em> (y compris un détail Docker encore coché). Les actions à faire sont en haut. Déjà conforme = « déjà installé », sans bouton.</p>
+            <div id="installActions" class="action-list"></div>
+          </article>
+
+          <article class="card stack-card hidden" id="stackCard">
+            <details class="stack-panel" id="stackPanel">
+              <summary>
+                <p class="kicker">Pile voulue · ce VPS</p>
+                <h2>Que doit installer l’agent ?</h2>
+              </summary>
+              <p class="hint">Ceci est la liste <strong>voulue</strong> (cases), pas le bouton. Coche une section. Les détails et les explications sont dans des menus fermés. Pour poser ce qui manque : carte <strong>Installations</strong> au-dessus.</p>
+              <div id="stackList" class="stack-list"></div>
+              <div id="stackWarnings" class="stack-warnings" hidden></div>
+            </details>
+          </article>
+        </div>
+
+        <div class="band band-report">
+          <p class="band-label">Rapport</p>
+          <article class="card report">
+            <p class="kicker">Rapport</p>
+            <pre id="report">—</pre>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="busyOverlay" class="busy-overlay hidden" aria-hidden="true" role="alertdialog" aria-modal="true" aria-labelledby="busyTitle" aria-describedby="busyDetail">
+    <div class="busy-card">
+      <div class="busy-spin" aria-hidden="true"></div>
+      <p class="kicker" id="busyRisk">Traitement</p>
+      <h2 id="busyTitle">Travail en cours</h2>
+      <p id="busyDetail" class="busy-detail"></p>
+      <ol id="busySteps" class="busy-steps hidden"></ol>
+      <p id="busyElapsed" class="busy-elapsed">0 s</p>
+      <p class="hint">Laisse cette fenêtre ouverte jusqu’à la fin. Rien n’est inventé : script versionné, déjà confirmé.</p>
+    </div>
+  </div>
+
+  <div id="resultOverlay" class="busy-overlay result-overlay hidden" aria-hidden="true" role="alertdialog" aria-modal="true" aria-labelledby="resultTitle" aria-describedby="resultDetail">
+    <div class="busy-card result-card" id="resultCard">
+      <p class="kicker" id="resultKicker">Résultat</p>
+      <h2 id="resultTitle">Opération terminée</h2>
+      <p id="resultDetail" class="busy-detail"></p>
+      <p id="resultNext" class="hint"></p>
+      <button id="btnResultClose" type="button">Fermer</button>
+    </div>
+  </div>
+
+  <script src="/console.js?v=app4"></script>
+</body>
+</html>

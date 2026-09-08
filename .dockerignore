@@ -1,0 +1,14 @@
+.git
+.idea
+.cursor
+.vscode
+state
+target
+.env
+*.iml
+*.log
+infrastructure/lab/keys
+.docs
+README.md
+**/.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+---
+description: Documentation progressive du dépôt devops-agent
+globs: .docs/**
+alwaysApply: false
+---
+
+# Documentation
+
+Toute capacité livrée avance `.docs/` dans le même chantier.
+
+- Catalogue et parcours de reprise : `documentation.md`
+- `current_state.md` + `changelog.md` a minima
+- Guide utilisateur : `src/main/resources/static/index.html` section Aide (`#help`) — **même chantier** si l’UI ou une fonction change
+- ADR si décision
+- Distinguer spécifié vs implémenté
+- Ne jamais effacer : amender ou marquer obsolete
