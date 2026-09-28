@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app4" />
+  <link rel="stylesheet" href="/console.css?v=app16" />
 </head>
 <body>
   <div class="bg"></div>
@@ -70,6 +70,7 @@
       <h2 id="helpTitle">Tout faire, dans l’ordre, sans surprise</h2>
       <p class="lede">
         Tu colles l’IP de ton VPS. L’agent lit ce serveur, puis n’installe que ce que tu confirmes.
+        Aujourd’hui : <strong>un seul opérateur</strong> (toi), console en local. Plus tard (V9) : chacun sa session et ses paramètres.
         Ce qui est déjà posé <em>sur cette machine</em> n’est pas reproposé. Un autre VPS reprend les mêmes traitements depuis le début.
       </p>
 
@@ -193,7 +194,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li>Sécurité n’est complète que si UFW est actif, fail2ban tourne, le mot de passe SSH est coupé et root SSH est fermé. fail2ban seul ne suffit pas.</li>
             <li>Traefik et MariaDB : seulement après une sécurité complète <em>sur ce VPS</em>, et Docker présent. Traefik ouvre 80/443 sans exposer d’app. MariaDB n’écoute pas sur Internet.</li>
             <li>Compte deploy : même prérequis. Utilisateur <code>deploy</code>, groupe docker, pas de sudo, clé de l’agent copiée. Aucune app n’est lancée.</li>
-            <li>Redis et backups : prévus, pas encore de bouton. Une app : bande <strong>Applications</strong> après analyse (Git HTTPS + Dockerfile).</li>
+            <li>Redis et backups : exécutables (Redis = conteneur ; backups = dump chiffré + copie locale). Une app : bande <strong>Applications</strong> après analyse (Git HTTPS + Dockerfile).</li>
             <li>Pendant analyse, clé ou install : un écran décrit le traitement. Ne ferme pas la page. Traefik / MariaDB : jusqu’à ~5 min (téléchargement d’image).</li>
             <li>À la fin, une fenêtre indique <strong>succès</strong> ou <strong>échec</strong> (et pourquoi). Clique <strong>Fermer</strong>. En cas d’échec, l’état déjà connu du VPS n’est pas effacé.</li>
           </ul>
@@ -203,12 +204,13 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
         <li class="step">
           <h3>7. Déployer une app</h3>
           <ul>
-            <li>Prérequis <em>sur ce VPS</em> : sécurité SKIP, Docker, Traefik, compte deploy. Tant que deploy est absent, un bandeau l’indique : installe d’abord le compte (bouton Installer), ensuite seulement Enregistrer / Déployer.</li>
-            <li>Le dépôt doit être <strong>HTTPS public</strong> et contenir un <strong>Dockerfile</strong> à la racine. L’agent écrit le compose (Traefik, pas de port publié).</li>
-            <li>Identifiant, Git, branche, nom d’hôte, port interne → Enregistrer dans la liste, puis le bouton <strong>Déployer</strong> apparaît sur cette ligne (confirmation CHANGE). Sans enregistrement, la liste reste vide — ce n’est pas un bug.</li>
+            <li>Avant Déployer : un <strong>popup</strong> liste ce qui sera fait. Liens publics en <strong>https://</strong>. Traefik installe toujours HTTPS (Let’s Encrypt) + redirection HTTP→HTTPS.</li>
+            <li>Domaine de base optionnel (ex. <code>apps.mondomaine.com</code>) : les apps deviennent <code>https://my-bourse.apps.mondomaine.com</code>. DNS <code>*</code> → IP du VPS. Sans domaine : fallback lab <code>identifiant.&lt;IP&gt;.sslip.io</code> (aussi en HTTPS).</li>
+            <li>Identifiant = slug court (<code>my-bourse</code>), pas le domaine. Nom d’hôte = DNS complet (<code>my-bourse.apps.nebdev.org</code>). Git = URL <code>https://…</code>.</li>
+            <li>Sur chaque ligne de la liste : <strong>Modifier</strong> (remplit le formulaire), <strong>Supprimer</strong> (retire la ligne locale, sans arrêter le conteneur VPS), <strong>Déployer / Mettre à jour</strong>.</li>
             <li>Premier test prévu : déployer <strong>ce produit</strong> (même dépôt, Dockerfile à la racine, port <code>8080</code>, identifiant <code>vps-autopilot</code>). Il faut un Git <strong>HTTPS public</strong> (pousser ce dépôt). Nom d’hôte : DNS vers le VPS, ou un nom du type <code>app.&lt;IP&gt;.sslip.io</code>.</li>
-            <li>L’instance publique est <strong>cargo</strong> : page de preuve + <code>/api/v1/health</code>. <strong>Aucun CHANGE</strong> depuis Internet. Le cockpit reste sur <code>127.0.0.1:8088</code>.</li>
-            <li>Le DNS du nom d’hôte vers l’IP du VPS est à toi (sauf astuce sslip). Grants SQL par projet : pas encore.</li>
+            <li>L’instance publique est <strong>cargo</strong> : page de preuve + <code>/api/v1/health</code>. <strong>Aucun CHANGE</strong> depuis Internet. Le cockpit reste sur <code>127.0.0.1:8088</code>. Plus tard (V9) : cockpit en ligne derrière login, une session et des paramètres par opérateur.</li>
+            <li>Le DNS du nom d’hôte vers l’IP du VPS est à toi (sauf astuce sslip). Si MariaDB est déjà sur ce VPS : à chaque Déployer, une base + user SQL dédiés à l’app (<code>db.env</code> sur le serveur, hors git).</li>
           </ul>
         </li>
 
@@ -226,6 +228,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
         <li class="step">
           <h3>9. Ce que l’agent ne fera pas</h3>
           <ul>
+            <li>Ouvrir le cockpit Installer/Déployer sur Internet <strong>sans</strong> login (cargo = preuve seulement ; plateforme multi-users = V9).</li>
             <li>Cibler un serveur interdit ou déjà bloqué par l’agent.</li>
             <li>Installer Apache, PHP ou Nginx directement sur l’hôte.</li>
             <li>Lancer un shell root inventé par une IA.</li>
@@ -331,6 +334,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <div class="sw" data-k="redis"><span>Redis</span><b id="swRedis">—</b></div>
             <div class="sw" data-k="traefik"><span>Traefik</span><b id="swTraefik">—</b></div>
             <div class="sw" data-k="deploy"><span>Compte deploy</span><b id="swDeploy">—</b></div>
+            <div class="sw" data-k="backups"><span>Backups</span><b id="swBackups">—</b></div>
             <div class="sw" data-k="ufw"><span>Pare-feu</span><b id="swUfw">—</b></div>
           </div>
         </div>
@@ -341,27 +345,36 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <p class="kicker">CHANGE · Git → image → Traefik</p>
             <h2>Déployer une app</h2>
             <p class="hint app-gate" id="appsGate" hidden></p>
-            <p class="hint">Dépôt HTTPS public, <strong>Dockerfile</strong> à la racine. Premier test prévu : ce produit (identifiant <code>vps-autopilot</code>, port <code>8080</code>) — instance cargo, pas le cockpit. Compte deploy + Traefik requis. Le bouton Déployer n’apparaît qu’après <strong>Enregistrer dans la liste</strong>.</p>
+            <p class="hint">Dépôt HTTPS public, <strong>Dockerfile</strong> à la racine (ou rattrapage template). Compte deploy + Traefik requis. Liens publics en <strong>https://</strong>. Domaine de base optionnel pour des URL courtes (ex. <code>my-bourse.apps.mondomaine.com</code>).</p>
+            <label class="field">Domaine public de base (optionnel, mémorisable)
+              <input id="publicBaseDomain" type="text" value="" placeholder="apps.mondomaine.com" autocomplete="off" />
+            </label>
+            <p class="hint" id="publicDomainHint">Sans domaine : fallback <code>identifiant.&lt;IP&gt;.sslip.io</code>. Avec domaine : DNS <code>*.domaine</code> → IP du VPS, puis Enregistrer le domaine.</p>
+            <button id="btnPublicDomain" type="button" class="ghost">Enregistrer le domaine</button>
             <div class="row2 app-fields">
-              <label class="field">Identifiant
-                <input id="appId" type="text" placeholder="mon-app" autocomplete="off" />
+              <label class="field">Identifiant court (slug) — PAS le domaine
+                <input id="appId" type="text" value="" placeholder="my-bourse" autocomplete="off" />
               </label>
               <label class="field">Port interne
                 <input id="appPort" type="number" value="8080" min="1" max="65535" />
               </label>
             </div>
-            <label class="field">Git (HTTPS)
-              <input id="appGit" type="url" placeholder="https://…" autocomplete="off" />
+            <label class="field">1 · Git (HTTPS) — colle ici l’URL du dépôt
+              <input id="appGit" type="url" value="" placeholder="https://github.com/nebdev07/BOURSE.git" autocomplete="off" />
             </label>
             <div class="row2 app-fields">
               <label class="field">Branche
                 <input id="appRef" type="text" value="main" autocomplete="off" />
               </label>
-              <label class="field">Nom d’hôte
-                <input id="appHostName" type="text" placeholder="app.exemple.org" autocomplete="off" />
+              <label class="field">2 · Nom d’hôte DNS complet (vide = auto)
+                <input id="appHostName" type="text" value="" placeholder="my-bourse.apps.nebdev.org" autocomplete="off" />
               </label>
             </div>
-            <button id="btnAppSave" type="button" class="ghost">Enregistrer dans la liste</button>
+            <div class="app-form-actions">
+              <button id="btnAppSave" type="button" class="ghost">Enregistrer dans la liste</button>
+              <button id="btnAppClear" type="button" class="ghost">Nouvelle fiche</button>
+            </div>
+            <p id="appFormStatus" class="app-form-status" hidden></p>
             <div id="appList" class="action-list"></div>
           </article>
         </div>
@@ -416,11 +429,29 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
       <p class="kicker" id="resultKicker">Résultat</p>
       <h2 id="resultTitle">Opération terminée</h2>
       <p id="resultDetail" class="busy-detail"></p>
+      <p id="resultLinkWrap" class="result-link-wrap" hidden>
+        <a id="resultLink" href="#" target="_blank" rel="noopener noreferrer"></a>
+      </p>
       <p id="resultNext" class="hint"></p>
       <button id="btnResultClose" type="button">Fermer</button>
     </div>
   </div>
 
-  <script src="/console.js?v=app4"></script>
+  <div id="confirmOverlay" class="busy-overlay result-overlay hidden" aria-hidden="true" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmDetail">
+    <div class="busy-card result-card confirm-card">
+      <p class="kicker" id="confirmKicker">CHANGE · confirmation</p>
+      <h2 id="confirmTitle">Confirmer</h2>
+      <p id="confirmDetail" class="busy-detail"></p>
+      <ol id="confirmActions" class="confirm-actions"></ol>
+      <p id="confirmWarnings" class="hint confirm-warnings" hidden></p>
+      <p id="confirmBlocker" class="confirm-blocker" hidden></p>
+      <div class="confirm-actions-row">
+        <button id="btnConfirmCancel" type="button" class="ghost">Annuler</button>
+        <button id="btnConfirmOk" type="button">Confirmer le CHANGE</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/console.js?v=app16"></script>
 </body>
 </html>

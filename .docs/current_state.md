@@ -1,12 +1,14 @@
 # État actuel — VPS Autopilot
 
 > Distinguer spécifié vs implémenté.  
-> Dernière mise à jour : 2026-09-08
+> Dernière mise à jour : 2026-09-28
 
 ## Spécifié
 
-Produit Agent DevOps (V0→V8), Ansible dès les CHANGE, Traefik/MariaDB/backups, IA en V5, VPS-2 comme premier lab. Catalogue : `documentation.md`.  
-V4 backups : dump chiffré + copie hors-site + restore par l’agent (pas à la main). **Option retenue** : stocker les dumps sur **le poste opérateur** (la machine où tourne la console). Autres cibles plus tard. Pas encore de rôle ni de dossier.
+Produit Agent DevOps (V0→V9), Ansible dès les CHANGE, Traefik/MariaDB/backups, IA en V5, **plateforme cargo multi-services en V7 (ADR-036)**, plateforme multi-opérateurs en V9 (ADR-031). Catalogue : `documentation.md`.  
+V4 backups : dump chiffré + copie hors-site + preuve de déchiffrement minimale. **Option retenue** : dumps sur le **poste opérateur** (`state/backups/`). Rôle exécutable (ADR-034). Restore SQL complet : pas encore.  
+V7 : un produit = N conteneurs (sites + API + Redis + volumes). Scénario de référence = forme d’infra type ARC. Exécution = **lab Autopilot seulement** (pas l’IP prod ARC). **Pas encore de code.**  
+V9 : auth + sessions ; chaque utilisateur ses paramètres ; cockpit en ligne seulement après login. **Pas encore de code.** Ne pas confondre V7 (plusieurs *services*) et V9 (plusieurs *opérateurs*).
 
 ## Implémenté (V0)
 
@@ -19,8 +21,8 @@ V4 backups : dump chiffré + copie hors-site + restore par l’agent (pas à la 
 - Bouton Installer si le composant (ou un détail encore coché) manque sur ce VPS. Sécurité = **baseline complet** (ADR-019) : UFW actif **et** fail2ban **et** mot de passe SSH coupé **et** root SSH fermé. fail2ban seul → bouton Installer encore visible.
 - Couleurs d’état : vert doux présent/sain, gris absent, ambre inconnu, rouge doux à surveiller. Cockpit en quatre bandes (état / logiciels / pile+install / rapport), filet gauche et teinte calme.
 - Pile voulue (ADR-017) : section **repliable** (fermée par défaut), **sous** la carte Installations. Détails cochables (ADR-020). Déjà installé = grisé. Plan d’install après analyse (ADR-018). Docker SKIP seulement si moteur **et** plus aucun détail coché non détecté. Nouvelle section `defaultEnabled` fusionnée une fois (`catalogSeen`).
-- CHANGE exécutable pour **tout hôte** analysé : `security`, `docker`, `traefik`, `mariadb`, `deploy`, **`deploy-app`**. Premier cargo prévu : **ce dépôt** (ADR-030) — `Dockerfile` racine, profil `cargo`, port 8080. Redis/backups/grants SQL : planifiés. Nginx hôte : **pas proposé** (ADR-021).
-- Console : bandeau Applications tant que le compte deploy est absent ; bouton Déployer seulement après enregistrement d’une app. Installations : READY en haut.
+- CHANGE exécutable : `security`, `docker`, `traefik`, `mariadb`, `deploy`, **`redis`**, **`backups`**, **`deploy-app`**. Premier cargo = ce dépôt (ADR-030). Nginx hôte : **pas proposé**.
+- Console : bandeau Applications ; bouton Déployer après enregistrement. Installations : READY en haut. Lien public **https://**. Préflight GitHub Dockerfile. Popup confirmation (ADR-032). Domaine de base optionnel (ADR-033). HTTPS Traefik forcé + redirect. Liste apps : **Modifier** / **Supprimer** (intention locale) + messages Cause/Où/À faire si Identifiant confondu avec DNS.
 - Bootstrap clé : mot de passe OVH ponctuel → `~/.ssh/authorized_keys` (ADR-016).
 - Clé dédiée `~\.ssh\vps-autopilot` (hors git). `.env` local sans hôte (saisi dans l’UI).
 - Console : aucune fixture affichée. Analyse seulement après IP + user SSH. Fixture CLI/tests uniquement.
@@ -28,7 +30,7 @@ V4 backups : dump chiffré + copie hors-site + restore par l’agent (pas à la 
 
 ## Non implémenté
 
-V2 : Traefik + MariaDB livrés. V3 : compte `deploy` **et** Git→image→Traefik (`deploy-app`) livrés ; grants SQL pas encore. Premier cargo (cet agent) : Dockerfile + mode cargo livrés ; **pas encore déployé** (Git HTTPS public + bouton Déployer). Redis, Ansible, backups, IA : pas encore.
+Ansible, restore SQL complet (V4 suite), IA (V5), **`deploy-platform` / V7** (ADR-036), **plateforme multi-opérateurs V9** (ADR-031). Cargo public ≠ cockpit (volontaire jusqu’à auth). Redis installé n’est **pas** encore injecté dans les apps.
 
 ## Runtime
 

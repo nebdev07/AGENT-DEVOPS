@@ -70,23 +70,101 @@ if [ -d "$SRC/.git" ]; then
   $SUDO -u deploy git -C "$SRC" checkout -f "$APP_REF" || $SUDO -u deploy git -C "$SRC" checkout -f FETCH_HEAD
 else
   $SUDO rm -rf "$SRC"
-  if ! $SUDO -u deploy git clone --depth 1 --branch "$APP_REF" "$APP_GIT" "$SRC"; then
-    if ! $SUDO -u deploy git clone --depth 1 "$APP_GIT" "$SRC"; then
+  CLONE_LOG="$(mktemp)"
+  if ! $SUDO -u deploy git clone --depth 1 --branch "$APP_REF" "$APP_GIT" "$SRC" >"$CLONE_LOG" 2>&1; then
+    if ! $SUDO -u deploy git clone --depth 1 "$APP_GIT" "$SRC" >>"$CLONE_LOG" 2>&1; then
       echo GIT_CLONE_FAILED
+      tail -n 20 "$CLONE_LOG" || true
+      rm -f "$CLONE_LOG"
       exit 1
     fi
     $SUDO -u deploy git -C "$SRC" checkout "$APP_REF" || true
   fi
+  rm -f "$CLONE_LOG"
+fi
+
+if [ -n "${APP_SCAFFOLD_B64:-}" ]; then
+  printf '%s' "$APP_SCAFFOLD_B64" | base64 -d | $SUDO -u deploy tee "$SRC/Dockerfile" >/dev/null
+  $SUDO chown deploy:deploy "$SRC/Dockerfile"
+  echo SCAFFOLD_DOCKERFILE_APPLIED
 fi
 
 if [ ! -f "$SRC/Dockerfile" ]; then
   echo NEED_DOCKERFILE
+  echo "HINT: racine du dépôt sans Dockerfile (un docker-compose.yml ne suffit pas)."
   exit 1
 fi
 
 HAS_DATA=0
 if $SUDO docker network inspect data >/dev/null 2>&1; then
   HAS_DATA=1
+fi
+
+HAS_DB=0
+DB_ENV_LINE=""
+if [ "$HAS_DATA" = "1" ] && $SUDO docker ps --format '{{.Names}}' 2>/dev/null | grep -qx mariadb; then
+  DB_ID="$(printf '%s' "$APP_SLUG" | tr '-' '_')"
+  DB_NAME="app_${DB_ID}"
+  DB_USER="app_${DB_ID}"
+  DB_FILE="$ROOT/db.env"
+  if ! $SUDO test -s "$DB_FILE"; then
+    DB_PW="$($SUDO openssl rand -hex 16)"
+    $SUDO tee "$DB_FILE" >/dev/null <<ENV
+DB_HOST=mariadb
+DB_PORT=3306
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PW}
+PERSISTENCE_DRIVER=mysql
+DATABASE_URL=mysql://${DB_USER}:${DB_PW}@mariadb:3306/${DB_NAME}
+ENV
+    $SUDO chmod 600 "$DB_FILE"
+    unset DB_PW
+  elif ! $SUDO grep -q '^DATABASE_URL=' "$DB_FILE"; then
+    DB_PW="$($SUDO grep '^DB_PASSWORD=' "$DB_FILE" | cut -d= -f2-)"
+    $SUDO tee -a "$DB_FILE" >/dev/null <<ENV
+PERSISTENCE_DRIVER=mysql
+DATABASE_URL=mysql://${DB_USER}:${DB_PW}@mariadb:3306/${DB_NAME}
+ENV
+    unset DB_PW
+  fi
+  $SUDO chown deploy:deploy "$DB_FILE"
+  ROOT_PW="$($SUDO cat /opt/vps-autopilot/mariadb/root.pw)"
+  DB_PW="$($SUDO grep '^DB_PASSWORD=' "$DB_FILE" | cut -d= -f2-)"
+  # Mot de passe = hex openssl uniquement (pas de quote).
+  printf '%s\n' \
+    "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;" \
+    "CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PW}';" \
+    "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';" \
+    "FLUSH PRIVILEGES;" \
+    | $SUDO docker exec -i mariadb mariadb -uroot -p"$ROOT_PW"
+  unset ROOT_PW DB_PW
+  HAS_DB=1
+  DB_ENV_LINE='    env_file:
+      - ./db.env'
+  echo "DB_GRANT=${DB_NAME}"
+fi
+
+APP_ENV_FILE="$ROOT/app.env"
+if ! $SUDO test -s "$APP_ENV_FILE"; then
+  JOB_SECRET="$($SUDO openssl rand -hex 32)"
+  $SUDO tee "$APP_ENV_FILE" >/dev/null <<ENV
+NODE_ENV=production
+PERSISTENCE_DRIVER=mysql
+ENABLE_ADMIN_PORTFOLIO_EXAMPLE=0
+JOB_SECRET=${JOB_SECRET}
+ENV
+  $SUDO chmod 600 "$APP_ENV_FILE"
+  unset JOB_SECRET
+fi
+$SUDO chown deploy:deploy "$APP_ENV_FILE"
+
+APP_ENV_LINES='    env_file:
+      - ./app.env'
+if [ -n "$DB_ENV_LINE" ]; then
+  APP_ENV_LINES='    env_file:
+      - ./app.env
+      - ./db.env'
 fi
 
 if [ "$HAS_DATA" = "1" ]; then
@@ -96,6 +174,9 @@ services:
     build: ./src
     container_name: app-${APP_SLUG}
     restart: unless-stopped
+${APP_ENV_LINES}
+    volumes:
+      - app_data_${APP_SLUG}:/app/data
     networks:
       - proxy
       - data
@@ -110,6 +191,8 @@ services:
       - traefik.http.routers.${APP_SLUG}-secure.tls=true
       - traefik.http.routers.${APP_SLUG}-secure.tls.certresolver=le
       - traefik.http.services.${APP_SLUG}.loadbalancer.server.port=${APP_PORT}
+volumes:
+  app_data_${APP_SLUG}:
 networks:
   proxy:
     external: true
@@ -123,6 +206,9 @@ services:
     build: ./src
     container_name: app-${APP_SLUG}
     restart: unless-stopped
+${APP_ENV_LINES}
+    volumes:
+      - app_data_${APP_SLUG}:/app/data
     networks:
       - proxy
     labels:
@@ -136,6 +222,8 @@ services:
       - traefik.http.routers.${APP_SLUG}-secure.tls=true
       - traefik.http.routers.${APP_SLUG}-secure.tls.certresolver=le
       - traefik.http.services.${APP_SLUG}.loadbalancer.server.port=${APP_PORT}
+volumes:
+  app_data_${APP_SLUG}:
 networks:
   proxy:
     external: true
@@ -144,13 +232,29 @@ fi
 
 $SUDO chown deploy:deploy "$ROOT/docker-compose.yml"
 
+BUILD_LOG="$(mktemp)"
 if $SUDO docker compose version >/dev/null 2>&1; then
-  $SUDO docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" up -d --build
+  if ! $SUDO docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" up -d --build >"$BUILD_LOG" 2>&1; then
+    echo BUILD_FAILED
+    tail -n 50 "$BUILD_LOG" || true
+    rm -f "$BUILD_LOG"
+    exit 1
+  fi
 elif command -v docker-compose >/dev/null 2>&1; then
-  $SUDO docker-compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" up -d --build
+  if ! $SUDO docker-compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" up -d --build >"$BUILD_LOG" 2>&1; then
+    echo BUILD_FAILED
+    tail -n 50 "$BUILD_LOG" || true
+    rm -f "$BUILD_LOG"
+    exit 1
+  fi
 else
   echo COMPOSE_MISSING
+  rm -f "$BUILD_LOG"
   exit 1
 fi
+rm -f "$BUILD_LOG"
 
+if [ "$HAS_DB" = "1" ]; then
+  echo DB_ATTACHED
+fi
 echo APP_DEPLOYED

@@ -274,7 +274,7 @@ public final class StackCatalog {
                 "Seulement si un projet en a besoin.",
                 "Redis ouvert sur 0.0.0.0 sans mot de passe se fait vider ou miner en quelques minutes. "
                         + "On ne l’installe que si un projet le demande, et seulement en interne.",
-                "Plus tard : conteneur Redis, bind interne, pas de port public. Optionnel.",
+                "Conteneur Redis, réseau Docker data, requirepass, pas de port public. Optionnel.",
                 false,
                 false,
                 StackComponent.PolicyImpact.NONE,
@@ -285,8 +285,8 @@ public final class StackCatalog {
                         new StackDetail(
                                 "internal",
                                 "Redis interne (pas public)",
-                                "Un Redis public = store vidé, parfois miner. Jamais de bind 0.0.0.0.",
-                                "Conteneur sur le réseau Docker interne. Pas encore exécutable (V2).",
+                                "Un Redis public = store vidé, parfois miner. Jamais de bind 0.0.0.0 sur l’hôte.",
+                                "Conteneur sur le réseau Docker data. Mot de passe requirepass hors git sur le VPS.",
                                 true,
                                 StackComponent.PolicyImpact.NONE,
                                 ""
@@ -303,7 +303,8 @@ public final class StackCatalog {
                 "Filet après compromission ou erreur.",
                 "Sans copie hors-site, une compromission ou un disque perdu emporte tout. "
                         + "Un snapshot chez le même hébergeur ne suffit pas si le compte ou la machine part.",
-                "Plus tard : dump chiffré, copie hors-site, preuve qu’on peut restaurer. Pas encore exécutable.",
+                "Dump MariaDB chiffré sur le VPS, copie vers le poste opérateur (state/backups/), "
+                        + "preuve locale de déchiffrement. Passphrase dans state/backup.key (hors git).",
                 true,
                 false,
                 StackComponent.PolicyImpact.POLICY_BREAK,
@@ -315,7 +316,7 @@ public final class StackCatalog {
                                 "encrypted-dump",
                                 "Dump chiffré",
                                 "Un dump en clair volé = toutes les données métier. Le chiffrement se fait avant de quitter le VPS.",
-                                "Dump des bases / volumes, chiffré. Pas encore exécutable (V4).",
+                                "mysqldump via docker exec si MariaDB tourne, gzip, openssl AES-256-CBC, plaintext effacé.",
                                 true,
                                 StackComponent.PolicyImpact.WARNING,
                                 "Sans dump chiffré, une copie hors-site serait lisible si interceptée."
@@ -324,7 +325,7 @@ public final class StackCatalog {
                                 "offsite",
                                 "Copie hors-site",
                                 "Le pirate qui a le VPS a aussi les backups locaux. Il faut une copie ailleurs.",
-                                "Envoi vers un stockage externe. Pas encore exécutable (V4).",
+                                "L’agent télécharge le .enc vers state/backups/ sur le poste opérateur.",
                                 true,
                                 StackComponent.PolicyImpact.POLICY_BREAK,
                                 "Backup seulement sur le VPS = plus de filet si la machine est prise."
@@ -333,7 +334,7 @@ public final class StackCatalog {
                                 "restore-proof",
                                 "Preuve de restauration",
                                 "Un backup qui ne restaure pas n’existe pas. On le saurait trop tard, après l’incident.",
-                                "Test de restore documenté. Pas encore exécutable (V4).",
+                                "Déchiffrement local avec la même passphrase ; vérifie gzip/sql. Pas de restore complet encore.",
                                 true,
                                 StackComponent.PolicyImpact.WARNING,
                                 "Sans test de restore, on découvre un backup mort le jour J."

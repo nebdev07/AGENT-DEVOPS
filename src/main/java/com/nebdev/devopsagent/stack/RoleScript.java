@@ -11,7 +11,8 @@ import java.util.Set;
 
 public final class RoleScript {
 
-    private static final Set<String> ALLOWED = Set.of("security", "docker", "traefik", "mariadb", "deploy", "app");
+    private static final Set<String> ALLOWED = Set.of(
+            "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups", "app");
     private static final Map<String, String> FLAGS = new LinkedHashMap<>();
 
     static {
@@ -29,6 +30,10 @@ public final class RoleScript {
         FLAGS.put("user", "APPLY_USER");
         FLAGS.put("keys", "APPLY_KEYS");
         FLAGS.put("ssh-allow", "APPLY_SSH_ALLOW");
+        FLAGS.put("internal", "APPLY_INTERNAL");
+        FLAGS.put("encrypted-dump", "APPLY_ENCRYPTED_DUMP");
+        FLAGS.put("offsite", "APPLY_OFFSITE");
+        FLAGS.put("restore-proof", "APPLY_RESTORE_PROOF");
     }
 
     private RoleScript() {}
@@ -50,9 +55,17 @@ public final class RoleScript {
             throw new IllegalStateException("Impossible de charger " + resource, e);
         }
         if (selected == null || selected.isEmpty()) {
+            if ("traefik".equals(id)) {
+                // HTTPS toujours actif à l’install Traefik (ADR-033).
+                return "APPLY_PROXY=1\nAPPLY_HTTPS=1\n" + body;
+            }
             return body;
         }
-        Set<String> on = Set.copyOf(selected);
+        Set<String> on = new java.util.LinkedHashSet<>(selected);
+        if ("traefik".equals(id)) {
+            on.add("proxy");
+            on.add("https");
+        }
         StringBuilder prefix = new StringBuilder();
         for (Map.Entry<String, String> e : FLAGS.entrySet()) {
             prefix.append(e.getValue()).append('=').append(on.contains(e.getKey()) ? "1" : "0").append('\n');
@@ -61,14 +74,24 @@ public final class RoleScript {
     }
 
     public static String loadApp(AppSpec app) {
+        return loadApp(app, null);
+    }
+
+    public static String loadApp(AppSpec app, String scaffoldDockerfileBase64) {
         if (app == null) {
             throw new IllegalArgumentException("App manquante.");
         }
-        return "APP_SLUG=" + app.id() + "\n"
-                + "APP_GIT=" + app.gitUrl() + "\n"
-                + "APP_REF=" + app.gitRef() + "\n"
-                + "APP_HOST=" + app.hostname() + "\n"
-                + "APP_PORT=" + app.port() + "\n"
-                + load("app");
+        StringBuilder prefix = new StringBuilder();
+        prefix.append("APP_SLUG=").append(app.id()).append('\n');
+        prefix.append("APP_GIT=").append(app.gitUrl()).append('\n');
+        prefix.append("APP_REF=").append(app.gitRef()).append('\n');
+        prefix.append("APP_HOST=").append(app.hostname()).append('\n');
+        prefix.append("APP_PORT=").append(app.port()).append('\n');
+        if (scaffoldDockerfileBase64 != null && !scaffoldDockerfileBase64.isBlank()) {
+            // Une seule ligne base64 — pas d’espaces.
+            String b64 = scaffoldDockerfileBase64.replaceAll("\\s", "");
+            prefix.append("APP_SCAFFOLD_B64=").append(b64).append('\n');
+        }
+        return prefix + load("app");
     }
 }

@@ -11,7 +11,8 @@ import java.util.Set;
 
 public final class InstallPlanBuilder {
 
-    static final Set<String> EXECUTABLE = Set.of("security", "docker", "traefik", "mariadb", "deploy");
+    static final Set<String> EXECUTABLE = Set.of(
+            "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups");
 
     private InstallPlanBuilder() {}
 
@@ -77,7 +78,9 @@ public final class InstallPlanBuilder {
                     steps(c.id(), selectedDetails)
             );
         }
-        if (("traefik".equals(c.id()) || "mariadb".equals(c.id()) || "deploy".equals(c.id())) && !securityPresent(snap, List.of())) {
+        if (("traefik".equals(c.id()) || "mariadb".equals(c.id()) || "deploy".equals(c.id())
+                || "redis".equals(c.id()) || "backups".equals(c.id()))
+                && !securityPresent(snap, List.of())) {
             return new InstallPlan.InstallAction(
                     c.id(), c.label(), c.phase(), InstallPlan.Status.PLANNED, "CHANGE",
                     "Baseline sécurité incomplet. Pas de pile applicative tant que Sécurité n’est pas SKIP.",
@@ -93,9 +96,11 @@ public final class InstallPlanBuilder {
         }
         String readyReason = switch (c.id()) {
             case "security" -> securityReadyReason(snap, selectedDetails);
-            case "traefik" -> "Traefik dans Docker, réseau proxy. UFW 80/443. Aucune app exposée tant qu’un routeur n’est pas déclaré.";
+            case "traefik" -> "Traefik dans Docker, réseau proxy. UFW 80/443. Image ≥ v3.5 + DOCKER_API_VERSION (Docker Ubuntu récent). Aucune app exposée tant qu’un routeur n’est pas déclaré.";
             case "mariadb" -> "Conteneur MariaDB, réseau interne data, pas de port public. Mot de passe root hors git sur le VPS.";
             case "deploy" -> "Compte deploy : docker, pas sudo, clé de l’agent, SSH autorisé. Aucune app lancée.";
+            case "redis" -> "Conteneur Redis, réseau data interne, requirepass, aucun port publié.";
+            case "backups" -> "Dump MariaDB chiffré sur le VPS, copie vers le poste opérateur, preuve de déchiffrement locale.";
             case "docker" -> dockerReadyReason(snap, selectedDetails);
             default -> "Absent. Install idempotente, versionnée, après confirmation.";
         };
@@ -131,15 +136,34 @@ public final class InstallPlanBuilder {
         }
         return switch (id) {
             case "docker" -> dockerPresent(snap, selectedDetails);
-            case "traefik" -> snap.traefik() != null && snap.traefik().present();
+            case "traefik" -> traefikHealthy(snap);
             case "mariadb" -> snap.mariadb() != null && snap.mariadb().present();
             case "redis" -> snap.redis() != null && snap.redis().present();
             case "nginx" -> snap.nginx() != null && snap.nginx().present();
             case "security" -> securityPresent(snap, selectedDetails);
             case "deploy" -> snap.deploy() != null && snap.deploy().present();
-            case "backups" -> false;
+            case "backups" -> snap.backups() != null && snap.backups().present();
             default -> false;
         };
+    }
+
+    /** Traefik v3.3- sur Docker Ubuntu récent = provider Docker mort (404 sur toutes les apps). */
+    static boolean traefikHealthy(ServerSnapshot snap) {
+        if (snap == null || snap.traefik() == null || !snap.traefik().present()) {
+            return false;
+        }
+        String blob = ((snap.traefik().version() == null ? "" : snap.traefik().version())
+                + "\n"
+                + (snap.traefik().detail() == null ? "" : snap.traefik().detail()))
+                .toLowerCase(Locale.ROOT);
+        if (blob.contains("traefik:v3.0") || blob.contains("traefik:v3.1")
+                || blob.contains("traefik:v3.2") || blob.contains("traefik:v3.3")) {
+            return false;
+        }
+        if (blob.contains("docker_api_version_absent")) {
+            return false;
+        }
+        return true;
     }
 
     static boolean securityPresent(ServerSnapshot snap) {
@@ -224,10 +248,30 @@ public final class InstallPlanBuilder {
             case "traefik" -> traefikSteps(wanted);
             case "mariadb" -> mariadbSteps(wanted);
             case "deploy" -> deploySteps(wanted);
-            case "redis" -> List.of("Conteneur Redis, bind interne seulement");
-            case "backups" -> List.of("Dump chiffré + copie hors-site + preuve de restore");
+            case "redis" -> List.of(
+                    "Conteneur Redis 7 sur réseau Docker data (pas de port public)",
+                    "Mot de passe requirepass dans /opt/vps-autopilot/redis/redis.pw (600)"
+            );
+            case "backups" -> backupsSteps(wanted);
             default -> List.of();
         };
+    }
+
+    private static List<String> backupsSteps(Set<String> wanted) {
+        Set<String> pick = wanted.isEmpty()
+                ? Set.of("encrypted-dump", "offsite", "restore-proof")
+                : wanted;
+        List<String> out = new ArrayList<>();
+        if (pick.contains("encrypted-dump")) {
+            out.add("Dump MariaDB (si conteneur) + chiffrement AES-256-CBC sur le VPS");
+        }
+        if (pick.contains("offsite")) {
+            out.add("Copie du .enc vers state/backups/ sur le poste opérateur");
+        }
+        if (pick.contains("restore-proof")) {
+            out.add("Déchiffrement local minimal (preuve que la passphrase ouvre le dump)");
+        }
+        return out;
     }
 
     private static List<String> securitySteps(Set<String> wanted) {

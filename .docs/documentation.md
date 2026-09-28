@@ -1,8 +1,7 @@
 # Documentation — catalogue et reprise
 
 > Fichier vivant.  
-> Dernière mise à jour : 2026-09-08  
-> Même contrat que BRVM / SmartFlow : `.docs/` = mémoire officielle.
+> Dernière mise à jour : 2026-09-28
 
 ## Objectif
 
@@ -38,12 +37,12 @@ Règles Cursor : [`.cursor/rules.md`](../.cursor/rules.md).
 | `vision.md` | published | Objectif long terme |
 | `current_state.md` | published | Spécifié vs implémenté |
 | `architecture.md` | published | Couches, modules, flux |
-| `decisions.md` | published | ADR-001 → ADR-030 |
+| `decisions.md` | published | ADR-001 → ADR-036 |
 | `security.md` | published | Risques, SSH, cibles interdites |
 | `api.md` | published | Endpoints V0 |
 | `conventions.md` | published | Gouvernance + code |
 | `glossary.md` | published | Vocabulaire |
-| `roadmap.md` | published | V0 → V8 |
+| `roadmap.md` | published | V0 → V9 |
 | `backlog.md` | draft | Items ouverts |
 | `changelog.md` | published | Chronologie (ne jamais effacer) |
 | `next-session.md` | published | Suite immédiate |

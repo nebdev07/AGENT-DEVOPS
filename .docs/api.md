@@ -18,6 +18,9 @@ Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `c
 | GET | `/api/v1/plan` | Écart pile voulue vs dernier snapshot (READY / SKIP / PLANNED / REFUSED) | oui |
 | POST | `/api/v1/install` | CHANGE : installe un composant READY (`confirm: true`) puis re-discovery | oui |
 | GET / PUT | `/api/v1/apps` | Intention d’apps cargo (slug, Git HTTPS, hôte, port) | oui |
+| DELETE | `/api/v1/apps?id=` | Retire une app de la liste locale (pas d’arrêt conteneur VPS) | oui |
+| GET | `/api/v1/apps/deploy-plan` | Plan CHANGE avant confirmation | oui |
+| GET / PUT | `/api/v1/apps/public-domain` | Domaine public de base (ex. `apps.nebdev.org`) | oui |
 | POST | `/api/v1/apps/deploy` | CHANGE `deploy-app` (`confirm: true`) puis re-discovery | oui |
 
 ## POST `/api/v1/discover`

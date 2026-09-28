@@ -87,6 +87,7 @@ public class DiscoveryParser {
         SoftwarePresence redis = parseSoftware(sections.getOrDefault("REDIS", ""));
         SoftwarePresence traefik = parseSoftware(sections.getOrDefault("TRAEFIK", ""));
         SoftwarePresence deploy = parseSoftware(sections.getOrDefault("DEPLOY", ""));
+        SoftwarePresence backups = parseSoftware(sections.getOrDefault("BACKUPS", ""));
         List<String> apps = parseAppIds(sections.getOrDefault("APPS", ""));
 
         SshDaemonInfo ssh = parseSsh(sections.getOrDefault("SSHD", ""), ports);
@@ -132,6 +133,7 @@ public class DiscoveryParser {
                 redis,
                 traefik,
                 deploy,
+                backups,
                 apps,
                 ssh,
                 firewall,

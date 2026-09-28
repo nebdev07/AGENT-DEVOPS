@@ -14,6 +14,8 @@ id_ecdsa
 state/*.json
 !state/.gitkeep
 state/*.report.txt
+state/backups/
+state/backup.key
 infrastructure/lab/keys/
 
 # OS

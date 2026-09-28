@@ -32,6 +32,7 @@ public class DiscoveryReportFormatter {
         b.append(row("Redis", presence(s.redis())));
         b.append(row("Traefik", presence(s.traefik())));
         b.append(row("Compte deploy", presence(s.deploy())));
+        b.append(row("Backups", presence(s.backups())));
         b.append(row("Apps", s.apps() == null || s.apps().isEmpty() ? "—" : String.join(", ", s.apps())));
         b.append('\n');
         b.append(row("SSH écoute", s.ssh().listening() ? "oui" : "non"));

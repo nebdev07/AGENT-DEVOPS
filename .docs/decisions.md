@@ -1,7 +1,7 @@
 # Décisions d’architecture (ADR) — VPS Autopilot
 
 > Mémoire permanente. **Ne jamais supprimer** une décision : la marquer `Superseded` et en ajouter une nouvelle.  
-> Dernière mise à jour : 2026-09-08 (ADR-030 : premier cargo = cet agent)
+> Dernière mise à jour : 2026-09-09 (ADR-034 : backups exécutables)
 
 ---
 
@@ -165,6 +165,7 @@
 - **Date** : 2026-09-07
 - **Statut** : Accepted
 - **Décision** : La discovery produit un **plan** (voulu vs présent). Chaque install est CHANGE (plan + confirmation). Rôles exécutables aujourd’hui : `security`, `docker` — scripts idempotents dans `src/main/resources/roles/` (stdin `bash -s`, pas de shell IA). Traefik / MariaDB / Redis / backups : plan visibles, pas encore exécutables. Nginx hôte : **refusé**. Pont vers Ansible quand `ansible-playbook` sera dispo sur le poste opérateur.
+- **Amendement 2026-09-09** : Traefik, MariaDB, deploy, Redis, **backups** (ADR-034) sont exécutables. Nginx hôte reste refusé.
 - **Amendement 2026-09-08 (détails restants)** : un composant n’est SKIP que si le moteur/signal est là **et** qu’il ne reste aucun détail coché non détecté. Ex. Docker présent mais Compose / groupe docker encore cochés → READY + bouton Installer (rôle idempotent, `APPLY_DOCKER=0`). Discovery : `GROUPS=$(id -nG)` + corps Docker conservé (Compose).
 - **Conséquence** : `GET /api/v1/plan`, `POST /api/v1/install`. Timeout install 180 s. sudo NOPASSWD requis. Carte Installations au-dessus du menu de cases.
 
@@ -228,7 +229,7 @@
 - **Date** : 2026-09-08
 - **Statut** : Accepted
 - **Décision** : Le rôle `traefik` est un CHANGE whitelisté (`install-traefik`). Il ne passe en READY que si le baseline sécurité est SKIP **et** Docker est présent. Il pose : réseau Docker `proxy`, compose versionné sous `/opt/vps-autopilot/traefik`, conteneur `traefik` (`exposedByDefault=false`, pas de dashboard public), UFW 80 (et 443 si HTTPS coché). Let’s Encrypt est préparé au proxy ; **aucune app n’est exposée** tant qu’un routeur n’est pas déclaré (V3).
-- **Conséquence** : `RoleScript` + `apply.sh`. MariaDB / Redis / backups restent planifiés. Pas d’install Traefik à la main. SKIP sécurité = **ce** VPS, pas « le produit a fini V1 ».
+- **Amendement 2026-09-08 (Docker API)** : Docker Engine 29+ (Ubuntu récent) impose MinAPI 1.44. Traefik ≤ 3.5 parle encore en 1.24 via le socket → provider Docker mort, **404** sur les apps alors qu’elles tournent. Le rôle Traefik pose `min-api-version: 1.24` dans `/etc/docker/daemon.json` + image `traefik:v3.5`.
 
 ---
 
@@ -272,8 +273,10 @@
 
 - **Date** : 2026-09-08
 - **Statut** : Accepted
-- **Décision** : CHANGE whitelisté `deploy-app`. L’opérateur déclare slug, URL Git **HTTPS publique**, ref, nom d’hôte, port interne. READY si **ce** VPS a : baseline sécurité SKIP, Docker, Traefik, compte `deploy`. L’agent clone sous `/opt/vps-autopilot/apps/<slug>/src`, **génère** le compose (réseau `proxy`, labels Traefik, **aucun port publié**). Le dépôt cargo n’a besoin que d’un `Dockerfile` à la racine — pas de logique de provision (ADR-023). Pas de grants MariaDB dans ce CHANGE (plus tard). Dépôts privés / SSH Git : pas encore.
+- **Décision** : CHANGE whitelisté `deploy-app`. L’opérateur déclare slug, URL Git **HTTPS publique**, ref, nom d’hôte, port interne. READY si **ce** VPS a : baseline sécurité SKIP, Docker, Traefik, compte `deploy`. L’agent clone sous `/opt/vps-autopilot/apps/<slug>/src`, **génère** le compose (réseau `proxy`, labels Traefik, **aucun port publié**). Le dépôt cargo n’a besoin que d’un `Dockerfile` à la racine — pas de logique de provision (ADR-023). Dépôts privés / SSH Git : pas encore.
+- **Amendement 2026-09-08 (grants)** : si le conteneur `mariadb` et le réseau `data` sont présents, le même CHANGE crée une base/user `app_<slug>` (tirets → `_`), mot de passe dans `apps/<slug>/db.env` (600), injecté via `env_file` du compose. Sans MariaDB : déploiement app inchangé (pas d’échec).
 - **Conséquence** : `roles/app/apply.sh` + intention locale `state/apps-intent.json`. DNS du nom d’hôte vers le VPS = charge de l’opérateur. HTTP (entrypoint `web`) d’abord ; certificat Let’s Encrypt sur `websecure` si Traefik HTTPS est déjà là.
+- **Amendement 2026-09-28** : le cargo 1:1 reste le défaut (Bourse, preuve Autopilot). Un **produit à plusieurs services** (sites + API) n’est plus un second `deploy-app` bricolé : voir **ADR-036** (V7).
 
 ---
 
@@ -283,4 +286,101 @@
 - **Statut** : Accepted
 - **Décision** : Le premier déploiement Git→image→Traefik est **ce dépôt** (`devops-agent`). Le cerveau (cockpit, confirmation, CHANGE) reste sur le poste opérateur (`127.0.0.1:8088`). L’instance sur le VPS démarre avec le profil Spring `cargo` (Dockerfile) : page de preuve + `/api/v1/health` seulement. Aucun discover / install / deploy depuis Internet. Pas d’auth à inventer pour ouvrir l’API admin.
 - **Conséquence** : `Dockerfile` à la racine (port 8080). Dépôt **HTTPS public** obligatoire (ADR-029). Ce workspace n’a pas encore d’`origin` : pousser avant le bouton Déployer. Identifiant prévu : `vps-autopilot`.
+- **Amendement 2026-09-08** : le mode cargo reste la preuve **tant que** la plateforme multi-opérateurs (ADR-031) n’est pas livrée. Le cockpit public derrière auth remplacera progressivement cette page, sans rouvrir les CHANGE anonymes.
+
+---
+
+## ADR-032 — Rattrapage cargo + popup de confirmation
+
+- **Date** : 2026-09-09
+- **Statut** : Accepted
+- **Contexte** : L’opérateur veut coller une URL Git et déployer sans écrire Dockerfile / compose. Le client ne configure pas le packaging. Il faut quand même un CHANGE explicite (ADR-003 / ADR-002).
+- **Décision** :
+  1. Avant `deploy-app`, la console charge un **plan** (`GET /api/v1/apps/deploy-plan`) et affiche un **popup** listant chaque action (clone, rattrapage éventuel, build, Traefik).
+  2. Confirmation = bouton « Confirmer le CHANGE » (plus le `window.confirm` navigateur pour ce flux).
+  3. Si Dockerfile absent et stack reconnue (Next / Node / Spring Boot) : **template déterministe** injecté sur le VPS après clone (`APP_SCAFFOLD_B64`), port ajusté si besoin. Pas de shell généré par LLM.
+  4. Le fichier injecté n’est **pas** poussé automatiquement dans Git (reproductibilité : à recopier plus tard ; push Git = chantier suivant).
+  5. Stack inconnue sans Dockerfile → plan **bloqué**, bouton Confirmer désactivé.
+- **Conséquence** : l’utilisateur ne remplit pas de config packaging ; il lit et confirme. Amendement soft d’ADR-029 (Dockerfile peut être fourni par rattrapage confirmé).
+
+---
+
+## ADR-031 — Plateforme multi-opérateurs (sessions, paramètres par compte)
+
+- **Date** : 2026-09-08
+- **Statut** : Accepted (spécifié ; **pas encore implémenté**)
+- **Contexte** : L’attente produit est qu’un utilisateur se connecte, ait **sa** session, et ne voie / ne pilote que **ses** VPS et paramètres. Aujourd’hui l’outil est mono-opérateur local (poste + `state/` local). Le lien public cargo n’est pas ce cockpit.
+- **Décision** :
+  1. **Phase actuelle (V0–V3)** : un opérateur, console sur le poste, CHANGE après confirmation. Cargo public = preuve uniquement (ADR-030).
+  2. **Phase plateforme (V9)** : comptes + sessions ; chaque opérateur fournit ses paramètres (hôte SSH, user, apps) **valables pour lui seul** ; isolation des secrets ; cockpit joignable en ligne **uniquement après authentification**.
+  3. Pas de CHANGE anonymes sur Internet. Auth avant plan/confirmation.
+  4. L’executor peut vivre sur un serveur dédié ou le VPS lab ; le modèle de risque (READ / CHANGE / DESTRUCTIVE) ne change pas.
+- **Non-objectifs V9 jour 1** : marketplace, multi-org complexe, facturation.
+- **Conséquence** : roadmap **V9** ; backlog `PLAT-*`. Aucun code multi-tenant tant que V3 (grants) / V4 (backups) utiles au mono-opérateur ne bloquent pas. ADR-030 reste valide jusqu’à la première livraison auth.
+
+---
+
+## ADR-033 — HTTPS par défaut + liens publics mémorisables
+
+- **Date** : 2026-09-09
+- **Statut** : Accepted
+- **Contexte** : L’opérateur veut du SSL dès l’install Traefik, et des URL simples (pas seulement `slug.IP.sslip.io` en HTTP).
+- **Décision** :
+  1. Install Traefik : **HTTPS toujours** (`APPLY_HTTPS=1`), UFW 443, Let’s Encrypt, **redirection HTTP→HTTPS** sur l’entrypoint `web`.
+  2. Liens console / popup : schéma **`https://`**.
+  3. **Domaine de base** optionnel (`state/public-domain.json`, UI Applications) : suggestion `https://<id>.<base>/`. DNS wildcard à la charge de l’opérateur. Sans base : fallback lab sslip (déjà compatible Let’s Encrypt).
+  4. Pas de génération de domaine magique hors DNS contrôlé par l’utilisateur.
+- **Conséquence** : réinstaller Traefik (ou ré-appliquer le rôle) pour activer la redirection sur un lab déjà installé. Apps déjà déployées : le cert LE fonctionne si le Host est public.
+
+---
+
+## ADR-035 — Executor bash accepté (Ansible différé)
+
+- **Date** : 2026-09-09
+- **Statut** : Accepted
+- **Contexte** : ADR-002 vise Ansible pour les CHANGE. Les rôles `src/main/resources/roles/*/apply.sh` couvrent déjà security→backups de façon déterministe et testée sur VPS réel.
+- **Décision** : Tant que les playbooks Ansible ne sont pas requis par une contrainte produit, **les scripts bash versionnés restent l’executor**. Ansible = chantier optionnel de convergence, pas un bloqueur de roadmap V2–V4.
+- **Conséquence** : V1-01 reste Open (Ansible) mais n’empêche pas de clôturer les capacités infra. `infrastructure/ansible/README.md` reste le point d’atterrissage.
+
+---
+
+## ADR-034 — Backups chiffrés exécutables (dump + opérateur)
+
+- **Date** : 2026-09-09
+- **Statut** : Accepted
+- **Contexte** : V4 exige un filet 3-2-1. Un dump seulement sur le VPS ne protège pas contre compromission. L’option hors-site retenue est le **poste opérateur** (pas un bucket cloud jour 1).
+- **Décision** :
+  1. CHANGE whitelisté `install-backups` (après baseline sécurité SKIP).
+  2. Sur le VPS : `/opt/vps-autopilot/backups/` — si conteneur `mariadb` : `mysqldump` via `docker exec` + gzip ; chiffrement `openssl enc -aes-256-cbc -pbkdf2` ; plaintext effacé ; marqueur `.vps-autopilot-backups`.
+  3. Passphrase générée/chargée dans `state/backup.key` (32 hex, hors git) injectée par `InstallService` (pas dans `RoleScript` seul).
+  4. Hors-site : l’agent télécharge le `.enc` (SSH `base64`) vers `state/backups/` + métadonnées `.last-backup`.
+  5. Preuve minimale : déchiffrement local + magic gzip/sql → `RESTORE_PROOF_OK` dans la réponse API. Restore SQL complet = chantier suivant.
+- **Conséquence** : discovery lit le marqueur ; pile backups devient SKIP après premier apply réussi. Relance périodique / restore complet : backlog V4 suite.
+
+---
+
+## ADR-036 — Plateforme cargo (plusieurs sites + API)
+
+- **Date** : 2026-09-28
+- **Statut** : Accepted (spécifié ; **pas encore de code**)
+- **Contexte** : V3 déploie **un** dépôt → **un** conteneur → **un** `Host()`. Ça suffit pour Bourse. Ça ne décrit pas une infra du type ARC : site public, backoffice, API Spring, Redis, volume fichiers, un même produit. Coller trois cargos indépendants oblige l’opérateur à recâbler à la main les URL, Redis et les chemins. V7 (« multi-projets ») était trop vague : plusieurs **produits** 1:1 sur un VPS existent déjà (liste d’apps) ; ce qui manque est un **produit multi-services**.
+- **Décision** :
+  1. **Deux formes de cargo, un seul agent** (ADR-023). Pas de nouvel agent sous `AGENTS/`.
+     | Forme | Contrat | Exemple |
+     |---|---|---|
+     | **App** (ADR-029) | 1 Git, 1 Dockerfile racine, 1 hôte, 1 volume `/app/data` | Bourse, preuve `vps-autopilot` |
+     | **Plateforme** (cette ADR) | N services, un CHANGE, réseaux/DB/Redis/volumes partagés | ARC *en lab*, futurs SaaS |
+  2. **Objet `platform`** (intention locale `state/platforms-intent.json`) : `id`, domaine de base, mode de routage, liste `services[]`. Chaque service : `id`, Git (URL + ref), port interne, `context` Docker optionnel (sous-dossier d’un monorepo), `needs` (`mariadb` \| `redis` \| `volume:<nom>`), vars de build (`NEXT_PUBLIC_*`).
+  3. **CHANGE whitelisté `deploy-platform`**. Plan + popup + confirmation, comme `deploy-app`. L’executor **génère** un compose sous `/opt/vps-autopilot/platforms/<id>/` : N services, réseau `proxy` + `data`, **aucun port publié**. Pas de shell inventé par l’IA. Pas d’Apache / Nginx / PM2 / Tomcat **hôte** (ADR-021 inchangé).
+  4. **Routage jour 1 = sous-domaines** (`Host(www.…)` / `Host(api.…)` / `Host(admin.…)`). C’est ce que Traefik sait déjà. **Chemins** (`/` + `/arc-backoffice` + `/arc-api` sur le même host) = phase 2 (`PathPrefix`, strip prefix) — pas un bloqueur du premier lab.
+  5. **Redis** : si un service `needs: redis` et le conteneur `redis` est SKIP, injecter `REDIS_HOST=redis` + mot de passe (fichier plateforme, mode 600) via `env_file`. Aujourd’hui Redis s’installe mais n’est **pas** branché aux apps : c’est un trou à fermer ici, pas un rôle séparé.
+  6. **Volumes** : `/app/data` reste le défaut d’une app 1:1. Une plateforme peut déclarer des volumes nommés (`uploads` → chemin dans le conteneur). Traefik ne sert pas de PHP sur un webroot.
+  7. **Git** : HTTPS public d’abord (comme V3). **Clone privé** (clé deploy lecture seule) = chantier V7 listé, requis pour des repos association, **pas** pour ouvrir la prod ARC.
+  8. **Cible d’exécution** : VPS lab Autopilot seulement. Prod ARC et staging DTSI restent **interdites** (`ActionGuard`). Le scénario ARC sert de **spécimen** (forme d’infra), pas de premier bouton Déployer.
+  9. **Packaging** : chaque service a un Dockerfile (racine du repo **ou** `context` monorepo). Le rattrapage ADR-032 reste pour l’app 1:1. Pour une plateforme, les templates (Next + build-args, Spring **Java 11** WAR/JAR) sont des Dockerfiles **dans le cargo** ou des templates versionnés **explicitement choisis** dans le plan — pas un pom racine GitHub magique.
+  10. **Unité de déploiement** : un CHANGE met à jour **toute** la plateforme (ordre : API puis fronts, healthcheck API avant de basculer les fronts). Redeploy d’un seul service = chantier suivant, pas jour 1.
+- **Non-objectifs jour 1** : Kubernetes, Apache hôte, pointer l’agent sur `arc-nwanyo.org` prod, migrer Tomcat existant sans images, multi-opérateurs (V9).
+- **Conséquence** : roadmap **V7** précisée ; backlog `V7-01`… ; module architecture « Plateforme cargo ». L’app 1:1 ne disparaît pas. Premier lab plateforme = copie / maquette sur VPS-2, jamais l’IP ARC.
+
+---
 

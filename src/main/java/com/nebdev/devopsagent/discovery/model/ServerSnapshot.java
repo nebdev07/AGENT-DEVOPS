@@ -32,6 +32,7 @@ public record ServerSnapshot(
         SoftwarePresence redis,
         SoftwarePresence traefik,
         SoftwarePresence deploy,
+        SoftwarePresence backups,
         List<String> apps,
         SshDaemonInfo ssh,
         FirewallInfo firewall,

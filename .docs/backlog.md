@@ -1,7 +1,7 @@
 # Backlog — VPS Autopilot
 
 > Enrichir ; marquer `Done` sans effacer.  
-> Dernière mise à jour : 2026-09-08
+> Dernière mise à jour : 2026-09-28
 
 | ID | Priorité | Item | Statut |
 |---|---|---|---|
@@ -14,11 +14,23 @@
 | V0-07 | P1 | Pile voulue décochable + alertes politique | Done |
 | LAB-01 | P1 | Docker Desktop / WSL puis `scripts/lab-up.ps1` + discovery SSH loopback | Open |
 | VPS-01 | P1 | Acheter VPS-2, `.env`, discovery réelle | Done — IP `57.128.186.38` ; discovery SSH OK ; sécurité SKIP ; Docker présent |
-| V1-01 | P1 | Ansible + module Security (CHANGE + validation) | Open — rôle `security` livré (idempotent, tout hôte) ; pas encore Ansible |
+| V1-01 | P1 | Ansible + module Security (CHANGE + validation) | Open — rôles bash idempotents livrés ; Ansible reporté (executor bash accepté tant que playbooks non requis) |
 | V1-02 | P1 | Module Docker + réseaux | Open — moteur Docker présent ; réseaux / compose plus tard |
-| V2-01 | P1 | Traefik + HTTPS + MariaDB isolée | Open — Traefik + instance MariaDB exécutables ; grants par projet = V3 |
-| V3-01 | P1 | Compte `deploy` + Git → image → Traefik | Open — `deploy` + `deploy-app` + Dockerfile cargo (cet agent) livrés ; grants SQL pas encore ; premier deploy réel en attente du Git public |
-| V4-01 | P1 | Backups chiffrés + restore par l’agent | Open — hors-site : poste opérateur (option retenue) ; pas encore de rôle |
+| V2-01 | P1 | Traefik + HTTPS + MariaDB isolée | Done — Traefik + MariaDB + grants V3 |
+| V2-02 | P1 | Redis interne (conteneur, requirepass) | Done — rôle `redis` + discovery conteneur ; test VPS PONG OK |
+| V3-01 | P1 | Compte `deploy` + Git → image → Traefik | Done — `deploy` + `deploy-app` + cargo |
+| V3-02 | P1 | Grants MariaDB (base + user) au `deploy-app` | Done — `db.env` + SQL si conteneur `mariadb` |
+| V4-01 | P1 | Backups chiffrés + restore par l’agent | Done (partiel) — dump+encrypt+copie opérateur+preuve déchiffrement (ADR-034) ; restore SQL complet plus tard |
 | V5-01 | P3 | IA : langage naturel → plan (jamais root libre) | Open |
+| V7-01 | P1 | ADR-036 : intention `platforms-intent.json` + API/UI déclaration plateforme (sans SSH) | Open — spec 2026-09-28 |
+| V7-02 | P1 | CHANGE `deploy-platform` : compose N services, sous-domaines `Host()`, aucun port public | Open |
+| V7-03 | P1 | Brancher Redis (`needs: redis`) + volumes nommés (uploads) | Open |
+| V7-04 | P2 | Routage par **chemin** (`PathPrefix`) pour un seul nom d’hôte | Open — après V7-02 |
+| V7-05 | P2 | Clone Git **privé** (clé lecture seule) | Open — requis association / DTSI, pas pour ouvrir la prod ARC |
+| V7-06 | P2 | Monorepo : `context` Docker (sous-dossier) + templates Next build-args / Spring Java 11 | Open |
+| V7-07 | P3 | Redeploy d’un seul service d’une plateforme | Open — après V7-02 |
+| PLAT-01 | P2 | Auth + sessions opérateur (ADR-031 / V9) | Open — spécifié seulement |
+| PLAT-02 | P2 | Paramètres VPS / apps isolés par compte | Open — après PLAT-01 |
+| PLAT-03 | P2 | Cockpit public derrière login (remplace cargo anonyme) | Open — après PLAT-01 ; ADR-030 amendé |
 
 Les items Open ne s’exécutent **pas** sur ARC (`54.37.156.11`) ni DTSI (`154.0.30.233`).

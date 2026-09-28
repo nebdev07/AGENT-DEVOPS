@@ -1,10 +1,37 @@
 # Changelog — VPS Autopilot
 
 > Ne jamais effacer une entrée.  
-> Dernière mise à jour : 2026-09-08
+> Dernière mise à jour : 2026-09-28
+
+## 2026-09-28
+
+- **ADR-036** : plateforme cargo (N services : sites + API + Redis + volumes). CHANGE `deploy-platform` spécifié, pas de code. Cargo 1:1 (ADR-029) inchangé. Scénario de forme = infra type ARC ; exécution = lab seulement (pas l’IP prod). Roadmap **V7** précisée ; backlog `V7-01`…`V7-07`.
+
+## 2026-09-14
+
+- Rôle `deploy-app` : `app.env` (`JOB_SECRET`, `PERSISTENCE_DRIVER`), `DATABASE_URL` dans `db.env`, volume nommé `/app/data` pour persistance cargo.
+
+## 2026-09-09
+
+- Console apps : **Modifier** / **Supprimer** / **Nouvelle fiche** ; messages clairs si un DNS est collé dans Identifiant (pré-correction slug + hôte). `DELETE /api/v1/apps?id=` (liste locale seulement). Cache `?v=app16`.
+- ADR-034 : rôle **backups** exécutable (`install-backups`) — dump MariaDB chiffré AES-256-CBC sur le VPS, copie hors-site vers `state/backups/` (poste opérateur), preuve locale de déchiffrement. Passphrase `state/backup.key`. Discovery marqueur `.vps-autopilot-backups`. Cache `?v=app15`.
+- Autonomie : Redis installé + testé VPS ; backups V4 (dump chiffré → `state/backups/`, `restoreProofOk=true`) ; vérif HTTPS post-deploy (slice V6) ; ADR-035 executor bash.
+- ADR-033 suite autonome : rôle **Redis** exécutable (conteneur data, requirepass, pas de port public). Test VPS : PONG OK. Discovery conteneur `redis`.
+- ADR-033 : HTTPS forcé à l’install Traefik + redirect HTTP→HTTPS ; liens console en `https://` ; domaine de base optionnel pour URL mémorisables. Cache `?v=app14`.
+- Lien public : si le nom d’hôte d’une 2e app copie celui de `vps-autopilot`, le popup ouvre la page cargo. Refus des hôtes en double à l’enregistrement + blocage au plan. Les deux conteneurs coexistent (pas d’écrasement).
+- Build `my-bourse` : échec ESLint (`prefer-const` dans BOURSE), pas le clone. Template Next ignore eslint/tsc cargo ; messages BUILD_FAILED explicites. Cache `?v=app13`.
+- ADR-032 : popup confirmation listant les actions ; rattrapage Dockerfile (templates Next/Node/Spring) après confirm. `GET /api/v1/apps/deploy-plan`. Cache `?v=app12`.
+- Déployer : échec `my-bourse` mal lu (stderr « Cloning into… » masquait `NEED_DOCKERFILE`). SSH remonte stdout+stderr ; préflight GitHub Dockerfile ; BOURSE n’a pas de Dockerfile racine. Cache `?v=app11`.
+- Messages opérateur **Cause / Où / À faire** (enregistrement app + prérequis / échecs Déployer). Erreur formulaire : détail sous Enregistrer ; barre Analyser = pointeur seulement. Cache `?v=app10`.
 
 ## 2026-09-08
 
+- Console : 2e app — `my_bourse` refusé (underscore). Normalisation `_`→`-`, erreur sous le formulaire Applications (plus à côté d’Analyser). Cache `?v=app9`.
+- ADR-031 : plateforme multi-opérateurs (sessions, paramètres par compte, cockpit public derrière auth) = **V9 spécifié**. Mono-opérateur local jusqu’alors. Aide à jour. Cache `?v=app8`.
+- ADR-029 amendé : au `deploy-app`, si MariaDB présent → base/user `app_<slug>` + `db.env` (V3-02).
+- Traefik : sur Docker Ubuntu récent, `traefik:v3.3` ne lit plus le socket (API 1.24). Image `v3.5` + `daemon.json` `min-api-version: 1.24` (workaround). Sans ça, apps UP mais 404 public. Console : lien public cliquable après deploy. Cache `?v=app7`.
+- Console : coller une URL GitHub dans « Nom d’hôte » → message clair + auto-correction vers le champ Git + sslip. Formulaire prérempli pour le premier cargo. Cache `?v=app6`.
+- Console : nom d’hôte ≠ URL Git. Si le champ est vide, proposition `id.<IP>.sslip.io`. Aide §7. Cache `?v=app5`.
 - ADR-030 : premier cargo = cet agent. `Dockerfile` racine, profil `cargo` (santé seulement). Cockpit inchangé en local. Aide §7. Cache `?v=app4`.
 - Console : menu Docker « 2 restants » sans bouton — les cases sont l’intention, pas l’install. Détails Docker encore cochés (Compose, groupe) → READY + Installer. Detection Compose/`GROUPS=`. Carte Installations au-dessus du menu. Aide §5–§6. Cache `?v=app3`.
 - Console : une pile enregistrée avant Compte deploy n’affichait aucun bouton Installer. Les nouvelles sections par défaut sont fusionnées une fois (`catalogSeen`). Installations liste READY en premier. Bandeau Applications si le compte deploy manque. Aide §5–§7. Cache `?v=app2`.

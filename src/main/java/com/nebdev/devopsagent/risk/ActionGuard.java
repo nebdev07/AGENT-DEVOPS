@@ -18,6 +18,8 @@ public class ActionGuard {
             "install-traefik",
             "install-mariadb",
             "install-deploy",
+            "install-redis",
+            "install-backups",
             "deploy-app"
     );
 

@@ -1,6 +1,6 @@
 # Glossaire — VPS Autopilot
 
-> Dernière mise à jour : 2026-09-08
+> Dernière mise à jour : 2026-09-28
 
 | Terme | Sens |
 |---|---|
@@ -20,3 +20,6 @@
 | **READY** | Plan d’install : manquant sur cet hôte, rôle exécutable, bouton Installer. |
 | **Roadmap Vn** | Capacités de l’agent (quels traitements existent), indépendant d’un VPS donné. |
 | **Ansible** | Executor déterministe prévu à partir des CHANGE (V1). Pas encore dans le code. |
+| **Cargo (app)** | Un dépôt → un conteneur → un nom d’hôte (ADR-029). Bourse. |
+| **Plateforme cargo** | Un produit = N services (sites, API, Redis, volumes), un CHANGE `deploy-platform` (ADR-036 / V7). |
+| **Plateforme opérateurs** | Comptes + sessions (ADR-031 / V9). Autre chose que la plateforme cargo. |

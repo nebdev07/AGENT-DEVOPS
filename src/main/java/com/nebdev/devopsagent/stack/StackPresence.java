@@ -64,6 +64,9 @@ public final class StackPresence {
         if (softwareOn(snap.redis())) {
             out.put("redis", List.of("internal"));
         }
+        if (softwareOn(snap.backups())) {
+            out.put("backups", List.of("encrypted-dump", "offsite", "restore-proof"));
+        }
         return out;
     }
 

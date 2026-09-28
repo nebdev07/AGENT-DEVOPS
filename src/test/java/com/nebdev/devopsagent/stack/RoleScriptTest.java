@@ -2,6 +2,8 @@ package com.nebdev.devopsagent.stack;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class RoleScriptTest {
@@ -23,6 +25,9 @@ class RoleScriptTest {
         assertThat(script).contains("TRAEFIK_APPLIED");
         assertThat(script).contains("exposedbydefault=false");
         assertThat(script).contains("/opt/vps-autopilot/traefik");
+        assertThat(script).contains("traefik:v3.5");
+        assertThat(script).contains("DOCKER_API_VERSION=1.44");
+        assertThat(script).contains("min-api-version");
     }
 
     @Test
@@ -55,5 +60,19 @@ class RoleScriptTest {
         assertThat(script).contains("traefik.enable=true");
         assertThat(script).doesNotContain("8080:8080");
         assertThat(script).contains("Dockerfile");
+        assertThat(script).contains("DB_GRANT");
+        assertThat(script).contains("db.env");
+    }
+
+    @Test
+    void backupsRoleFlagsEncryptedDumpAndOffsite() {
+        String script = RoleScript.load("backups", List.of("encrypted-dump", "offsite"));
+        assertThat(script).doesNotContain("\r");
+        assertThat(script).contains("APPLY_ENCRYPTED_DUMP=1");
+        assertThat(script).contains("APPLY_OFFSITE=1");
+        assertThat(script).contains("APPLY_RESTORE_PROOF=0");
+        assertThat(script).contains("BACKUPS_APPLIED");
+        assertThat(script).contains("BACKUP_READY");
+        assertThat(script).doesNotContain("BACKUP_PASSPHRASE=");
     }
 }

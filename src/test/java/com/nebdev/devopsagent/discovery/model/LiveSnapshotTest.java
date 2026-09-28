@@ -17,7 +17,7 @@ class LiveSnapshotTest {
     private static ServerSnapshot snap(String source, String host) {
         return new ServerSnapshot(
                 null, source, host, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
         );
     }
 }

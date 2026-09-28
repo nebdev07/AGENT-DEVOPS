@@ -92,7 +92,11 @@ public class SshConnector {
                 cmd.join(timeout, TimeUnit.SECONDS);
                 Integer status = cmd.getExitStatus();
                 if (status != null && status != 0) {
-                    throw new IOException("Commande distante exit=" + status + " stderr=" + stderr);
+                    // stdout porte les marqueurs (NEED_DOCKERFILE, …) ; stderr = bruit git.
+                    throw new IOException(
+                            "Commande distante exit=" + status
+                                    + "\n###STDOUT###\n" + stdout.strip()
+                                    + "\n###STDERR###\n" + stderr.strip());
                 }
                 if (!stderr.isBlank()) {
                     return stdout + "\n###WARN###\n" + stderr;

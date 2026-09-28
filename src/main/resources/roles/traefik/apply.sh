@@ -44,9 +44,9 @@ fi
 
 compose_up() {
   if $SUDO docker compose version >/dev/null 2>&1; then
-    $SUDO docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" up -d
+    $SUDO docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" up -d --force-recreate --remove-orphans
   elif command -v docker-compose >/dev/null 2>&1; then
-    $SUDO docker-compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" up -d
+    $SUDO docker-compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" up -d --force-recreate --remove-orphans
   else
     echo COMPOSE_MISSING
     exit 1
@@ -68,6 +68,8 @@ HTTPS_VOL=""
 if [ "$APPLY_HTTPS" = "1" ]; then
   HTTPS_PORTS='      - "443:443"'
   HTTPS_CMD=$(printf '%s\n' \
+    '      - --entrypoints.web.http.redirections.entrypoint.to=websecure' \
+    '      - --entrypoints.web.http.redirections.entrypoint.scheme=https' \
     '      - --entrypoints.websecure.address=:443' \
     '      - --certificatesresolvers.le.acme.httpchallenge=true' \
     '      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web' \
@@ -76,13 +78,52 @@ if [ "$APPLY_HTTPS" = "1" ]; then
   HTTPS_VOL='      - ./letsencrypt:/letsencrypt'
 fi
 
+# Ubuntu récent (Docker Engine 29+) impose MinAPI 1.44. Traefik ≤ 3.5 parle encore en API 1.24
+# via le socket → provider Docker mort, 404 sur toutes les apps. Workaround : min-api-version 1.24.
+merge_docker_min_api() {
+  local conf=/etc/docker/daemon.json
+  $SUDO mkdir -p /etc/docker
+  if [ -f "$conf" ]; then
+    if grep -q 'min-api-version' "$conf" 2>/dev/null; then
+      return 0
+    fi
+    # Fichier existant sans la clé : backup + écriture minimale (lab).
+    $SUDO cp "$conf" "${conf}.bak.vps-autopilot" || true
+  fi
+  $SUDO tee "$conf" >/dev/null <<'JSON'
+{
+  "min-api-version": "1.24"
+}
+JSON
+  if command -v systemctl >/dev/null 2>&1; then
+    $SUDO systemctl restart docker
+  else
+    $SUDO service docker restart
+  fi
+  # Attendre que le daemon réponde.
+  i=0
+  while [ "$i" -lt 30 ]; do
+    if $SUDO docker info >/dev/null 2>&1; then
+      break
+    fi
+    i=$((i + 1))
+    sleep 1
+  done
+  $SUDO docker info >/dev/null 2>&1 || { echo DOCKER_RESTART_FAILED; exit 1; }
+}
+
+merge_docker_min_api
+
+# Image v3.5 + DOCKER_API_VERSION (défense en profondeur) ; le min-api-version débloque le socket.
 # shellcheck disable=SC2086
 $SUDO tee "$DIR/docker-compose.yml" >/dev/null <<EOF
 services:
   traefik:
-    image: traefik:v3.3
+    image: traefik:v3.5
     container_name: traefik
     restart: unless-stopped
+    environment:
+      - DOCKER_API_VERSION=1.44
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false

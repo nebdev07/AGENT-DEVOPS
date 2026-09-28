@@ -16,6 +16,7 @@ import java.io.IOException;
 public class AppDeployService {
 
     private final AppIntentStore appIntentStore;
+    private final AppDeployPlanService planService;
     private final StateStore stateStore;
     private final ActionGuard actionGuard;
     private final ForbiddenTargetGuard forbiddenTargetGuard;
@@ -24,6 +25,7 @@ public class AppDeployService {
 
     public AppDeployService(
             AppIntentStore appIntentStore,
+            AppDeployPlanService planService,
             StateStore stateStore,
             ActionGuard actionGuard,
             ForbiddenTargetGuard forbiddenTargetGuard,
@@ -31,6 +33,7 @@ public class AppDeployService {
             DiscoveryService discoveryService
     ) {
         this.appIntentStore = appIntentStore;
+        this.planService = planService;
         this.stateStore = stateStore;
         this.actionGuard = actionGuard;
         this.forbiddenTargetGuard = forbiddenTargetGuard;
@@ -38,55 +41,98 @@ public class AppDeployService {
         this.discoveryService = discoveryService;
     }
 
+    public AppDeployPlan plan(String appId) throws IOException {
+        return planService.plan(appId);
+    }
+
     public DiscoveryService.DiscoveryResult deploy(String appId, SshTarget target, boolean confirmed)
             throws IOException {
+        return deploy(appId, target, confirmed, true);
+    }
+
+    public DiscoveryService.DiscoveryResult deploy(
+            String appId,
+            SshTarget target,
+            boolean confirmed,
+            boolean allowScaffold
+    ) throws IOException {
         actionGuard.assertConfirmedChange("deploy-app", confirmed);
         forbiddenTargetGuard.assertAllowed(target.host());
         ServerSnapshot snap = lastSnapshot();
         if (snap == null || !LiveSnapshot.isLive(snap)) {
-            throw new IllegalStateException("Analyse SSH réelle requise avant de déployer une app.");
+            throw new IllegalStateException(OperatorMessage.of(
+                    "pas d’analyse SSH réelle en mémoire (fixture ou aucune discovery).",
+                    "Étape Déployer — prérequis",
+                    "clique « Analyser le VPS » avec IP + user SSH, puis réessaie Déployer."));
         }
         if (!InstallPlanBuilder.securityPresent(snap)) {
-            throw new IllegalStateException("Baseline sécurité incomplet. Pas d’app publique tant que Sécurité n’est pas SKIP.");
+            throw new IllegalStateException(OperatorMessage.of(
+                    "baseline sécurité incomplet sur ce VPS (UFW, fail2ban, SSH durci).",
+                    "Étape Déployer — prérequis Sécurité",
+                    "dans Installations, installe Sécurité jusqu’à SKIP, puis Déployer."));
         }
         if (snap.docker() == null || !snap.docker().present()) {
-            throw new IllegalStateException("Docker est requis. Installe Docker d’abord.");
+            throw new IllegalStateException(OperatorMessage.of(
+                    "Docker absent sur ce VPS.",
+                    "Étape Déployer — prérequis Docker",
+                    "installe Docker depuis Installations, réanalyse si besoin, puis Déployer."));
         }
         if (snap.traefik() == null || !snap.traefik().present()) {
-            throw new IllegalStateException("Traefik est requis. Installe Traefik d’abord.");
+            throw new IllegalStateException(OperatorMessage.of(
+                    "Traefik absent : sans lui l’app n’a pas d’entrée HTTP publique.",
+                    "Étape Déployer — prérequis Traefik",
+                    "installe Traefik (après Docker + sécurité), puis Déployer."));
         }
         if (snap.deploy() == null || !snap.deploy().present()) {
-            throw new IllegalStateException("Compte deploy requis. Installe le compte deploy d’abord.");
+            throw new IllegalStateException(OperatorMessage.of(
+                    "compte système « deploy » absent.",
+                    "Étape Déployer — prérequis Compte deploy",
+                    "installe le compte deploy dans Installations (pas Analyser), puis Enregistrer / Déployer."));
         }
+
         AppSpec app = appIntentStore.require(appId);
-        String script = RoleScript.loadApp(app);
-        String raw = sshConnector.runStdinScript(script, target, 600);
-        if (raw.contains("NEED_PASSWORDLESS_SUDO")) {
-            throw new IllegalStateException(
-                    "sudo sans mot de passe requis pour " + target.user() + ".");
+        AppDeployPlan plan = planService.plan(appId);
+        if (!plan.canProceed()) {
+            throw new IllegalStateException(OperatorMessage.of(
+                    plan.blocker() == null ? "déploiement impossible." : plan.blocker(),
+                    "Popup confirmation — plan bloqué",
+                    "corrige le dépôt ou attends un template pour cette stack."));
         }
-        if (raw.contains("NEED_DEPLOY_USER")) {
-            throw new IllegalStateException("Compte deploy absent. Installe-le depuis la pile.");
+
+        String scaffoldB64 = null;
+        AppSpec effective = app;
+        if (allowScaffold && plan.scaffoldOpt().isPresent()) {
+            AppDeployPlan.Scaffold sc = plan.scaffold();
+            scaffoldB64 = sc.dockerfileBase64();
+            if (sc.port() != app.port()) {
+                effective = new AppSpec(app.id(), app.gitUrl(), app.gitRef(), app.hostname(), sc.port());
+            }
+        } else {
+            // Pas de rattrapage autorisé : garder l’ancien préflight strict.
+            DockerfilePreflight.assertPresentOrSkip(app);
         }
-        if (raw.contains("NEED_TRAEFIK") || raw.contains("DOCKER_MISSING")) {
-            throw new IllegalStateException("Docker et Traefik (réseau proxy) sont requis.");
+
+        String script = RoleScript.loadApp(effective, scaffoldB64);
+        String raw;
+        try {
+            raw = sshConnector.runStdinScript(script, target, 600);
+        } catch (IOException e) {
+            throw AppRemoteFailure.unknown(e, effective);
         }
-        if (raw.contains("NEED_DOCKERFILE")) {
-            throw new IllegalStateException("Le dépôt n’a pas de Dockerfile à la racine. L’agent ne l’invente pas.");
-        }
-        if (raw.contains("GIT_CLONE_FAILED")) {
-            throw new IllegalStateException("Clone Git impossible. Dépôt HTTPS public, branche existante.");
-        }
-        if (raw.contains("NEED_APP_SPEC")) {
-            throw new IllegalStateException("Spécification d’app incomplète.");
-        }
-        if (raw.contains("UNSUPPORTED_OS")) {
-            throw new IllegalStateException("Famille Debian/Ubuntu uniquement pour l’instant.");
-        }
+        AppRemoteFailure.throwIfKnown(raw, effective);
         if (!raw.contains("APP_DEPLOYED")) {
-            throw new IllegalStateException("Le déploiement ne s’est pas terminé (APP_DEPLOYED absent).");
+            String excerpt = raw.replace('\n', ' ').strip();
+            if (excerpt.length() > 180) {
+                excerpt = excerpt.substring(0, 180);
+            }
+            throw new IllegalStateException(OperatorMessage.of(
+                    "le script distant s’est arrêté sans marqueur APP_DEPLOYED (build ou compose en échec).",
+                    "Étape Déployer — " + effective.id(),
+                    "vérifie Dockerfile et le build. L’état déjà installé du VPS n’est pas effacé. Extrait : " + excerpt));
         }
-        return discoveryService.discoverRemote(target);
+        DiscoveryService.DiscoveryResult discovery = discoveryService.discoverRemote(target);
+        PublicReachability.checkHttps(effective.hostname());
+        return discovery;
     }
 
     private ServerSnapshot lastSnapshot() throws IOException {

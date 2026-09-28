@@ -37,6 +37,7 @@ class DiscoveryParserTest {
         assertThat(snap.redis().present()).isFalse();
         assertThat(snap.traefik().present()).isFalse();
         assertThat(snap.deploy().present()).isFalse();
+        assertThat(snap.backups().present()).isFalse();
         assertThat(snap.apps()).isEmpty();
         assertThat(snap.ssh().listening()).isTrue();
         assertThat(snap.ssh().permitRootLogin()).isEqualTo("yes");

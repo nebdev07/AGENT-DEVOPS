@@ -74,8 +74,17 @@ else
 fi
 
 section REDIS
-if command -v redis-server >/dev/null 2>&1; then
+if command -v docker >/dev/null 2>&1; then
+  if $SUDO docker ps --format '{{.Names}}' 2>/dev/null | grep -qx redis \
+      || docker ps --format '{{.Names}}' 2>/dev/null | grep -qx redis; then
+    echo PRESENT
+    $SUDO docker inspect -f '{{.Config.Image}}' redis 2>/dev/null || docker inspect -f '{{.Config.Image}}' redis 2>/dev/null || true
+  else
+    echo ABSENT
+  fi
+elif command -v redis-server >/dev/null 2>&1; then
   echo PRESENT
+  echo REDIS_HOST
   redis-server --version 2>/dev/null || true
 else
   echo ABSENT
@@ -86,6 +95,10 @@ if command -v docker >/dev/null 2>&1; then
   if $SUDO docker ps --format '{{.Names}}' 2>/dev/null | grep -qi traefik \
       || docker ps --format '{{.Names}}' 2>/dev/null | grep -qi traefik; then
     echo PRESENT
+    $SUDO docker inspect -f '{{.Config.Image}}' traefik 2>/dev/null || docker inspect -f '{{.Config.Image}}' traefik 2>/dev/null || true
+    $SUDO docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' traefik 2>/dev/null \
+      | grep -E '^DOCKER_API_VERSION=' || docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' traefik 2>/dev/null \
+      | grep -E '^DOCKER_API_VERSION=' || echo DOCKER_API_VERSION_ABSENT
   else
     echo ABSENT
   fi
@@ -97,6 +110,17 @@ section DEPLOY
 if id deploy >/dev/null 2>&1 && id -nG deploy 2>/dev/null | grep -qw docker; then
   echo PRESENT
   id -nG deploy 2>/dev/null || true
+else
+  echo ABSENT
+fi
+
+section BACKUPS
+if $SUDO test -f /opt/vps-autopilot/backups/.vps-autopilot-backups 2>/dev/null \
+    || test -f /opt/vps-autopilot/backups/.vps-autopilot-backups 2>/dev/null; then
+  echo PRESENT
+  $SUDO ls -1 /opt/vps-autopilot/backups/*.enc 2>/dev/null | tail -n 3 \
+    || ls -1 /opt/vps-autopilot/backups/*.enc 2>/dev/null | tail -n 3 \
+    || true
 else
   echo ABSENT
 fi

@@ -1,6 +1,6 @@
 # Vision — VPS Autopilot
 
-> Dernière mise à jour : 2026-09-07
+> Dernière mise à jour : 2026-09-28
 
 ## Objectif
 
@@ -27,3 +27,9 @@ TOI → Agent (plan) → validation humaine → Ansible/SSH déterministe → VP
 ## Cible long terme
 
 Un outil « VPS Autopilot » : provider, OS, type de projet, base, domaine → provision / secure / docker / reverse-proxy / SSL / deploy / monitor.
+
+**Cargo 1:1 (V3)** : une app, une image, un hôte.
+
+**Plateforme cargo (V7, ADR-036)** : un produit à plusieurs services (site, backoffice, API, Redis, fichiers) sur le même VPS, toujours sans Apache/PM2/Tomcat hôte. Premier terrain = lab. Une infra du type ARC est le **spécimen**, pas la première cible d’exécution.
+
+**Plateforme opérateurs (V9, ADR-031)** : plusieurs opérateurs, chacun une session et des paramètres qui ne valent **que pour lui**. Cockpit en ligne seulement après authentification. Jusqu’à V9 : mono-opérateur sur le poste local ; le lien public cargo n’est qu’une preuve de déploiement.

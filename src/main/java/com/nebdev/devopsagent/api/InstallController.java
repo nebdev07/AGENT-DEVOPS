@@ -41,18 +41,22 @@ public class InstallController {
             throw new IllegalArgumentException("Indiquez l’hôte et l’utilisateur SSH.");
         }
         int port = body.port() == null ? 22 : body.port();
-        DiscoveryService.DiscoveryResult result = installService.apply(
+        InstallService.ApplyResult applied = installService.apply(
                 body.component().trim(),
                 new SshTarget(body.host().trim(), port, body.user().trim()),
                 Boolean.TRUE.equals(body.confirm())
         );
-        return Map.of(
-                "status", "ok",
-                "component", body.component().trim(),
-                "risk", "CHANGE",
-                "snapshot", result.snapshot(),
-                "report", result.report()
-        );
+        DiscoveryService.DiscoveryResult result = applied.discovery();
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("status", "ok");
+        out.put("component", body.component().trim());
+        out.put("risk", "CHANGE");
+        out.put("snapshot", result.snapshot());
+        out.put("report", result.report());
+        if (applied.extras() != null) {
+            out.putAll(applied.extras());
+        }
+        return out;
     }
 
     @ExceptionHandler(UnsafeActionException.class)

@@ -56,6 +56,10 @@ class ActionGuardTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> guard.assertConfirmedChange("install-deploy", true))
                 .doesNotThrowAnyException();
+        assertThatCode(() -> guard.assertConfirmedChange("install-redis", true))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> guard.assertConfirmedChange("install-backups", true))
+                .doesNotThrowAnyException();
         assertThatCode(() -> guard.assertConfirmedChange("deploy-app", true))
                 .doesNotThrowAnyException();
     }

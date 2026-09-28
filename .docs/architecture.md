@@ -36,9 +36,11 @@ L’IA **ne SSH pas en root librement**. Elle produit un plan ; seules des actio
 | Security | user deploy, SSH clés, UFW, fail2ban, unattended-upgrades | **baseline exécutable** (ADR-019) ; user deploy encore spécifié |
 | Container | Docker + Compose | spécifié |
 | Network | Traefik, réseaux Docker, HTTPS | **rôle exécutable** (ADR-024) |
-| Database | MariaDB (une base / projet), Redis à la demande | **instance exécutable** (ADR-026) ; grants par projet = V3 |
-| Backup | dump, chiffrement, hors-site, restore **par l’agent** | spécifié (V4) — hors-site : **poste opérateur** au moins (autre cible plus tard) |
-| Deploy | Git → image → Traefik ; compte `deploy` | **compte + deploy-app exécutables** (ADR-028 / ADR-029) ; premier cargo = cet agent en `cargo` (ADR-030) ; grants SQL = plus tard |
+| Database | MariaDB (une base / projet), Redis à la demande | **instance + grants au deploy-app** (ADR-026 / ADR-029) ; Redis = plus tard |
+| Backup | dump, chiffrement, hors-site, preuve déchiffrement | **partiel V4** — exécutable (ADR-034) ; restore SQL complet plus tard |
+| Deploy | Git → image → Traefik ; compte `deploy` | **compte + deploy-app + cargo 1:1** (ADR-028→030) |
+| Plateforme cargo | N services (sites + API), Redis, volumes, un CHANGE | **spécifié V7** (ADR-036) ; pas de code |
+| Plateforme opérateurs | Auth, sessions, params par opérateur | **spécifié V9** (ADR-031) |
 
 ## 3. Dépôt (V0 : un module Maven)
 
@@ -96,4 +98,4 @@ CLI/API plan + install (ADR-018)
 
 ## 5. Hors V0
 
-Pas d’Ansible, pas d’IA générative. Docker + Traefik + MariaDB + compte `deploy` + **deploy-app** : rôles bash exécutables (après SKIP sécurité **sur l’hôte**). Redis / grants SQL / backups : spécifiés.
+Pas d’Ansible, pas d’IA générative. Docker + Traefik + MariaDB + Redis + compte `deploy` + **deploy-app** + **backups** (dump chiffré) : rôles bash exécutables (après SKIP sécurité **sur l’hôte**). Restore SQL complet / grants avancés : suite. **`deploy-platform` (ADR-036)** : spécifié, pas d’executor.

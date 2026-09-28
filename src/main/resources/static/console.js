@@ -153,6 +153,7 @@ function paint(snapshot, report, mode) {
   setSoft("swRedis", snapshot.redis?.present);
   setSoft("swTraefik", snapshot.traefik?.present);
   setSoft("swDeploy", snapshot.deploy?.present);
+  setSoft("swBackups", snapshot.backups?.present);
   setFirewall(snapshot.firewall?.ufwStatus, snapshot.firewall?.fail2banStatus);
   renderAppsGate(snapshot);
   renderLiveWarnings(snapshot.warnings);
@@ -328,7 +329,7 @@ function hideBusy() {
   if ($("btnAppSave")) $("btnAppSave").disabled = false;
 }
 
-function showResult({ ok, kicker, title, detail, next }) {
+function showResult({ ok, kicker, title, detail, next, link }) {
   const overlay = $("resultOverlay");
   const card = $("resultCard");
   card.classList.toggle("ok", !!ok);
@@ -339,6 +340,19 @@ function showResult({ ok, kicker, title, detail, next }) {
   const nextEl = $("resultNext");
   nextEl.textContent = next || "";
   nextEl.hidden = !next;
+  const wrap = $("resultLinkWrap");
+  const a = $("resultLink");
+  if (wrap && a) {
+    if (link) {
+      a.href = link;
+      a.textContent = link;
+      wrap.hidden = false;
+    } else {
+      a.removeAttribute("href");
+      a.textContent = "";
+      wrap.hidden = true;
+    }
+  }
   overlay.classList.remove("hidden");
   overlay.setAttribute("aria-hidden", "false");
   document.body.classList.add("is-busy");
@@ -349,7 +363,73 @@ function hideResult() {
   const overlay = $("resultOverlay");
   overlay.classList.add("hidden");
   overlay.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("is-busy");
+  if ($("confirmOverlay")?.classList.contains("hidden") && $("busyOverlay")?.classList.contains("hidden")) {
+    document.body.classList.remove("is-busy");
+  }
+}
+
+let confirmResolver = null;
+
+function hideConfirm() {
+  const overlay = $("confirmOverlay");
+  if (!overlay) return;
+  overlay.classList.add("hidden");
+  overlay.setAttribute("aria-hidden", "true");
+  if ($("resultOverlay")?.classList.contains("hidden") && $("busyOverlay")?.classList.contains("hidden")) {
+    document.body.classList.remove("is-busy");
+  }
+}
+
+/**
+ * Popup CHANGE : liste ce qui sera fait. Résout true/false.
+ */
+function showConfirmPlan({ kicker, title, detail, actions, warnings, canProceed, blocker }) {
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+    const overlay = $("confirmOverlay");
+    $("confirmKicker").textContent = kicker || "CHANGE · confirmation";
+    $("confirmTitle").textContent = title || "Confirmer";
+    $("confirmDetail").textContent = detail || "Voici ce que l’agent va faire si tu confirmes.";
+    const list = $("confirmActions");
+    list.innerHTML = "";
+    (actions || []).forEach((a) => {
+      const li = document.createElement("li");
+      li.textContent = a;
+      list.appendChild(li);
+    });
+    const warn = $("confirmWarnings");
+    if (warnings && warnings.length) {
+      warn.hidden = false;
+      warn.textContent = warnings.join("\n");
+    } else {
+      warn.hidden = true;
+      warn.textContent = "";
+    }
+    const block = $("confirmBlocker");
+    const okBtn = $("btnConfirmOk");
+    if (blocker) {
+      block.hidden = false;
+      block.textContent = "Bloqué : " + blocker;
+    } else {
+      block.hidden = true;
+      block.textContent = "";
+    }
+    okBtn.disabled = canProceed === false;
+    okBtn.textContent = canProceed === false ? "Impossible de continuer" : "Confirmer le CHANGE";
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+    document.body.classList.add("is-busy");
+    (canProceed === false ? $("btnConfirmCancel") : okBtn).focus();
+  });
+}
+
+function settleConfirm(ok) {
+  hideConfirm();
+  if (confirmResolver) {
+    const r = confirmResolver;
+    confirmResolver = null;
+    r(!!ok);
+  }
 }
 
 async function loadRuntime() {
@@ -545,9 +625,20 @@ $("btnDiscover").addEventListener("click", discover);
 $("btnTrust").addEventListener("click", acceptHost);
 $("btnInstallKey").addEventListener("click", installKey);
 if ($("btnAppSave")) $("btnAppSave").addEventListener("click", saveApp);
+if ($("btnAppClear")) $("btnAppClear").addEventListener("click", clearAppForm);
+if ($("btnPublicDomain")) $("btnPublicDomain").addEventListener("click", savePublicDomain);
 $("btnResultClose").addEventListener("click", hideResult);
+if ($("btnConfirmCancel")) $("btnConfirmCancel").addEventListener("click", () => settleConfirm(false));
+if ($("btnConfirmOk")) $("btnConfirmOk").addEventListener("click", () => {
+  if ($("btnConfirmOk").disabled) return;
+  settleConfirm(true);
+});
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
+  if ($("confirmOverlay") && !$("confirmOverlay").classList.contains("hidden")) {
+    settleConfirm(false);
+    return;
+  }
   if (!$("resultOverlay").classList.contains("hidden")) {
     hideResult();
   }
@@ -830,6 +921,8 @@ async function applyInstall(action) {
     traefik: "Traefik dans Docker, réseau proxy, UFW 80/443. Aucune app exposée. Pull d’image : jusqu’à 5 minutes.",
     mariadb: "Conteneur MariaDB interne (pas de port public). Pull d’image : jusqu’à 5 minutes.",
     deploy: "Compte deploy : groupe docker, pas de sudo, mot de passe verrouillé. La clé de l’agent est copiée. AllowUsers inclut deploy. Aucune app n’est lancée.",
+    redis: "Conteneur Redis sur le réseau data (pas de port public), requirepass hors git.",
+    backups: "Dump MariaDB chiffré sur le VPS, copie vers state/backups/ sur ce poste, preuve de déchiffrement locale.",
   };
   showBusy({
     risk: "CHANGE",
@@ -898,7 +991,11 @@ async function loadApps() {
   try {
     const r = await fetch("/api/v1/apps");
     const j = await r.json();
-    renderAppList(j.apps || []);
+    const apps = j.apps || [];
+    renderAppList(apps);
+    if (apps.length && !$("appGit").value.trim() && !$("appId").value.trim()) {
+      // Ne préremplit plus avec la 1re app : on ajoute souvent une 2e.
+    }
   } catch {
     box.innerHTML = "<p class=\"hint\">Liste d’apps injoignable.</p>";
   }
@@ -918,26 +1015,244 @@ function renderAppList(apps) {
     const on = running.has(a.id);
     row.className = "action-row " + (on ? "SKIP" : "READY");
     const info = document.createElement("div");
-    info.innerHTML = "<span class=\"tag\">" + (on ? "en cours" : "déclarée") + "</span><strong>"
-      + esc(a.id) + "</strong><p>" + esc(a.hostname) + " · " + esc(a.gitUrl) + " @ " + esc(a.gitRef)
+    info.innerHTML = "<span class=\"tag\">" + (on ? "en ligne" : "déclarée") + "</span><strong>"
+      + esc(a.id) + "</strong><p>"
+      + (on
+        ? '<a class="app-public-link" href="https://' + esc(a.hostname) + '/" target="_blank" rel="noopener noreferrer">https://'
+          + esc(a.hostname) + '/</a> · '
+        : esc(a.hostname) + " · ")
+      + esc(a.gitUrl) + " @ " + esc(a.gitRef)
       + " · port " + a.port + "</p>";
     row.appendChild(info);
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "change";
-    btn.textContent = on ? "Mettre à jour" : "Déployer";
-    btn.addEventListener("click", () => deployApp(a));
-    row.appendChild(btn);
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    const btnEdit = document.createElement("button");
+    btnEdit.type = "button";
+    btnEdit.className = "ghost";
+    btnEdit.textContent = "Modifier";
+    btnEdit.title = "Remplir le formulaire pour changer cette ligne";
+    btnEdit.addEventListener("click", () => editApp(a));
+    const btnDel = document.createElement("button");
+    btnDel.type = "button";
+    btnDel.className = "ghost ghost-danger";
+    btnDel.textContent = "Supprimer";
+    btnDel.title = "Retirer de la liste locale (ne stoppe pas le conteneur VPS)";
+    btnDel.addEventListener("click", () => deleteApp(a));
+    const btnDeploy = document.createElement("button");
+    btnDeploy.type = "button";
+    btnDeploy.className = "change";
+    btnDeploy.textContent = on ? "Mettre à jour" : "Déployer";
+    btnDeploy.addEventListener("click", () => deployApp(a));
+    actions.appendChild(btnEdit);
+    actions.appendChild(btnDel);
+    actions.appendChild(btnDeploy);
+    row.appendChild(actions);
     box.appendChild(row);
   });
 }
 
+function suggestedAppHost(slug) {
+  const base = $("publicBaseDomain") ? $("publicBaseDomain").value.trim().toLowerCase()
+    .replace(/^https?:\/\//, "").replace(/\/$/, "").replace(/^\*\./, "") : "";
+  const id = (slug || "app").toLowerCase().replace(/[^a-z0-9-]/g, "") || "app";
+  if (base && /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(base)) {
+    return id + "." + base;
+  }
+  const ip = $("sshHost") ? $("sshHost").value.trim() : "";
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    return "";
+  }
+  return id + "." + ip + ".sslip.io";
+}
+
+async function loadPublicDomain() {
+  try {
+    const r = await fetch("/api/v1/apps/public-domain");
+    const j = await r.json();
+    if (!r.ok) return;
+    if ($("publicBaseDomain")) $("publicBaseDomain").value = j.baseDomain || "";
+    if ($("publicDomainHint") && j.hint) $("publicDomainHint").textContent = j.hint;
+  } catch (_) { /* ignore */ }
+}
+
+async function savePublicDomain() {
+  const base = $("publicBaseDomain") ? $("publicBaseDomain").value.trim() : "";
+  try {
+    const r = await fetch("/api/v1/apps/public-domain", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseDomain: base }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    if ($("publicBaseDomain")) $("publicBaseDomain").value = j.baseDomain || "";
+    if ($("publicDomainHint") && j.hint) $("publicDomainHint").textContent = j.hint;
+    setStatus(j.baseDomain
+      ? "Domaine public « " + j.baseDomain + " » enregistré. Les nouvelles apps proposeront https://id." + j.baseDomain + "/"
+      : "Domaine public effacé — suggestions sslip.", "ok");
+  } catch (e) {
+    setStatus(e.message, "err");
+  }
+}
+
+function looksLikeGitUrl(value) {
+  const v = (value || "").trim().toLowerCase();
+  return v.startsWith("http://") || v.startsWith("https://") || v.includes("github.com") || v.includes(".git");
+}
+
+function normalizeGitUrl(value) {
+  let g = (value || "").trim();
+  if (!g) return "";
+  if (!g.endsWith(".git") && /^https:\/\/github\.com\/[^/]+\/[^/]+\/?$/i.test(g)) {
+    g = g.replace(/\/$/, "") + ".git";
+  }
+  return g;
+}
+
+function fillAppForm(app) {
+  if (!app) return;
+  if ($("appId")) $("appId").value = app.id || "";
+  if ($("appGit")) $("appGit").value = app.gitUrl || "";
+  if ($("appRef")) $("appRef").value = app.gitRef || "main";
+  if ($("appHostName")) $("appHostName").value = app.hostname || "";
+  if ($("appPort") && app.port) $("appPort").value = String(app.port);
+}
+
+function clearAppForm() {
+  if ($("appId")) $("appId").value = "";
+  if ($("appGit")) $("appGit").value = "";
+  if ($("appRef")) $("appRef").value = "main";
+  if ($("appHostName")) $("appHostName").value = "";
+  if ($("appPort")) $("appPort").value = "8080";
+  setAppFormStatus("Formulaire vidé — saisis une nouvelle app ou clique Modifier sur une ligne.", "ok");
+  setAppSaveLabel(false);
+  if ($("appId")) $("appId").focus();
+}
+
+function setAppSaveLabel(editing) {
+  const btn = $("btnAppSave");
+  if (!btn) return;
+  btn.textContent = editing ? "Enregistrer les modifications" : "Enregistrer dans la liste";
+}
+
+function editApp(app) {
+  fillAppForm(app);
+  setAppSaveLabel(true);
+  setAppFormStatus(
+    "Modification de « " + app.id + " ».\n"
+      + "Où : formulaire au-dessus.\n"
+      + "À faire : change le nom d’hôte / Git / port, puis « Enregistrer les modifications ». Ensuite « Mettre à jour » pour appliquer sur le VPS.",
+    "ok"
+  );
+  setStatus("Modification « " + app.id + " » — formulaire Applications rempli.", "ok");
+  const card = $("appsCard");
+  if (card && card.scrollIntoView) {
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  if ($("appHostName")) $("appHostName").focus();
+}
+
+async function deleteApp(app) {
+  const ok = window.confirm(
+    "Supprimer « " + app.id + " » de la liste locale ?\n\n"
+      + "Cela n’arrête PAS le conteneur sur le VPS.\n"
+      + "Hostname actuel : " + app.hostname
+  );
+  if (!ok) {
+    setStatus("Suppression annulée.", "ok");
+    return;
+  }
+  try {
+    const r = await fetch("/api/v1/apps?id=" + encodeURIComponent(app.id), { method: "DELETE" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    renderAppList(j.apps || []);
+    if ($("appId") && $("appId").value.trim().toLowerCase() === app.id) {
+      clearAppForm();
+    }
+    const msg = "« " + app.id + " » retiré de la liste locale. Conteneur VPS inchangé.";
+    setAppFormStatus(msg, "ok");
+    setStatus(msg, "ok");
+  } catch (e) {
+    setAppFormStatus(e.message, "err");
+    pointAppFormError();
+  }
+}
+
+function setAppFormStatus(text, kind) {
+  const el = $("appFormStatus");
+  if (!el) return;
+  el.hidden = !text;
+  el.textContent = text || "";
+  el.classList.remove("ok", "err");
+  if (kind) el.classList.add(kind);
+}
+
+/** Pointe vers le formulaire apps : n’écrase pas la barre Analyser avec le détail. */
+function pointAppFormError() {
+  setStatus("Erreur formulaire Applications (à droite) — détail sous « Enregistrer ». Pas lié à Analyser.", "err");
+}
+
+function explainIdLooksLikeHost(rawId) {
+  const host = rawId.trim().toLowerCase();
+  const slug = host.split(".")[0].replace(/_/g, "-").replace(/[^a-z0-9-]/g, "") || "my-app";
+  if (!$("appHostName").value.trim()) {
+    $("appHostName").value = host;
+  }
+  $("appId").value = slug;
+  setAppFormStatus(
+    "Cause : tu as collé un nom d’hôte DNS (« " + host + " ») dans Identifiant.\n"
+      + "Où : champ Identifiant (slug) vs champ Nom d’hôte (DNS complet).\n"
+      + "À faire : Identifiant = « " + slug + " » ; Nom d’hôte = « " + host
+      + " ». Les champs ont été pré-corrigés — vérifie puis reclique Enregistrer.",
+    "err"
+  );
+  pointAppFormError();
+  $("appId").focus();
+}
+
 async function saveApp() {
+  setAppFormStatus("", null);
+  let rawId = $("appId").value.trim();
+  if (!rawId) {
+    setAppFormStatus(
+      "Cause : aucun identifiant saisi.\n"
+        + "Où : champ Identifiant — bande Applications (pas Analyser).\n"
+        + "À faire : ex. my-bourse (les _ deviennent des tirets). Pas de domaine ici.",
+      "err"
+    );
+    pointAppFormError();
+    $("appId").focus();
+    return;
+  }
+  if (rawId.indexOf(".") >= 0) {
+    explainIdLooksLikeHost(rawId);
+    return;
+  }
+  let gitUrl = normalizeGitUrl($("appGit").value);
+  let hostname = $("appHostName").value.trim();
+  if (looksLikeGitUrl(hostname)) {
+    if (!gitUrl) {
+      gitUrl = normalizeGitUrl(hostname);
+      $("appGit").value = gitUrl;
+    }
+    hostname = "";
+    $("appHostName").value = "";
+  }
+  const normalizedId = rawId.toLowerCase().replace(/_/g, "-");
+  if ($("appId")) $("appId").value = normalizedId;
+  if (!hostname) {
+    hostname = suggestedAppHost(normalizedId);
+    if (hostname) {
+      $("appHostName").value = hostname;
+    }
+  }
+  if ($("appGit")) $("appGit").value = gitUrl;
   const spec = {
-    id: $("appId").value.trim(),
-    gitUrl: $("appGit").value.trim(),
+    id: normalizedId,
+    gitUrl: gitUrl,
     gitRef: $("appRef").value.trim() || "main",
-    hostname: $("appHostName").value.trim(),
+    hostname: hostname,
     port: Number($("appPort").value) || 8080,
   };
   try {
@@ -952,9 +1267,15 @@ async function saveApp() {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.statusText);
     renderAppList(j.apps || []);
-    setStatus("App " + spec.id + " enregistrée. Rien n’est déployé tant que tu n’as pas confirmé Déployer.", "ok");
+    setAppSaveLabel(false);
+    const msg = "App « " + spec.id + " » enregistrée (hôte " + spec.hostname
+      + "). Clique Déployer / Mettre à jour sur sa ligne.";
+    setAppFormStatus(msg, "ok");
+    setStatus(msg, "ok");
   } catch (e) {
-    setStatus(e.message, "err");
+    setAppFormStatus(e.message, "err");
+    pointAppFormError();
+    $("appId").focus();
   }
 }
 
@@ -964,19 +1285,35 @@ async function deployApp(app) {
     setStatus("Indique IP et utilisateur SSH.", "err");
     return;
   }
-  const planText = "CHANGE : déployer " + app.id + " sur " + t.user + "@" + t.host
-    + "\n\nGit " + app.gitUrl + " (" + app.gitRef + ")"
-    + "\nHôte public " + app.hostname + " · port interne " + app.port
-    + "\n\nClone + build + Traefik. Aucun port publié. DNS à ta charge. Continuer ?";
-  if (!window.confirm(planText)) {
+  let plan;
+  try {
+    const r = await fetch("/api/v1/apps/deploy-plan?id=" + encodeURIComponent(app.id));
+    plan = await r.json();
+    if (!r.ok) throw new Error(plan.error || r.statusText);
+  } catch (e) {
+    setStatus("Plan de déploiement : " + e.message, "err");
     return;
   }
+  const accepted = await showConfirmPlan({
+    kicker: "CHANGE · confirmation",
+    title: "Déployer « " + app.id + " »",
+    detail: "Cible " + t.user + "@" + t.host + ". Rien ne part tant que tu n’as pas confirmé.",
+    actions: plan.actions || [],
+    warnings: plan.warnings || [],
+    canProceed: plan.canProceed !== false,
+    blocker: plan.blocker || "",
+  });
+  if (!accepted) {
+    setStatus("Déploiement annulé — aucune modification.", "ok");
+    return;
+  }
+  const steps = (plan.actions || []).slice(0, 4);
   showBusy({
     risk: "CHANGE",
     title: "Déploiement — " + app.id,
-    detail: "Clone HTTPS, image Docker, labels Traefik. Cible " + t.user + "@" + t.host
+    detail: "Exécution du plan confirmé sur " + t.user + "@" + t.host
       + ". Jusqu’à 10 minutes (build). Ne ferme pas cette page.",
-    steps: ["Cloner le dépôt", "Construire l’image", "Brancher Traefik (pas de port public)"],
+    steps: steps.length ? steps : ["Cloner le dépôt", "Rattrapage si besoin", "Build + Traefik"],
     currentStep: 0,
   });
   setStatus("Déploiement de " + app.id + "…");
@@ -990,6 +1327,7 @@ async function deployApp(app) {
         port: t.port,
         user: t.user,
         confirm: true,
+        allowScaffold: true,
       }),
     });
     const j = await r.json();
@@ -998,29 +1336,33 @@ async function deployApp(app) {
     const elapsed = formatElapsed(Date.now() - busyStartedAt);
     hideBusy();
     setStatus(app.id + " : déployé. Nouvelle analyse affichée.", "ok");
+    const publicUrl = "https://" + app.hostname + "/";
     showResult({
       ok: true,
       kicker: "CHANGE · réussi",
       title: app.id + " déployé",
-      detail: "Image construite et branchée sur Traefik en " + elapsed + ". Pointe le DNS de "
-        + app.hostname + " vers ce VPS.",
-      next: "Les grants MariaDB par projet viendront plus tard.",
+      detail: "Plan exécuté en " + elapsed + ". Lien public HTTPS ci-dessous (HTTP redirigé si Traefik HTTPS est actif).",
+      link: publicUrl,
+      next: plan.scaffold
+        ? "Un Dockerfile template (« " + plan.scaffold.kind + " ») a pu être injecté sur le VPS — recopie-le dans Git quand tu peux."
+        : "Pour un nom court : renseigne un domaine de base (ex. apps.mondomaine.com) + DNS wildcard.",
     });
   } catch (e) {
     hideBusy();
-    setStatus(e.message, "err");
+    setStatus("Déploiement « " + app.id + " » échoué — vois la fenêtre (Cause / Où / À faire).", "err");
     showResult({
       ok: false,
       kicker: "CHANGE · échec",
       title: app.id + " n’a pas abouti",
       detail: e.message,
-      next: "Dockerfile à la racine, Git HTTPS public, compte deploy et Traefik déjà là.",
+      next: "Lis Cause / Où / À faire. Si « Failed to compile » / ESLint : le code du dépôt bloque le build (ou relance après maj template Next).",
     });
   }
 }
 
 showView(currentView());
 refreshPwsh();
+loadPublicDomain();
 loadRuntime().then(loadStack).catch(() => {
   setStatus("API injoignable.", "err");
 });
