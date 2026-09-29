@@ -1,7 +1,11 @@
 # Changelog — VPS Autopilot
 
 > Ne jamais effacer une entrée.  
-> Dernière mise à jour : 2026-09-28
+> Dernière mise à jour : 2026-09-29
+
+## 2026-09-29
+
+- **V7-01** : déclaration de **plateforme** (N services) — `GET/PUT/DELETE /api/v1/platforms`, `state/platforms-intent.json`, bande console **Plateformes**. Aucun CHANGE SSH. Sous-domaines, besoins MariaDB/Redis/volume, `NEXT_PUBLIC_API_URL`. `deploy-platform` toujours V7-02. Aide §7b. Cache `?v=app17`.
 
 ## 2026-09-28
 

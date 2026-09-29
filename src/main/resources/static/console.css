@@ -669,6 +669,23 @@ button:hover:not(:disabled), .btn:hover { filter: brightness(1.08); }
   margin-top: 0.75rem;
 }
 .app-form-actions button { width: auto; margin: 0; }
+.plat-services { display: grid; gap: 0.75rem; margin-top: 0.85rem; }
+.plat-svc {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem;
+  background: rgba(0, 0, 0, 0.12);
+}
+.plat-svc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.plat-svc-head strong { font-size: 0.92rem; }
+.plat-needs { display: flex; flex-wrap: wrap; gap: 0.75rem 1.1rem; margin-top: 0.55rem; font-size: 0.88rem; }
+.plat-needs label { display: flex; align-items: center; gap: 0.35rem; margin: 0; }
 .action-row {
   display: grid;
   grid-template-columns: 1fr auto;

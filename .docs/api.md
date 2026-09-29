@@ -1,7 +1,7 @@
 # API — VPS Autopilot
 
-> Dernière mise à jour : 2026-09-08  
-> Implémenté : V0–V3 partiel. Base : `http://127.0.0.1:8088`
+> Dernière mise à jour : 2026-09-29  
+> Implémenté : V0–V3 partiel + V7-01 (déclaration plateforme). Base : `http://127.0.0.1:8088`
 
 Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `cargo` (image Docker) : `/` + `GET /api/v1/health` seulement ; le reste → `403` (ADR-030).
 
@@ -22,6 +22,9 @@ Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `c
 | GET | `/api/v1/apps/deploy-plan` | Plan CHANGE avant confirmation | oui |
 | GET / PUT | `/api/v1/apps/public-domain` | Domaine public de base (ex. `apps.nebdev.org`) | oui |
 | POST | `/api/v1/apps/deploy` | CHANGE `deploy-app` (`confirm: true`) puis re-discovery | oui |
+| GET / PUT | `/api/v1/platforms` | Intention de plateformes (N services, local). PUT optionnel `vpsIp` pour sslip | **oui V7-01** |
+| DELETE | `/api/v1/platforms?id=` | Retire une plateforme de la liste locale | **oui V7-01** |
+| POST | `/api/v1/platforms/deploy` | CHANGE `deploy-platform` | **non** (V7-02) |
 
 ## POST `/api/v1/discover`
 
@@ -75,3 +78,49 @@ Intention locale (ADR-017 / ADR-020). PUT :
 Une entrée catalogue `defaultEnabled` absente d’un ancien `stack-intent.json` est ajoutée **une fois** (`catalogSeen`). Décocher ensuite n’est pas recassé.
 
 Écart de politique sans `acknowledgeWarnings: true` → `409` + liste d’avertissements. Rien n’est installé sur le VPS.
+
+## GET / PUT `/api/v1/platforms` (V7-01)
+
+Intention locale `state/platforms-intent.json` (ADR-036). **Aucun SSH.**
+
+PUT :
+
+```json
+{
+  "vpsIp": "10.0.0.8",
+  "platforms": [
+    {
+      "id": "ma-asso",
+      "baseDomain": "apps.exemple.com",
+      "routing": "host",
+      "services": [
+        {
+          "id": "api",
+          "gitUrl": "https://github.com/org/api.git",
+          "gitRef": "main",
+          "hostname": "",
+          "port": 8080,
+          "context": "backend/api",
+          "needs": ["mariadb", "redis", "volume:uploads"],
+          "buildArgs": {}
+        },
+        {
+          "id": "www",
+          "gitUrl": "https://github.com/org/site.git",
+          "gitRef": "main",
+          "hostname": "",
+          "port": 3000,
+          "context": "",
+          "needs": [],
+          "buildArgs": { "NEXT_PUBLIC_API_URL": "https://api.ma-asso.apps.exemple.com" }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Hôte vide → `service.plateforme.domaine` ou `service-plateforme.<IP>.sslip.io` si `vpsIp`.  
+`routing: path` → `400` (V7-04). Collision d’hôte avec une app 1:1 → `400`.  
+Réponse : `{ platforms, deployReady: false, note }`.
+

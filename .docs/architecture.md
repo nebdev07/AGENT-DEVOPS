@@ -1,8 +1,8 @@
 # Architecture — VPS Autopilot
 
 > Mémoire permanente. Enrichir, ne jamais effacer.  
-> Dernière mise à jour : 2026-09-08  
-> Statut code : V0 discovery (voir `current_state.md`)
+> Dernière mise à jour : 2026-09-29  
+> Statut code : voir `current_state.md`
 
 ## 1. Couches
 
@@ -39,7 +39,7 @@ L’IA **ne SSH pas en root librement**. Elle produit un plan ; seules des actio
 | Database | MariaDB (une base / projet), Redis à la demande | **instance + grants au deploy-app** (ADR-026 / ADR-029) ; Redis = plus tard |
 | Backup | dump, chiffrement, hors-site, preuve déchiffrement | **partiel V4** — exécutable (ADR-034) ; restore SQL complet plus tard |
 | Deploy | Git → image → Traefik ; compte `deploy` | **compte + deploy-app + cargo 1:1** (ADR-028→030) |
-| Plateforme cargo | N services (sites + API), Redis, volumes, un CHANGE | **spécifié V7** (ADR-036) ; pas de code |
+| Plateforme cargo | N services (sites + API), Redis, volumes, un CHANGE | **V7-01 déclaration UI/API** ; executor V7-02 |
 | Plateforme opérateurs | Auth, sessions, params par opérateur | **spécifié V9** (ADR-031) |
 
 ## 3. Dépôt (V0 : un module Maven)
@@ -98,4 +98,4 @@ CLI/API plan + install (ADR-018)
 
 ## 5. Hors V0
 
-Pas d’Ansible, pas d’IA générative. Docker + Traefik + MariaDB + Redis + compte `deploy` + **deploy-app** + **backups** (dump chiffré) : rôles bash exécutables (après SKIP sécurité **sur l’hôte**). Restore SQL complet / grants avancés : suite. **`deploy-platform` (ADR-036)** : spécifié, pas d’executor.
+Pas d’Ansible, pas d’IA générative. Docker + Traefik + MariaDB + Redis + compte `deploy` + **deploy-app** + **backups** (dump chiffré) : rôles bash exécutables (après SKIP sécurité **sur l’hôte**). Restore SQL complet / grants avancés : suite. **Plateforme** : déclaration locale V7-01 ; **`deploy-platform`** pas d’executor.

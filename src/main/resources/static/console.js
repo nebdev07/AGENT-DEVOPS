@@ -102,6 +102,7 @@ function paint(snapshot, report, mode) {
     $("board").classList.add("hidden");
     $("installCard").classList.add("hidden");
     $("appsCard").classList.add("hidden");
+    if ($("platformsCard")) $("platformsCard").classList.add("hidden");
     $("stackCard").classList.add("hidden");
     $("empty").classList.remove("hidden");
     return false;
@@ -111,6 +112,7 @@ function paint(snapshot, report, mode) {
   $("stackCard").classList.remove("hidden");
   $("installCard").classList.remove("hidden");
   if ($("appsCard")) $("appsCard").classList.remove("hidden");
+  if ($("platformsCard")) $("platformsCard").classList.remove("hidden");
   $("osPretty").textContent = snapshot.osPretty || snapshot.osId || "—";
   $("hostLine").textContent = [
     snapshot.profileName,
@@ -162,6 +164,7 @@ function paint(snapshot, report, mode) {
   if (mode) $("modePill").textContent = mode === "ssh" ? "SSH réel" : "Prêt pour le VPS";
   loadStack().then(loadPlan);
   loadApps();
+  loadPlatforms();
   return true;
 }
 
@@ -296,8 +299,9 @@ function showBusy({ risk, title, detail, steps, currentStep }) {
   ["btnDiscover", "btnTrust", "btnInstallKey"].forEach((id) => {
     if ($(id)) $(id).disabled = true;
   });
-  document.querySelectorAll("#installActions button, #appList button").forEach((b) => { b.disabled = true; });
+  document.querySelectorAll("#installActions button, #appList button, #platList button").forEach((b) => { b.disabled = true; });
   if ($("btnAppSave")) $("btnAppSave").disabled = true;
+  if ($("btnPlatSave")) $("btnPlatSave").disabled = true;
   busyStartedAt = Date.now();
   if (busyTimer) clearInterval(busyTimer);
   busyTimer = setInterval(() => {
@@ -325,8 +329,9 @@ function hideBusy() {
   ["btnDiscover", "btnTrust", "btnInstallKey"].forEach((id) => {
     if ($(id)) $(id).disabled = false;
   });
-  document.querySelectorAll("#installActions button, #appList button").forEach((b) => { b.disabled = false; });
+  document.querySelectorAll("#installActions button, #appList button, #platList button").forEach((b) => { b.disabled = false; });
   if ($("btnAppSave")) $("btnAppSave").disabled = false;
+  if ($("btnPlatSave")) $("btnPlatSave").disabled = false;
 }
 
 function showResult({ ok, kicker, title, detail, next, link }) {
@@ -627,6 +632,9 @@ $("btnInstallKey").addEventListener("click", installKey);
 if ($("btnAppSave")) $("btnAppSave").addEventListener("click", saveApp);
 if ($("btnAppClear")) $("btnAppClear").addEventListener("click", clearAppForm);
 if ($("btnPublicDomain")) $("btnPublicDomain").addEventListener("click", savePublicDomain);
+if ($("btnPlatAddSvc")) $("btnPlatAddSvc").addEventListener("click", () => addPlatServiceRow(null));
+if ($("btnPlatSave")) $("btnPlatSave").addEventListener("click", savePlatform);
+if ($("btnPlatClear")) $("btnPlatClear").addEventListener("click", clearPlatForm);
 $("btnResultClose").addEventListener("click", hideResult);
 if ($("btnConfirmCancel")) $("btnConfirmCancel").addEventListener("click", () => settleConfirm(false));
 if ($("btnConfirmOk")) $("btnConfirmOk").addEventListener("click", () => {
@@ -1360,9 +1368,220 @@ async function deployApp(app) {
   }
 }
 
+let platEditingId = "";
+
+function platNeedChecked(svc, key) {
+  const n = (svc && svc.needs) || [];
+  if (key === "uploads") return n.includes("volume:uploads") || n.includes("uploads");
+  return n.includes(key);
+}
+
+function addPlatServiceRow(svc) {
+  const box = $("platServices");
+  if (!box) return;
+  const s = svc || {};
+  const wrap = document.createElement("div");
+  wrap.className = "plat-svc";
+  const needs = s.needs || [];
+  const apiUrl = (s.buildArgs && s.buildArgs.NEXT_PUBLIC_API_URL) || "";
+  wrap.innerHTML = '<div class="plat-svc-head"><strong>Service</strong>'
+    + '<button type="button" class="ghost ghost-danger plat-svc-del">Retirer</button></div>'
+    + '<div class="row2 app-fields">'
+    + '<label class="field">Identifiant<input class="plat-svc-id" type="text" value="' + esc(s.id || "") + '" placeholder="api" autocomplete="off" /></label>'
+    + '<label class="field">Port<input class="plat-svc-port" type="number" value="' + (s.port || 8080) + '" min="1" max="65535" /></label>'
+    + "</div>"
+    + '<label class="field">Git (HTTPS)<input class="plat-svc-git" type="url" value="' + esc(s.gitUrl || "") + '" placeholder="https://github.com/org/api.git" autocomplete="off" /></label>'
+    + '<div class="row2 app-fields">'
+    + '<label class="field">Branche<input class="plat-svc-ref" type="text" value="' + esc(s.gitRef || "main") + '" autocomplete="off" /></label>'
+    + '<label class="field">Sous-dossier (optionnel)<input class="plat-svc-ctx" type="text" value="' + esc(s.context || "") + '" placeholder="backend/api" autocomplete="off" /></label>'
+    + "</div>"
+    + '<label class="field">Nom d’hôte (vide = auto)<input class="plat-svc-host" type="text" value="' + esc(s.hostname || "") + '" placeholder="api.ma-asso.apps.exemple.com" autocomplete="off" /></label>'
+    + '<label class="field">NEXT_PUBLIC_API_URL (optionnel)<input class="plat-svc-apiurl" type="url" value="' + esc(apiUrl) + '" placeholder="https://api…/" autocomplete="off" /></label>'
+    + '<div class="plat-needs">'
+    + '<label><input type="checkbox" class="plat-need-mariadb"' + (platNeedChecked(s, "mariadb") ? " checked" : "") + " /> MariaDB</label>"
+    + '<label><input type="checkbox" class="plat-need-redis"' + (platNeedChecked(s, "redis") ? " checked" : "") + " /> Redis</label>"
+    + '<label><input type="checkbox" class="plat-need-uploads"' + (platNeedChecked(s, "uploads") ? " checked" : "") + " /> Volume fichiers</label>"
+    + "</div>";
+  wrap.querySelector(".plat-svc-del").addEventListener("click", () => wrap.remove());
+  box.appendChild(wrap);
+}
+
+function collectPlatServices() {
+  return Array.from(document.querySelectorAll("#platServices .plat-svc")).map((el) => {
+    const needs = [];
+    if (el.querySelector(".plat-need-mariadb").checked) needs.push("mariadb");
+    if (el.querySelector(".plat-need-redis").checked) needs.push("redis");
+    if (el.querySelector(".plat-need-uploads").checked) needs.push("volume:uploads");
+    const apiUrl = el.querySelector(".plat-svc-apiurl").value.trim();
+    const buildArgs = {};
+    if (apiUrl) buildArgs.NEXT_PUBLIC_API_URL = apiUrl;
+    const portRaw = el.querySelector(".plat-svc-port").value;
+    return {
+      id: el.querySelector(".plat-svc-id").value.trim(),
+      gitUrl: el.querySelector(".plat-svc-git").value.trim(),
+      gitRef: el.querySelector(".plat-svc-ref").value.trim() || "main",
+      hostname: el.querySelector(".plat-svc-host").value.trim(),
+      port: portRaw ? Number(portRaw) : 8080,
+      context: el.querySelector(".plat-svc-ctx").value.trim(),
+      needs,
+      buildArgs,
+    };
+  });
+}
+
+function setPlatFormStatus(msg, kind) {
+  const el = $("platFormStatus");
+  if (!el) return;
+  if (!msg) {
+    el.hidden = true;
+    el.textContent = "";
+    return;
+  }
+  el.hidden = false;
+  el.textContent = msg;
+  el.className = "app-form-status" + (kind ? " " + kind : "");
+}
+
+function clearPlatForm() {
+  platEditingId = "";
+  if ($("platId")) $("platId").value = "";
+  if ($("platBase") && $("publicBaseDomain")) $("platBase").value = $("publicBaseDomain").value.trim();
+  const box = $("platServices");
+  if (box) box.innerHTML = "";
+  addPlatServiceRow({ id: "api", port: 8080, needs: ["mariadb"] });
+  addPlatServiceRow({ id: "www", port: 3000, needs: [] });
+  setPlatFormStatus("");
+}
+
+function fillPlatForm(p) {
+  platEditingId = p.id;
+  $("platId").value = p.id || "";
+  $("platBase").value = p.baseDomain || "";
+  const box = $("platServices");
+  box.innerHTML = "";
+  (p.services || []).forEach((s) => addPlatServiceRow(s));
+  if (!box.children.length) addPlatServiceRow(null);
+}
+
+async function loadPlatforms() {
+  const box = $("platList");
+  if (!box) return;
+  try {
+    const r = await fetch("/api/v1/platforms");
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    renderPlatList(j.platforms || []);
+    if ($("platBase") && !$("platBase").value.trim() && $("publicBaseDomain")) {
+      $("platBase").value = $("publicBaseDomain").value.trim();
+    }
+  } catch {
+    box.innerHTML = "<p class=\"hint\">Liste de plateformes injoignable.</p>";
+  }
+}
+
+function renderPlatList(platforms) {
+  const box = $("platList");
+  if (!box) return;
+  if (!platforms.length) {
+    box.innerHTML = "<p class=\"hint\">Aucune plateforme enregistrée. Ajoute des services puis Enregistrer.</p>";
+    return;
+  }
+  box.innerHTML = "";
+  platforms.forEach((p) => {
+    const row = document.createElement("div");
+    row.className = "action-row READY";
+    const svcTxt = (p.services || []).map((s) => s.id + " → https://" + s.hostname + "/").join(" · ");
+    const info = document.createElement("div");
+    info.innerHTML = "<span class=\"tag\">déclarée</span><strong>" + esc(p.id) + "</strong><p>"
+      + (p.services || []).length + " service(s) · sous-domaines · " + esc(svcTxt) + "</p>";
+    row.appendChild(info);
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    const btnEdit = document.createElement("button");
+    btnEdit.type = "button";
+    btnEdit.className = "ghost";
+    btnEdit.textContent = "Modifier";
+    btnEdit.addEventListener("click", () => fillPlatForm(p));
+    const btnDel = document.createElement("button");
+    btnDel.type = "button";
+    btnDel.className = "ghost ghost-danger";
+    btnDel.textContent = "Supprimer";
+    btnDel.addEventListener("click", () => deletePlatform(p));
+    const btnSoon = document.createElement("button");
+    btnSoon.type = "button";
+    btnSoon.className = "ghost";
+    btnSoon.disabled = true;
+    btnSoon.textContent = "Déployer (bientôt)";
+    btnSoon.title = "V7-02 : CHANGE deploy-platform pas encore livré";
+    actions.appendChild(btnEdit);
+    actions.appendChild(btnDel);
+    actions.appendChild(btnSoon);
+    row.appendChild(actions);
+    box.appendChild(row);
+  });
+}
+
+async function savePlatform() {
+  setPlatFormStatus("");
+  const services = collectPlatServices();
+  if (!services.length) {
+    setPlatFormStatus("Cause : aucun service.\nOù : bande Plateformes.\nÀ faire : Ajouter un service.", "err");
+    return;
+  }
+  try {
+    const cur = await fetch("/api/v1/platforms").then((r) => r.json());
+    const list = (cur.platforms || []).slice();
+    const spec = {
+      id: $("platId").value.trim(),
+      baseDomain: $("platBase").value.trim(),
+      routing: "host",
+      services,
+    };
+    const idx = list.findIndex((p) => p.id === (platEditingId || spec.id));
+    if (idx >= 0) list[idx] = spec;
+    else list.push(spec);
+    const ip = $("sshHost") ? $("sshHost").value.trim() : "";
+    const r = await fetch("/api/v1/platforms", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platforms: list, vpsIp: ip }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    platEditingId = spec.id;
+    renderPlatList(j.platforms || []);
+    setPlatFormStatus(j.note || "Enregistré (local, pas de SSH).", "ok");
+    setStatus("Plateforme enregistrée sur ce poste. Déployer : pas encore.", "ok");
+  } catch (e) {
+    setPlatFormStatus(e.message, "err");
+    setStatus(e.message, "err");
+  }
+}
+
+async function deletePlatform(p) {
+  if (!window.confirm("Retirer « " + p.id + " » de la liste locale ? Rien ne sera arrêté sur un VPS.")) {
+    return;
+  }
+  try {
+    const r = await fetch("/api/v1/platforms?id=" + encodeURIComponent(p.id), { method: "DELETE" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    renderPlatList(j.platforms || []);
+    if (platEditingId === p.id) clearPlatForm();
+    setStatus("Plateforme « " + p.id + " » retirée de la liste locale.", "ok");
+  } catch (e) {
+    setStatus(e.message, "err");
+  }
+}
+
 showView(currentView());
 refreshPwsh();
 loadPublicDomain();
+loadPlatforms();
+if ($("platServices") && !$("platServices").children.length) {
+  addPlatServiceRow({ id: "api", port: 8080, needs: ["mariadb"] });
+  addPlatServiceRow({ id: "www", port: 3000, needs: [] });
+}
 loadRuntime().then(loadStack).catch(() => {
   setStatus("API injoignable.", "err");
 });
