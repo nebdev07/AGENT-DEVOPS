@@ -23,8 +23,8 @@
 | V4-01 | P1 | Backups chiffrés + restore par l’agent | Done (partiel) — dump+encrypt+copie opérateur+preuve déchiffrement (ADR-034) ; restore SQL complet plus tard |
 | V5-01 | P3 | IA : langage naturel → plan (jamais root libre) | Open |
 | V7-01 | P1 | ADR-036 : intention `platforms-intent.json` + API/UI déclaration plateforme (sans SSH) | Done — 2026-09-29 |
-| V7-02 | P1 | CHANGE `deploy-platform` : compose N services, sous-domaines `Host()`, aucun port public | Open |
-| V7-03 | P1 | Brancher Redis (`needs: redis`) + volumes nommés (uploads) | Open |
+| V7-02 | P1 | CHANGE `deploy-platform` : compose N services, sous-domaines `Host()`, aucun port public | Done — 2026-09-29 |
+| V7-03 | P1 | Brancher Redis (`needs: redis`) + volumes nommés (uploads) | Done — dans `deploy-platform` ; pas les apps 1:1 |
 | V7-04 | P2 | Routage par **chemin** (`PathPrefix`) pour un seul nom d’hôte | Open — après V7-02 |
 | V7-05 | P2 | Clone Git **privé** (clé lecture seule) | Open — requis association / DTSI, pas pour ouvrir la prod ARC |
 | V7-06 | P2 | Monorepo : `context` Docker (sous-dossier) + templates Next build-args / Spring Java 11 | Open |

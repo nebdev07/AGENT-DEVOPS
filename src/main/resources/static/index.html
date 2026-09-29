@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app17" />
+  <link rel="stylesheet" href="/console.css?v=app18" />
 </head>
 <body>
   <div class="bg"></div>
@@ -220,8 +220,9 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li>Pour un produit du type <strong>site + API</strong> (éventuellement admin, Redis, fichiers), utilise la bande <strong>Plateformes</strong>, pas trois apps 1:1 collées à la main.</li>
             <li>Identifiant = slug du produit. Chaque service = un Git HTTPS, un port interne, des besoins (MariaDB, Redis, volume fichiers). Sous-dossier optionnel si le Dockerfile n’est pas à la racine du dépôt (monorepo).</li>
             <li>DNS proposés : <code>service.plateforme.ton-domaine</code>. Variable de build typique : <code>NEXT_PUBLIC_API_URL</code> vers l’URL publique de l’API.</li>
-            <li><strong>Enregistrer</strong> n’installe rien. Aucun SSH. Le déploiement groupé (<code>deploy-platform</code>) n’est pas encore livré.</li>
-            <li>Supprimer retire la fiche locale seulement.</li>
+            <li><strong>Enregistrer</strong> reste local. <strong>Déployer</strong> ouvre un popup de plan, puis un CHANGE : clone de chaque Git, build, Traefik HTTPS, aucun port publié. Redis / MariaDB doivent déjà être installés si tu les as cochés sur un service.</li>
+            <li>Chaque service a besoin d’un <strong>Dockerfile</strong> (racine du dépôt ou sous-dossier). Pas de rattrapage template pour les plateformes (jour 1).</li>
+            <li>Supprimer retire la fiche locale seulement (ne stoppe pas les conteneurs).</li>
           </ul>
         </li>
 
@@ -390,9 +391,9 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           </article>
 
           <article class="card hidden" id="platformsCard">
-            <p class="kicker">V7 · intention locale · pas de CHANGE</p>
+            <p class="kicker">V7 · Git → images → Traefik</p>
             <h2>Déclarer une plateforme</h2>
-            <p class="hint">Un produit = plusieurs services (site, API, admin…). Même forme qu’une infra « sites + API + Redis + fichiers ». Enregistrement <strong>sur ce poste seulement</strong> — le bouton Déployer n’existe pas encore (V7-02).</p>
+            <p class="hint">Un produit = plusieurs services (site, API, admin…). Enregistre d’abord, puis <strong>Déployer</strong> (CHANGE confirmé). Compose généré, aucun port public, sous-domaines.</p>
             <p class="hint">Routage jour 1 : <strong>sous-domaines</strong> (<code>api.</code> / <code>www.</code> / <code>admin.</code>). Les chemins sur un seul domaine viendront plus tard.</p>
             <div class="row2 app-fields">
               <label class="field">Identifiant plateforme (slug)
@@ -487,6 +488,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app17"></script>
+  <script src="/console.js?v=app18"></script>
 </body>
 </html>

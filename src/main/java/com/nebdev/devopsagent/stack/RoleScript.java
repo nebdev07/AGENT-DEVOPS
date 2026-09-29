@@ -12,7 +12,7 @@ import java.util.Set;
 public final class RoleScript {
 
     private static final Set<String> ALLOWED = Set.of(
-            "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups", "app");
+            "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups", "app", "platform");
     private static final Map<String, String> FLAGS = new LinkedHashMap<>();
 
     static {
@@ -93,5 +93,22 @@ public final class RoleScript {
             prefix.append("APP_SCAFFOLD_B64=").append(b64).append('\n');
         }
         return prefix + load("app");
+    }
+
+    public static String loadPlatform(PlatformSpec platform) {
+        if (platform == null) {
+            throw new IllegalArgumentException("Plateforme manquante.");
+        }
+        String compose = PlatformCompose.yaml(platform);
+        String manifest = PlatformCompose.manifest(platform);
+        String b64c = java.util.Base64.getEncoder().encodeToString(compose.getBytes(StandardCharsets.UTF_8));
+        String b64m = java.util.Base64.getEncoder().encodeToString(manifest.getBytes(StandardCharsets.UTF_8));
+        StringBuilder prefix = new StringBuilder();
+        prefix.append("PLATFORM_ID=").append(platform.id()).append('\n');
+        prefix.append("PLATFORM_NEED_DB=").append(PlatformCompose.needsDb(platform) ? "1" : "0").append('\n');
+        prefix.append("PLATFORM_NEED_REDIS=").append(PlatformCompose.needsRedis(platform) ? "1" : "0").append('\n');
+        prefix.append("PLATFORM_COMPOSE_B64=").append(b64c).append('\n');
+        prefix.append("PLATFORM_MANIFEST_B64=").append(b64m).append('\n');
+        return prefix + load("platform");
     }
 }

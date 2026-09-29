@@ -2,7 +2,9 @@ package com.nebdev.devopsagent.stack;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -62,6 +64,54 @@ class RoleScriptTest {
         assertThat(script).contains("Dockerfile");
         assertThat(script).contains("DB_GRANT");
         assertThat(script).contains("db.env");
+    }
+
+    @Test
+    void platformRoleHasNoPublishedPorts() {
+        PlatformSpec p = PlatformSpec.normalized(
+                "ma-asso",
+                "apps.exemple.com",
+                "host",
+                List.of(
+                        new PlatformServiceSpec(
+                                "api",
+                                "https://github.com/org/api.git",
+                                "main",
+                                "",
+                                8080,
+                                "",
+                                List.of("mariadb", "redis"),
+                                Map.of()
+                        ),
+                        new PlatformServiceSpec(
+                                "www",
+                                "https://github.com/org/site.git",
+                                "main",
+                                "",
+                                3000,
+                                "",
+                                List.of(),
+                                Map.of("NEXT_PUBLIC_API_URL", "https://api.ma-asso.apps.exemple.com")
+                        )
+                ),
+                null
+        );
+        String script = RoleScript.loadPlatform(p);
+        assertThat(script).doesNotContain("\r");
+        assertThat(script).contains("PLATFORM_ID=ma-asso");
+        assertThat(script).contains("PLATFORM_NEED_DB=1");
+        assertThat(script).contains("PLATFORM_NEED_REDIS=1");
+        assertThat(script).contains("PLATFORM_DEPLOYED");
+        String b64 = java.util.Arrays.stream(script.split("\n"))
+                .filter(l -> l.startsWith("PLATFORM_COMPOSE_B64="))
+                .findFirst()
+                .orElseThrow();
+        String yaml = new String(Base64.getDecoder().decode(b64.substring("PLATFORM_COMPOSE_B64=".length())));
+        assertThat(yaml).contains("traefik.enable=true");
+        assertThat(yaml).doesNotContain("8080:8080");
+        assertThat(yaml).doesNotContain("3000:3000");
+        assertThat(yaml).contains("Host(`api.ma-asso.apps.exemple.com`)");
+        assertThat(yaml).contains("NEXT_PUBLIC_API_URL");
     }
 
     @Test

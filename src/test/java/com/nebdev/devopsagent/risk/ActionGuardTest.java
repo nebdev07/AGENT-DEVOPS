@@ -62,5 +62,7 @@ class ActionGuardTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> guard.assertConfirmedChange("deploy-app", true))
                 .doesNotThrowAnyException();
+        assertThatCode(() -> guard.assertConfirmedChange("deploy-platform", true))
+                .doesNotThrowAnyException();
     }
 }

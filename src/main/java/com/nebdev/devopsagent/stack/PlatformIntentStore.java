@@ -95,6 +95,17 @@ public class PlatformIntentStore {
         return save(kept, null);
     }
 
+    public PlatformSpec require(String id) throws IOException {
+        String slug = id == null ? "" : id.trim().toLowerCase(Locale.ROOT).replace('_', '-');
+        return load().stream()
+                .filter(p -> p.id().equals(slug))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(OperatorMessage.of(
+                        "aucune plateforme « " + slug + " » enregistrée.",
+                        "Bande Plateformes — Déployer",
+                        "Enregistrer la plateforme avant Déployer.")));
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Intent(List<PlatformSpec> platforms) {
         public Intent {

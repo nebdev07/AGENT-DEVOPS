@@ -1479,7 +1479,7 @@ async function loadPlatforms() {
   }
 }
 
-function renderPlatList(platforms) {
+function renderPlatList(platforms, deployReady) {
   const box = $("platList");
   if (!box) return;
   if (!platforms.length) {
@@ -1507,18 +1507,94 @@ function renderPlatList(platforms) {
     btnDel.className = "ghost ghost-danger";
     btnDel.textContent = "Supprimer";
     btnDel.addEventListener("click", () => deletePlatform(p));
-    const btnSoon = document.createElement("button");
-    btnSoon.type = "button";
-    btnSoon.className = "ghost";
-    btnSoon.disabled = true;
-    btnSoon.textContent = "Déployer (bientôt)";
-    btnSoon.title = "V7-02 : CHANGE deploy-platform pas encore livré";
+    const btnDeploy = document.createElement("button");
+    btnDeploy.type = "button";
+    btnDeploy.className = "change";
+    btnDeploy.textContent = "Déployer";
+    btnDeploy.addEventListener("click", () => deployPlatform(p));
     actions.appendChild(btnEdit);
     actions.appendChild(btnDel);
-    actions.appendChild(btnSoon);
+    actions.appendChild(btnDeploy);
     row.appendChild(actions);
     box.appendChild(row);
   });
+}
+
+async function deployPlatform(p) {
+  const t = target();
+  if (!t.host || !t.user) {
+    setStatus("Indique IP et utilisateur SSH.", "err");
+    return;
+  }
+  let plan;
+  try {
+    const r = await fetch("/api/v1/platforms/deploy-plan?id=" + encodeURIComponent(p.id));
+    plan = await r.json();
+    if (!r.ok) throw new Error(plan.error || r.statusText);
+  } catch (e) {
+    setStatus("Plan plateforme : " + e.message, "err");
+    return;
+  }
+  const accepted = await showConfirmPlan({
+    kicker: "CHANGE · confirmation",
+    title: "Déployer la plateforme « " + p.id + " »",
+    detail: "Cible " + t.user + "@" + t.host + ". N services, aucun port public. Rien ne part sans confirmation.",
+    actions: plan.actions || [],
+    warnings: plan.warnings || [],
+    canProceed: plan.canProceed !== false,
+    blocker: plan.blocker || "",
+  });
+  if (!accepted) {
+    setStatus("Déploiement plateforme annulé.", "ok");
+    return;
+  }
+  const steps = (plan.actions || []).slice(0, 5);
+  showBusy({
+    risk: "CHANGE",
+    title: "Plateforme — " + p.id,
+    detail: "Clones + builds sur " + t.user + "@" + t.host + ". Jusqu’à 20 minutes. Ne ferme pas cette page.",
+    steps: steps.length ? steps : ["Cloner", "Build", "Traefik"],
+    currentStep: 0,
+  });
+  setStatus("Déploiement de la plateforme " + p.id + "…");
+  try {
+    const r = await fetch("/api/v1/platforms/deploy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: p.id,
+        host: t.host,
+        port: t.port,
+        user: t.user,
+        confirm: true,
+      }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    paint(j.snapshot, j.report, "ssh");
+    const elapsed = formatElapsed(Date.now() - busyStartedAt);
+    hideBusy();
+    const firstHost = (p.services && p.services[0] && p.services[0].hostname) ? p.services[0].hostname : "";
+    setStatus(p.id + " : plateforme déployée.", "ok");
+    showResult({
+      ok: true,
+      kicker: "CHANGE · réussi",
+      title: "Plateforme " + p.id + " déployée",
+      detail: "Plan exécuté en " + elapsed + ". Chaque service a son HTTPS (sous-domaines).",
+      link: firstHost ? "https://" + firstHost + "/" : "",
+      next: "DNS wildcard vers le VPS si ce n’est pas du sslip. Redis/MariaDB doivent déjà être SKIP si tu les as cochés.",
+    });
+  } catch (e) {
+    hideBusy();
+    setStatus("Plateforme « " + p.id + " » échouée — vois la fenêtre.", "err");
+    showResult({
+      ok: false,
+      kicker: "CHANGE · échec",
+      title: p.id + " n’a pas abouti",
+      detail: e.message,
+      next: "Lis Cause / Où / À faire. Chaque service doit avoir un Dockerfile (racine ou sous-dossier).",
+    });
+  }
 }
 
 async function savePlatform() {
@@ -1551,7 +1627,7 @@ async function savePlatform() {
     platEditingId = spec.id;
     renderPlatList(j.platforms || []);
     setPlatFormStatus(j.note || "Enregistré (local, pas de SSH).", "ok");
-    setStatus("Plateforme enregistrée sur ce poste. Déployer : pas encore.", "ok");
+    setStatus("Plateforme enregistrée. Tu peux Déployer (CHANGE confirmé).", "ok");
   } catch (e) {
     setPlatFormStatus(e.message, "err");
     setStatus(e.message, "err");

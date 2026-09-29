@@ -1,7 +1,7 @@
 # API — VPS Autopilot
 
 > Dernière mise à jour : 2026-09-29  
-> Implémenté : V0–V3 partiel + V7-01 (déclaration plateforme). Base : `http://127.0.0.1:8088`
+> Implémenté : V0–V3 partiel + V7-01/V7-02 (plateformes). Base : `http://127.0.0.1:8088`
 
 Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `cargo` (image Docker) : `/` + `GET /api/v1/health` seulement ; le reste → `403` (ADR-030).
 
@@ -22,9 +22,10 @@ Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `c
 | GET | `/api/v1/apps/deploy-plan` | Plan CHANGE avant confirmation | oui |
 | GET / PUT | `/api/v1/apps/public-domain` | Domaine public de base (ex. `apps.nebdev.org`) | oui |
 | POST | `/api/v1/apps/deploy` | CHANGE `deploy-app` (`confirm: true`) puis re-discovery | oui |
-| GET / PUT | `/api/v1/platforms` | Intention de plateformes (N services, local). PUT optionnel `vpsIp` pour sslip | **oui V7-01** |
-| DELETE | `/api/v1/platforms?id=` | Retire une plateforme de la liste locale | **oui V7-01** |
-| POST | `/api/v1/platforms/deploy` | CHANGE `deploy-platform` | **non** (V7-02) |
+| GET / PUT | `/api/v1/platforms` | Intention de plateformes (N services). PUT optionnel `vpsIp` | oui (V7-01) |
+| DELETE | `/api/v1/platforms?id=` | Retire une plateforme de la liste locale | oui |
+| GET | `/api/v1/platforms/deploy-plan` | Plan CHANGE avant confirmation | **oui V7-02** |
+| POST | `/api/v1/platforms/deploy` | CHANGE `deploy-platform` (`confirm: true`) | **oui V7-02** |
 
 ## POST `/api/v1/discover`
 
@@ -122,5 +123,13 @@ PUT :
 
 Hôte vide → `service.plateforme.domaine` ou `service-plateforme.<IP>.sslip.io` si `vpsIp`.  
 `routing: path` → `400` (V7-04). Collision d’hôte avec une app 1:1 → `400`.  
-Réponse : `{ platforms, deployReady: false, note }`.
+Réponse : `{ platforms, deployReady: true, note }`.
+
+## POST `/api/v1/platforms/deploy`
+
+```json
+{ "id": "ma-asso", "host": "x.x.x.x", "port": 22, "user": "debian", "confirm": true }
+```
+
+Sans `confirm: true` → `403`. Prérequis : analyse SSH réelle, sécurité SKIP, Docker, Traefik, compte `deploy`. Redis/MariaDB SKIP si un service les exige. GET `/deploy-plan` avant le popup.
 

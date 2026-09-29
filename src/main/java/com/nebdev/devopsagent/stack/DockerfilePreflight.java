@@ -39,7 +39,32 @@ final class DockerfilePreflight {
             repo = repo.substring(0, repo.length() - 4);
         }
         String ref = app.gitRef() == null || app.gitRef().isBlank() ? "main" : app.gitRef();
-        URI uri = URI.create("https://raw.githubusercontent.com/" + owner + "/" + repo + "/" + ref + "/Dockerfile");
+        return probeUri(owner, repo, ref, "Dockerfile");
+    }
+
+    static Optional<Boolean> probePath(AppSpec app, String relativePath) {
+        Matcher m = GITHUB.matcher(app.gitUrl().trim());
+        if (!m.matches()) {
+            return Optional.empty();
+        }
+        String owner = m.group(1);
+        String repo = m.group(2);
+        if (repo.toLowerCase(Locale.ROOT).endsWith(".git")) {
+            repo = repo.substring(0, repo.length() - 4);
+        }
+        String ref = app.gitRef() == null || app.gitRef().isBlank() ? "main" : app.gitRef();
+        String path = relativePath.replace('\\', '/');
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (path.contains("..")) {
+            return Optional.empty();
+        }
+        return probeUri(owner, repo, ref, path);
+    }
+
+    private static Optional<Boolean> probeUri(String owner, String repo, String ref, String path) {
+        URI uri = URI.create("https://raw.githubusercontent.com/" + owner + "/" + repo + "/" + ref + "/" + path);
         try {
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(8))
