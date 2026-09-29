@@ -9,13 +9,11 @@ import java.util.regex.Pattern;
 public record AppSpec(String id, String gitUrl, String gitRef, String hostname, int port) {
 
     private static final Pattern SLUG = Pattern.compile("^[a-z][a-z0-9-]{0,31}$");
-    private static final Pattern GIT = Pattern.compile("^https://[A-Za-z0-9._~:/?#\\[\\]@!$&'()*+,;=%-]+$");
     private static final Pattern REF = Pattern.compile("^[A-Za-z0-9._/-]{1,80}$");
     private static final Pattern HOST = Pattern.compile(
             "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$");
 
     private static final String WHERE_ID = "Champ Identifiant — bande Applications (pas « Analyser le VPS »)";
-    private static final String WHERE_GIT = "Champ 1 · Git (HTTPS) — bande Applications";
     private static final String WHERE_REF = "Champ Branche — bande Applications";
     private static final String WHERE_HOST = "Champ 2 · Nom d’hôte — bande Applications (ce n’est pas l’URL Git)";
     private static final String WHERE_PORT = "Champ Port interne — bande Applications";
@@ -36,20 +34,7 @@ public record AppSpec(String id, String gitUrl, String gitRef, String hostname, 
                     WHERE_ID,
                     "utilise seulement a-z, 0-9 et tirets ; commence par une lettre ; max 32 car. Exemple : my-bourse."));
         }
-        if (gitUrl == null || gitUrl.isBlank()) {
-            throw new IllegalArgumentException(OperatorMessage.of(
-                    "URL Git absente.",
-                    WHERE_GIT,
-                    "colle l’URL HTTPS publique du dépôt, ex. https://github.com/org/repo.git — pas le nom d’hôte."));
-        }
-        String git = gitUrl.trim();
-        if (!GIT.matcher(git).matches() || git.contains("..")) {
-            throw new IllegalArgumentException(OperatorMessage.of(
-                    "URL « " + abbreviate(git) + " » n’est pas une HTTPS publique valide"
-                            + (git.startsWith("git@") || git.startsWith("ssh://") ? " (format SSH refusé)." : "."),
-                    WHERE_GIT,
-                    "utilise uniquement https://… (dépôt public). Pas de git@, pas de clé SSH dans ce champ."));
-        }
+        String git = GitUrls.normalize(gitUrl);
         String ref = (gitRef == null || gitRef.isBlank()) ? "main" : gitRef.trim();
         if (!REF.matcher(ref).matches()) {
             throw new IllegalArgumentException(OperatorMessage.of(

@@ -67,6 +67,16 @@ class RoleScriptTest {
     }
 
     @Test
+    void appRoleUsesInjectedGitDeployKey() {
+        AppSpec spec = AppSpec.normalized("priv", "git@github.com:org/app.git", "main", "priv.example.com", 8080);
+        String script = RoleScript.loadApp(spec, null, "QUJD");
+        assertThat(script).contains("GIT_DEPLOY_KEY_B64=QUJD");
+        assertThat(script).contains("git_as_deploy");
+        assertThat(script).contains("NEED_GIT_DEPLOY_KEY");
+        assertThat(script).contains("IdentitiesOnly=yes");
+    }
+
+    @Test
     void platformRoleHasNoPublishedPorts() {
         PlatformSpec p = PlatformSpec.normalized(
                 "ma-asso",

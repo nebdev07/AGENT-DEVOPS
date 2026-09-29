@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app19" />
+  <link rel="stylesheet" href="/console.css?v=app20" />
 </head>
 <body>
   <div class="bg"></div>
@@ -194,7 +194,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li>Sécurité n’est complète que si UFW est actif, fail2ban tourne, le mot de passe SSH est coupé et root SSH est fermé. fail2ban seul ne suffit pas.</li>
             <li>Traefik et MariaDB : seulement après une sécurité complète <em>sur ce VPS</em>, et Docker présent. Traefik ouvre 80/443 sans exposer d’app. MariaDB n’écoute pas sur Internet.</li>
             <li>Compte deploy : même prérequis. Utilisateur <code>deploy</code>, groupe docker, pas de sudo, clé de l’agent copiée. Aucune app n’est lancée.</li>
-            <li>Redis et backups : exécutables (Redis = conteneur ; backups = dump chiffré + copie locale). Une app simple : bande <strong>Applications</strong>. Un produit à plusieurs services : bande <strong>Plateformes</strong> (déclaration seulement pour l’instant).</li>
+            <li>Redis et backups : exécutables (Redis = conteneur ; backups = dump chiffré + copie locale). Une app simple : bande <strong>Applications</strong>. Un produit à plusieurs services : bande <strong>Plateformes</strong> (Enregistrer puis Déployer).</li>
             <li>Pendant analyse, clé ou install : un écran décrit le traitement. Ne ferme pas la page. Traefik / MariaDB : jusqu’à ~5 min (téléchargement d’image).</li>
             <li>À la fin, une fenêtre indique <strong>succès</strong> ou <strong>échec</strong> (et pourquoi). Clique <strong>Fermer</strong>. En cas d’échec, l’état déjà connu du VPS n’est pas effacé.</li>
           </ul>
@@ -206,9 +206,9 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           <ul>
             <li>Avant Déployer : un <strong>popup</strong> liste ce qui sera fait. Liens publics en <strong>https://</strong>. Traefik installe toujours HTTPS (Let’s Encrypt) + redirection HTTP→HTTPS.</li>
             <li>Domaine de base optionnel (ex. <code>apps.mondomaine.com</code>) : les apps deviennent <code>https://my-bourse.apps.mondomaine.com</code>. DNS <code>*</code> → IP du VPS. Sans domaine : fallback lab <code>identifiant.&lt;IP&gt;.sslip.io</code> (aussi en HTTPS).</li>
-            <li>Identifiant = slug court (<code>my-bourse</code>), pas le domaine. Nom d’hôte = DNS complet (<code>my-bourse.apps.nebdev.org</code>). Git = URL <code>https://…</code>.</li>
+            <li>Identifiant = slug court (<code>my-bourse</code>), pas le domaine. Nom d’hôte = DNS complet. Git = <code>https://…</code> public, ou <code>git@github.com:org/repo.git</code> + clé lecture seule (Deploy key, pas d’écriture).</li>
             <li>Sur chaque ligne de la liste : <strong>Modifier</strong> (remplit le formulaire), <strong>Supprimer</strong> (retire la ligne locale, sans arrêter le conteneur VPS), <strong>Déployer / Mettre à jour</strong>.</li>
-            <li>Premier test prévu : déployer <strong>ce produit</strong> (même dépôt, Dockerfile à la racine, port <code>8080</code>, identifiant <code>vps-autopilot</code>). Il faut un Git <strong>HTTPS public</strong> (pousser ce dépôt). Nom d’hôte : DNS vers le VPS, ou un nom du type <code>app.&lt;IP&gt;.sslip.io</code>.</li>
+            <li>Premier test prévu : déployer <strong>ce produit</strong> (même dépôt, Dockerfile à la racine, port <code>8080</code>, identifiant <code>vps-autopilot</code>). Git HTTPS public, ou SSH + Deploy key. Nom d’hôte : DNS vers le VPS, ou <code>app.&lt;IP&gt;.sslip.io</code>.</li>
             <li>L’instance publique est <strong>cargo</strong> : page de preuve + <code>/api/v1/health</code>. <strong>Aucun CHANGE</strong> depuis Internet. Le cockpit reste sur <code>127.0.0.1:8088</code>. Plus tard (V9) : cockpit en ligne derrière login, une session et des paramètres par opérateur.</li>
             <li>Le DNS du nom d’hôte vers l’IP du VPS est à toi (sauf astuce sslip). Si MariaDB est déjà sur ce VPS : à chaque Déployer, une base + user SQL dédiés à l’app (<code>db.env</code> sur le serveur, hors git).</li>
           </ul>
@@ -218,7 +218,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           <h3>7b. Déclarer une plateforme (plusieurs services)</h3>
           <ul>
             <li>Pour un produit du type <strong>site + API</strong> (éventuellement admin, Redis, fichiers), utilise la bande <strong>Plateformes</strong>, pas trois apps 1:1 collées à la main.</li>
-            <li>Identifiant = slug du produit. Chaque service = un Git HTTPS, un port interne, des besoins (MariaDB, Redis, volume fichiers). Sous-dossier optionnel si le Dockerfile n’est pas à la racine du dépôt (monorepo).</li>
+            <li>Identifiant = slug du produit. Chaque service = un Git (HTTPS public ou <code>git@…</code> + même clé lecture seule), un port interne, des besoins (MariaDB, Redis, volume fichiers). Sous-dossier optionnel si le Dockerfile n’est pas à la racine du dépôt (monorepo).</li>
             <li>DNS : <strong>sous-domaines</strong> (<code>api.</code> / <code>www.</code>) ou <strong>chemins</strong> sur un seul hôte (<code>/</code> + <code>/api</code> + <code>/admin</code>). En chemins, Traefik retire le préfixe : l’app écoute à la racine du conteneur.</li>
             <li>Variable de build typique : <code>NEXT_PUBLIC_API_URL</code> vers l’URL publique de l’API (sous-domaine <em>ou</em> <code>https://hote/api</code>).</li>
             <li><strong>Enregistrer</strong> reste local. <strong>Déployer</strong> ouvre un popup de plan, puis un CHANGE : clone de chaque Git, build, Traefik HTTPS, aucun port publié. Redis / MariaDB doivent déjà être installés si tu les as cochés sur un service.</li>
@@ -358,12 +358,20 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <p class="kicker">CHANGE · Git → image → Traefik</p>
             <h2>Déployer une app</h2>
             <p class="hint app-gate" id="appsGate" hidden></p>
-            <p class="hint">Dépôt HTTPS public, <strong>Dockerfile</strong> à la racine (ou rattrapage template). Compte deploy + Traefik requis. Liens publics en <strong>https://</strong>. Domaine de base optionnel pour des URL courtes (ex. <code>my-bourse.apps.mondomaine.com</code>).</p>
+            <p class="hint">Dépôt HTTPS public <strong>ou</strong> <code>git@github.com:org/repo.git</code> (clé lecture seule ci-dessous). Dockerfile à la racine (ou rattrapage template). Compte deploy + Traefik requis.</p>
             <label class="field">Domaine public de base (optionnel, mémorisable)
               <input id="publicBaseDomain" type="text" value="" placeholder="apps.mondomaine.com" autocomplete="off" />
             </label>
             <p class="hint" id="publicDomainHint">Sans domaine : fallback <code>identifiant.&lt;IP&gt;.sslip.io</code>. Avec domaine : DNS <code>*.domaine</code> → IP du VPS, puis Enregistrer le domaine.</p>
             <button id="btnPublicDomain" type="button" class="ghost">Enregistrer le domaine</button>
+            <p class="kicker" style="margin-top:1.1rem">Clé Git lecture seule (V7-05)</p>
+            <p class="hint" id="gitKeyHint">Pour un dépôt privé : génère la clé, colle la publique en <strong>Deploy key</strong> (read-only) sur GitHub/GitLab, saisis <code>git@github.com:org/repo.git</code>.</p>
+            <textarea id="gitKeyPub" class="git-key-pub" readonly rows="3" placeholder="ssh-ed25519 AAAA… vps-autopilot-git-readonly"></textarea>
+            <p class="hint" id="gitKeyFp"></p>
+            <div class="app-form-actions">
+              <button id="btnGitKeyGen" type="button" class="ghost">Générer la clé</button>
+              <button id="btnGitKeyCopy" type="button" class="ghost">Copier la publique</button>
+            </div>
             <div class="row2 app-fields">
               <label class="field">Identifiant court (slug) — PAS le domaine
                 <input id="appId" type="text" value="" placeholder="my-bourse" autocomplete="off" />
@@ -372,8 +380,8 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
                 <input id="appPort" type="number" value="8080" min="1" max="65535" />
               </label>
             </div>
-            <label class="field">1 · Git (HTTPS) — colle ici l’URL du dépôt
-              <input id="appGit" type="url" value="" placeholder="https://github.com/nebdev07/BOURSE.git" autocomplete="off" />
+            <label class="field">1 · Git — HTTPS public ou git@github.com:org/repo.git
+              <input id="appGit" type="text" value="" placeholder="https://github.com/nebdev07/BOURSE.git" autocomplete="off" />
             </label>
             <div class="row2 app-fields">
               <label class="field">Branche
@@ -495,6 +503,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app19"></script>
+  <script src="/console.js?v=app20"></script>
 </body>
 </html>

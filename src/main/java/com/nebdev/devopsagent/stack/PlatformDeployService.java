@@ -22,6 +22,7 @@ public class PlatformDeployService {
     private final ForbiddenTargetGuard forbiddenTargetGuard;
     private final SshConnector sshConnector;
     private final DiscoveryService discoveryService;
+    private final GitDeployKeyStore gitDeployKeyStore;
 
     public PlatformDeployService(
             PlatformIntentStore store,
@@ -30,7 +31,8 @@ public class PlatformDeployService {
             ActionGuard actionGuard,
             ForbiddenTargetGuard forbiddenTargetGuard,
             SshConnector sshConnector,
-            DiscoveryService discoveryService
+            DiscoveryService discoveryService,
+            GitDeployKeyStore gitDeployKeyStore
     ) {
         this.store = store;
         this.planService = planService;
@@ -39,6 +41,7 @@ public class PlatformDeployService {
         this.forbiddenTargetGuard = forbiddenTargetGuard;
         this.sshConnector = sshConnector;
         this.discoveryService = discoveryService;
+        this.gitDeployKeyStore = gitDeployKeyStore;
     }
 
     public AppDeployPlan plan(String platformId) throws IOException {
@@ -100,7 +103,10 @@ public class PlatformDeployService {
                     "Popup confirmation — plateforme",
                     "corrige les Dockerfile Git, Enregistrer, puis Déployer."));
         }
-        String script = RoleScript.loadPlatform(platform);
+        String gitKey = platform.services().stream().anyMatch(s -> GitUrls.ssh(s.gitUrl()))
+                ? gitDeployKeyStore.privateKeyBase64()
+                : null;
+        String script = RoleScript.loadPlatform(platform, gitKey);
         String raw;
         try {
             raw = sshConnector.runStdinScript(script, target, 1200);

@@ -58,6 +58,41 @@ if ! $SUDO docker compose version >/dev/null 2>&1 && ! command -v docker-compose
   $SUDO apt-get install -y docker-compose-v2 || $SUDO apt-get install -y docker-compose
 fi
 
+setup_git_ssh() {
+  GIT_SSH_COMMAND=""
+  if [ -n "${GIT_DEPLOY_KEY_B64:-}" ]; then
+    KEYDIR=/home/deploy/.ssh
+    $SUDO mkdir -p "$KEYDIR"
+    printf '%s' "$GIT_DEPLOY_KEY_B64" | base64 -d | $SUDO tee "$KEYDIR/git-deploy" >/dev/null
+    $SUDO chmod 700 "$KEYDIR"
+    $SUDO chmod 600 "$KEYDIR/git-deploy"
+    $SUDO chown -R deploy:deploy "$KEYDIR"
+    GIT_SSH_COMMAND="ssh -i /home/deploy/.ssh/git-deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+  fi
+}
+
+git_as_deploy() {
+  if [ -n "${GIT_SSH_COMMAND:-}" ]; then
+    $SUDO -u deploy env GIT_SSH_COMMAND="$GIT_SSH_COMMAND" git "$@"
+  else
+    $SUDO -u deploy git "$@"
+  fi
+}
+
+require_git_ssh_if_needed() {
+  case "$1" in
+    git@*|ssh://git@*)
+      if [ -z "${GIT_DEPLOY_KEY_B64:-}" ]; then
+        echo NEED_GIT_DEPLOY_KEY
+        exit 1
+      fi
+      ;;
+  esac
+}
+
+setup_git_ssh
+require_git_ssh_if_needed "$APP_GIT"
+
 $SUDO docker network inspect proxy >/dev/null 2>&1 || { echo NEED_TRAEFIK; exit 1; }
 
 ROOT=/opt/vps-autopilot/apps/$APP_SLUG
@@ -66,19 +101,19 @@ $SUDO mkdir -p "$ROOT"
 $SUDO chown deploy:deploy "$ROOT"
 
 if [ -d "$SRC/.git" ]; then
-  $SUDO -u deploy git -C "$SRC" fetch --depth 1 origin "$APP_REF" || $SUDO -u deploy git -C "$SRC" fetch --depth 1 origin
-  $SUDO -u deploy git -C "$SRC" checkout -f "$APP_REF" || $SUDO -u deploy git -C "$SRC" checkout -f FETCH_HEAD
+  git_as_deploy -C "$SRC" fetch --depth 1 origin "$APP_REF" || git_as_deploy -C "$SRC" fetch --depth 1 origin
+  git_as_deploy -C "$SRC" checkout -f "$APP_REF" || git_as_deploy -C "$SRC" checkout -f FETCH_HEAD
 else
   $SUDO rm -rf "$SRC"
   CLONE_LOG="$(mktemp)"
-  if ! $SUDO -u deploy git clone --depth 1 --branch "$APP_REF" "$APP_GIT" "$SRC" >"$CLONE_LOG" 2>&1; then
-    if ! $SUDO -u deploy git clone --depth 1 "$APP_GIT" "$SRC" >>"$CLONE_LOG" 2>&1; then
+  if ! git_as_deploy clone --depth 1 --branch "$APP_REF" "$APP_GIT" "$SRC" >"$CLONE_LOG" 2>&1; then
+    if ! git_as_deploy clone --depth 1 "$APP_GIT" "$SRC" >>"$CLONE_LOG" 2>&1; then
       echo GIT_CLONE_FAILED
       tail -n 20 "$CLONE_LOG" || true
       rm -f "$CLONE_LOG"
       exit 1
     fi
-    $SUDO -u deploy git -C "$SRC" checkout "$APP_REF" || true
+    git_as_deploy -C "$SRC" checkout "$APP_REF" || true
   fi
   rm -f "$CLONE_LOG"
 fi

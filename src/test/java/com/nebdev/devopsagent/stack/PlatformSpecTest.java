@@ -68,16 +68,15 @@ class PlatformSpecTest {
     }
 
     @Test
-    void rejectsSshGit() {
-        assertThatThrownBy(() -> PlatformSpec.normalized(
+    void acceptsGithubSshGit() {
+        PlatformSpec p = PlatformSpec.normalized(
                 "x",
                 "apps.exemple.com",
                 "host",
                 List.of(svc("api", "git@github.com:org/api.git", "", 8080, List.of())),
                 null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("HTTPS");
+        );
+        assertThat(p.services().get(0).gitUrl()).isEqualTo("git@github.com:org/api.git");
     }
 
     @Test

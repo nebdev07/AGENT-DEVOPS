@@ -78,6 +78,10 @@ public final class RoleScript {
     }
 
     public static String loadApp(AppSpec app, String scaffoldDockerfileBase64) {
+        return loadApp(app, scaffoldDockerfileBase64, null);
+    }
+
+    public static String loadApp(AppSpec app, String scaffoldDockerfileBase64, String gitDeployKeyBase64) {
         if (app == null) {
             throw new IllegalArgumentException("App manquante.");
         }
@@ -87,8 +91,8 @@ public final class RoleScript {
         prefix.append("APP_REF=").append(app.gitRef()).append('\n');
         prefix.append("APP_HOST=").append(app.hostname()).append('\n');
         prefix.append("APP_PORT=").append(app.port()).append('\n');
+        appendGitKey(prefix, gitDeployKeyBase64);
         if (scaffoldDockerfileBase64 != null && !scaffoldDockerfileBase64.isBlank()) {
-            // Une seule ligne base64 — pas d’espaces.
             String b64 = scaffoldDockerfileBase64.replaceAll("\\s", "");
             prefix.append("APP_SCAFFOLD_B64=").append(b64).append('\n');
         }
@@ -96,6 +100,10 @@ public final class RoleScript {
     }
 
     public static String loadPlatform(PlatformSpec platform) {
+        return loadPlatform(platform, null);
+    }
+
+    public static String loadPlatform(PlatformSpec platform, String gitDeployKeyBase64) {
         if (platform == null) {
             throw new IllegalArgumentException("Plateforme manquante.");
         }
@@ -109,6 +117,13 @@ public final class RoleScript {
         prefix.append("PLATFORM_NEED_REDIS=").append(PlatformCompose.needsRedis(platform) ? "1" : "0").append('\n');
         prefix.append("PLATFORM_COMPOSE_B64=").append(b64c).append('\n');
         prefix.append("PLATFORM_MANIFEST_B64=").append(b64m).append('\n');
+        appendGitKey(prefix, gitDeployKeyBase64);
         return prefix + load("platform");
+    }
+
+    private static void appendGitKey(StringBuilder prefix, String gitDeployKeyBase64) {
+        if (gitDeployKeyBase64 != null && !gitDeployKeyBase64.isBlank()) {
+            prefix.append("GIT_DEPLOY_KEY_B64=").append(gitDeployKeyBase64.replaceAll("\\s", "")).append('\n');
+        }
     }
 }

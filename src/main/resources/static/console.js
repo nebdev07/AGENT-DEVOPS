@@ -632,6 +632,8 @@ $("btnInstallKey").addEventListener("click", installKey);
 if ($("btnAppSave")) $("btnAppSave").addEventListener("click", saveApp);
 if ($("btnAppClear")) $("btnAppClear").addEventListener("click", clearAppForm);
 if ($("btnPublicDomain")) $("btnPublicDomain").addEventListener("click", savePublicDomain);
+if ($("btnGitKeyGen")) $("btnGitKeyGen").addEventListener("click", generateGitDeployKey);
+if ($("btnGitKeyCopy")) $("btnGitKeyCopy").addEventListener("click", copyGitDeployKey);
 if ($("btnPlatAddSvc")) $("btnPlatAddSvc").addEventListener("click", () => addPlatServiceRow(null));
 if ($("btnPlatSave")) $("btnPlatSave").addEventListener("click", savePlatform);
 if ($("btnPlatClear")) $("btnPlatClear").addEventListener("click", clearPlatForm);
@@ -1106,7 +1108,8 @@ async function savePublicDomain() {
 
 function looksLikeGitUrl(value) {
   const v = (value || "").trim().toLowerCase();
-  return v.startsWith("http://") || v.startsWith("https://") || v.includes("github.com") || v.includes(".git");
+  return v.startsWith("http://") || v.startsWith("https://") || v.startsWith("git@")
+    || v.startsWith("ssh://") || v.includes("github.com") || v.includes(".git");
 }
 
 function normalizeGitUrl(value) {
@@ -1115,7 +1118,64 @@ function normalizeGitUrl(value) {
   if (!g.endsWith(".git") && /^https:\/\/github\.com\/[^/]+\/[^/]+\/?$/i.test(g)) {
     g = g.replace(/\/$/, "") + ".git";
   }
+  if (!g.endsWith(".git") && /^git@(github|gitlab)\.com:/i.test(g)) {
+    g += ".git";
+  }
   return g;
+}
+
+async function loadGitDeployKey() {
+  const ta = $("gitKeyPub");
+  const fp = $("gitKeyFp");
+  const hint = $("gitKeyHint");
+  if (!ta) return;
+  try {
+    const r = await fetch("/api/v1/git-deploy-key");
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    ta.value = j.publicKey || "";
+    if (fp) fp.textContent = j.fingerprint || "";
+    if (hint && j.note) hint.textContent = j.note;
+  } catch {
+    ta.value = "";
+    if (fp) fp.textContent = "";
+  }
+}
+
+async function generateGitDeployKey() {
+  const rotate = !!($("gitKeyPub") && $("gitKeyPub").value.trim());
+  if (rotate && !window.confirm("Remplacer la clé Git locale ? Les Deploy keys déjà collées sur GitHub/GitLab ne marcheront plus.")) {
+    return;
+  }
+  try {
+    const r = await fetch("/api/v1/git-deploy-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true, rotate }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    if ($("gitKeyPub")) $("gitKeyPub").value = j.publicKey || "";
+    if ($("gitKeyFp")) $("gitKeyFp").textContent = j.fingerprint || "";
+    if ($("gitKeyHint") && j.note) $("gitKeyHint").textContent = j.note;
+    setStatus("Clé Git lecture seule prête. Copie-la en Deploy key (read-only).", "ok");
+  } catch (e) {
+    setStatus(e.message, "err");
+  }
+}
+
+async function copyGitDeployKey() {
+  const v = $("gitKeyPub") ? $("gitKeyPub").value.trim() : "";
+  if (!v) {
+    setStatus("Pas encore de clé publique — génère-la d’abord.", "err");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(v);
+    setStatus("Clé publique copiée.", "ok");
+  } catch {
+    setStatus("Copie impossible — sélectionne le champ et Ctrl+C.", "err");
+  }
 }
 
 function fillAppForm(app) {
@@ -1412,7 +1472,7 @@ function addPlatServiceRow(svc) {
     + '<label class="field">Identifiant<input class="plat-svc-id" type="text" value="' + esc(s.id || "") + '" placeholder="api" autocomplete="off" /></label>'
     + '<label class="field">Port<input class="plat-svc-port" type="number" value="' + (s.port || 8080) + '" min="1" max="65535" /></label>'
     + "</div>"
-    + '<label class="field">Git (HTTPS)<input class="plat-svc-git" type="url" value="' + esc(s.gitUrl || "") + '" placeholder="https://github.com/org/api.git" autocomplete="off" /></label>'
+    + '<label class="field">Git (HTTPS ou git@github.com:…)<input class="plat-svc-git" type="text" value="' + esc(s.gitUrl || "") + '" placeholder="https://github.com/org/api.git" autocomplete="off" /></label>'
     + '<div class="row2 app-fields">'
     + '<label class="field">Branche<input class="plat-svc-ref" type="text" value="' + esc(s.gitRef || "main") + '" autocomplete="off" /></label>'
     + '<label class="field">Sous-dossier (optionnel)<input class="plat-svc-ctx" type="text" value="' + esc(s.context || "") + '" placeholder="backend/api" autocomplete="off" /></label>'
@@ -1685,6 +1745,7 @@ async function deletePlatform(p) {
 showView(currentView());
 refreshPwsh();
 loadPublicDomain();
+loadGitDeployKey();
 loadPlatforms();
 if ($("platServices") && !$("platServices").children.length) {
   addPlatServiceRow({ id: "api", port: 8080, needs: ["mariadb"] });

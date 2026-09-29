@@ -1,7 +1,7 @@
 # API — VPS Autopilot
 
 > Dernière mise à jour : 2026-09-29  
-> Implémenté : V0–V3 partiel + V7-01/02/04 (plateformes). Base : `http://127.0.0.1:8088`
+> Implémenté : V0–V3 partiel + V7-01/02/04/05 (plateformes + Git privé). Base : `http://127.0.0.1:8088`
 
 Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `cargo` (image Docker) : `/` + `GET /api/v1/health` seulement ; le reste → `403` (ADR-030).
 
@@ -17,11 +17,12 @@ Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `c
 | GET / PUT | `/api/v1/stack` | Intention de pile (composants cochés). `409` si écart politique sans `acknowledgeWarnings` | oui |
 | GET | `/api/v1/plan` | Écart pile voulue vs dernier snapshot (READY / SKIP / PLANNED / REFUSED) | oui |
 | POST | `/api/v1/install` | CHANGE : installe un composant READY (`confirm: true`) puis re-discovery | oui |
-| GET / PUT | `/api/v1/apps` | Intention d’apps cargo (slug, Git HTTPS, hôte, port) | oui |
+| GET / PUT | `/api/v1/apps` | Intention d’apps cargo (slug, Git HTTPS ou SSH, hôte, port) | oui |
 | DELETE | `/api/v1/apps?id=` | Retire une app de la liste locale (pas d’arrêt conteneur VPS) | oui |
 | GET | `/api/v1/apps/deploy-plan` | Plan CHANGE avant confirmation | oui |
 | GET / PUT | `/api/v1/apps/public-domain` | Domaine public de base (ex. `apps.nebdev.org`) | oui |
 | POST | `/api/v1/apps/deploy` | CHANGE `deploy-app` (`confirm: true`) puis re-discovery | oui |
+| GET / POST | `/api/v1/git-deploy-key` | Clé Ed25519 lecture seule (locale, hors git). POST `{confirm, rotate}` | **oui V7-05** |
 | GET / PUT | `/api/v1/platforms` | Intention de plateformes (N services). PUT optionnel `vpsIp` | oui (V7-01) |
 | DELETE | `/api/v1/platforms?id=` | Retire une plateforme de la liste locale | oui |
 | GET | `/api/v1/platforms/deploy-plan` | Plan CHANGE avant confirmation | **oui V7-02** |

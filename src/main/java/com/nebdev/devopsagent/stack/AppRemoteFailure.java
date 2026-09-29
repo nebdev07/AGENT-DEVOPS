@@ -46,11 +46,17 @@ final class AppRemoteFailure {
                     "ajoute un Dockerfile à la racine de la branche « " + app.gitRef()
                             + " », pousse sur GitHub, puis Déployer — ou confirme le rattrapage template."));
         }
+        if (raw.contains("NEED_GIT_DEPLOY_KEY")) {
+            throw new IllegalStateException(OperatorMessage.of(
+                    "clone SSH sans clé Git lecture seule.",
+                    "Étape Déployer — clé Git",
+                    "Génère la clé dans la console, ajoute la publique en Deploy key read-only, puis Déployer."));
+        }
         if (raw.contains("GIT_CLONE_FAILED")) {
             throw new IllegalStateException(OperatorMessage.of(
                     "clone impossible de « " + app.gitUrl() + " » (branche « " + app.gitRef() + " »).",
                     "Étape Déployer — Git",
-                    "vérifie : dépôt HTTPS public, branche existante, pas de repo privé / SSH. "
+                    "HTTPS public, ou git@github.com:org/repo.git + Deploy key lecture seule. "
                             + detailFromRemote(raw)));
         }
         if (raw.contains("NEED_APP_SPEC")) {

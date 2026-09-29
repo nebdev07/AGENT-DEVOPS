@@ -362,7 +362,7 @@
 ## ADR-036 — Plateforme cargo (plusieurs sites + API)
 
 - **Date** : 2026-09-28
-- **Statut** : Accepted (V7-01/02/04 livrés ; Git privé V7-05 et templates V7-06 ouverts)
+- **Statut** : Accepted (V7-01/02/04/05 livrés ; templates V7-06 ouverts)
 - **Contexte** : V3 déploie **un** dépôt → **un** conteneur → **un** `Host()`. Ça suffit pour Bourse. Ça ne décrit pas une infra du type ARC : site public, backoffice, API Spring, Redis, volume fichiers, un même produit. Coller trois cargos indépendants oblige l’opérateur à recâbler à la main les URL, Redis et les chemins. V7 (« multi-projets ») était trop vague : plusieurs **produits** 1:1 sur un VPS existent déjà (liste d’apps) ; ce qui manque est un **produit multi-services**.
 - **Décision** :
   1. **Deux formes de cargo, un seul agent** (ADR-023). Pas de nouvel agent sous `AGENTS/`.
@@ -375,7 +375,7 @@
   4. **Routage** : sous-domaines (`Host(www.…)` / `Host(api.…)` / `Host(admin.…)`) **ou** chemins sur un seul hôte (`PathPrefix` + `StripPrefix`, livré V7-04). Les apps derrière un chemin écoutent à la racine du conteneur (préfixe retiré). Défaut UI : sous-domaines.
   5. **Redis** : si un service `needs: redis` et le conteneur `redis` est SKIP, injecter `REDIS_HOST=redis` + mot de passe (fichier plateforme, mode 600) via `env_file`. Aujourd’hui Redis s’installe mais n’est **pas** branché aux apps : c’est un trou à fermer ici, pas un rôle séparé.
   6. **Volumes** : `/app/data` reste le défaut d’une app 1:1. Une plateforme peut déclarer des volumes nommés (`uploads` → chemin dans le conteneur). Traefik ne sert pas de PHP sur un webroot.
-  7. **Git** : HTTPS public d’abord (comme V3). **Clone privé** (clé deploy lecture seule) = chantier V7 listé, requis pour des repos association, **pas** pour ouvrir la prod ARC.
+  7. **Git** : HTTPS public (comme V3) **ou** SSH `git@github.com` / `gitlab.com` avec une **clé lecture seule** locale (`state/git-deploy`, livré V7-05). Pas de jeton dans l’URL. Requis association / DTSI-forme ; **pas** pour ouvrir la prod ARC.
   8. **Cible d’exécution** : VPS lab Autopilot seulement. Prod ARC et staging DTSI restent **interdites** (`ActionGuard`). Le scénario ARC sert de **spécimen** (forme d’infra), pas de premier bouton Déployer.
   9. **Packaging** : chaque service a un Dockerfile (racine du repo **ou** `context` monorepo). Le rattrapage ADR-032 reste pour l’app 1:1. Pour une plateforme, les templates (Next + build-args, Spring **Java 11** WAR/JAR) sont des Dockerfiles **dans le cargo** ou des templates versionnés **explicitement choisis** dans le plan — pas un pom racine GitHub magique.
   10. **Unité de déploiement** : un CHANGE met à jour **toute** la plateforme (ordre : API puis fronts, healthcheck API avant de basculer les fronts). Redeploy d’un seul service = chantier suivant, pas jour 1.

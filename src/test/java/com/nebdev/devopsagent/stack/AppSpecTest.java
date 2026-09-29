@@ -15,13 +15,10 @@ class AppSpecTest {
     }
 
     @Test
-    void rejectsSshGit() {
-        assertThatThrownBy(() -> AppSpec.normalized("x", "git@github.com:org/app.git", "main", "app.example.com", 80))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Cause :")
-                .hasMessageContaining("Où :")
-                .hasMessageContaining("À faire :")
-                .hasMessageContaining("HTTPS");
+    void acceptsGithubSshGit() {
+        AppSpec spec = AppSpec.normalized("x", "git@github.com:org/app.git", "main", "app.example.com", 80);
+        assertThat(spec.gitUrl()).isEqualTo("git@github.com:org/app.git");
+        assertThat(GitUrls.ssh(spec.gitUrl())).isTrue();
     }
 
     @Test

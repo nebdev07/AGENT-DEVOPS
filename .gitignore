@@ -16,6 +16,8 @@ state/*.json
 state/*.report.txt
 state/backups/
 state/backup.key
+state/git-deploy
+state/git-deploy.pub
 infrastructure/lab/keys/
 
 # OS

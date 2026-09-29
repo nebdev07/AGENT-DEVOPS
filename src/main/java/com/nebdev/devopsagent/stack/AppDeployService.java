@@ -22,6 +22,7 @@ public class AppDeployService {
     private final ForbiddenTargetGuard forbiddenTargetGuard;
     private final SshConnector sshConnector;
     private final DiscoveryService discoveryService;
+    private final GitDeployKeyStore gitDeployKeyStore;
 
     public AppDeployService(
             AppIntentStore appIntentStore,
@@ -30,7 +31,8 @@ public class AppDeployService {
             ActionGuard actionGuard,
             ForbiddenTargetGuard forbiddenTargetGuard,
             SshConnector sshConnector,
-            DiscoveryService discoveryService
+            DiscoveryService discoveryService,
+            GitDeployKeyStore gitDeployKeyStore
     ) {
         this.appIntentStore = appIntentStore;
         this.planService = planService;
@@ -39,6 +41,7 @@ public class AppDeployService {
         this.forbiddenTargetGuard = forbiddenTargetGuard;
         this.sshConnector = sshConnector;
         this.discoveryService = discoveryService;
+        this.gitDeployKeyStore = gitDeployKeyStore;
     }
 
     public AppDeployPlan plan(String appId) throws IOException {
@@ -112,7 +115,8 @@ public class AppDeployService {
             DockerfilePreflight.assertPresentOrSkip(app);
         }
 
-        String script = RoleScript.loadApp(effective, scaffoldB64);
+        String gitKey = GitUrls.ssh(effective.gitUrl()) ? gitDeployKeyStore.privateKeyBase64() : null;
+        String script = RoleScript.loadApp(effective, scaffoldB64, gitKey);
         String raw;
         try {
             raw = sshConnector.runStdinScript(script, target, 600);

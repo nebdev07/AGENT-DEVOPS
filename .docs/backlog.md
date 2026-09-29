@@ -26,7 +26,7 @@
 | V7-02 | P1 | CHANGE `deploy-platform` : compose N services, sous-domaines `Host()`, aucun port public | Done — 2026-09-29 |
 | V7-03 | P1 | Brancher Redis (`needs: redis`) + volumes nommés (uploads) | Done — dans `deploy-platform` ; pas les apps 1:1 |
 | V7-04 | P2 | Routage par **chemin** (`PathPrefix`) pour un seul nom d’hôte | Done — 2026-09-29 |
-| V7-05 | P2 | Clone Git **privé** (clé lecture seule) | Open — requis association / DTSI, pas pour ouvrir la prod ARC |
+| V7-05 | P2 | Clone Git **privé** (clé lecture seule) | Done — 2026-09-29 |
 | V7-06 | P2 | Monorepo : `context` Docker (sous-dossier) + templates Next build-args / Spring Java 11 | Open |
 | V7-07 | P3 | Redeploy d’un seul service d’une plateforme | Open — après V7-02 |
 | PLAT-01 | P2 | Auth + sessions opérateur (ADR-031 / V9) | Open — spécifié seulement |

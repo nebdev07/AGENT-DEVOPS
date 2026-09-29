@@ -11,9 +11,11 @@ import java.util.Optional;
 public class AppDeployPlanService {
 
     private final AppIntentStore appIntentStore;
+    private final GitDeployKeyStore gitDeployKeyStore;
 
-    public AppDeployPlanService(AppIntentStore appIntentStore) {
+    public AppDeployPlanService(AppIntentStore appIntentStore, GitDeployKeyStore gitDeployKeyStore) {
         this.appIntentStore = appIntentStore;
+        this.gitDeployKeyStore = gitDeployKeyStore;
     }
 
     public AppDeployPlan plan(String appId) throws IOException {
@@ -21,6 +23,15 @@ public class AppDeployPlanService {
         List<String> actions = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         actions.add("Cloner « " + app.gitUrl() + " » (branche « " + app.gitRef() + " ») sur le VPS.");
+        if (GitUrls.ssh(app.gitUrl())) {
+            if (!gitDeployKeyStore.present()) {
+                return AppDeployPlan.blocked(
+                        app.id(),
+                        actions,
+                        "Dépôt SSH : génère la clé Git lecture seule, ajoute-la en Deploy key (read-only) sur GitHub/GitLab, puis Déployer.");
+            }
+            actions.add("Poser la clé Git lecture seule sur le compte deploy (IdentitiesOnly).");
+        }
 
         Optional<Boolean> hasDocker = CargoScaffold.dockerfileExists(app);
         AppDeployPlan.Scaffold scaffold = null;

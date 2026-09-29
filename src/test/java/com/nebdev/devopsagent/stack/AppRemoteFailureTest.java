@@ -6,6 +6,7 @@ import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class AppRemoteFailureTest {
 
@@ -38,7 +39,16 @@ class AppRemoteFailureTest {
     }
 
     @Test
-    void preflightDetectsMissingDockerfileOnBourse() {
-        assertThat(DockerfilePreflight.probe(APP)).contains(false);
+    void preflightDetectsMissingDockerfileOnRepoWithoutOne() {
+        // Dépôt figé sans Dockerfile (BOURSE en a un depuis : ne plus s’y fier).
+        AppSpec noDockerfile = AppSpec.normalized(
+                "hello",
+                "https://github.com/octocat/Hello-World.git",
+                "master",
+                "hello.example.com",
+                8080
+        );
+        assumeTrue(DockerfilePreflight.probe(noDockerfile).isPresent(), "GitHub injoignable depuis ce poste");
+        assertThat(DockerfilePreflight.probe(noDockerfile)).contains(false);
     }
 }

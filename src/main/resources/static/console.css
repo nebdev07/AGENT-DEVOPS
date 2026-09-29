@@ -669,6 +669,15 @@ button:hover:not(:disabled), .btn:hover { filter: brightness(1.08); }
   margin-top: 0.75rem;
 }
 .app-form-actions button { width: auto; margin: 0; }
+.git-key-pub {
+  width: 100%;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  resize: vertical;
+  min-height: 4.2rem;
+  margin-top: 0.35rem;
+}
 .plat-services { display: grid; gap: 0.75rem; margin-top: 0.85rem; }
 .plat-svc {
   border: 1px solid var(--line);

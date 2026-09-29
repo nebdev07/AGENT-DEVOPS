@@ -11,9 +11,11 @@ import java.util.Optional;
 public class PlatformDeployPlanService {
 
     private final PlatformIntentStore store;
+    private final GitDeployKeyStore gitDeployKeyStore;
 
-    public PlatformDeployPlanService(PlatformIntentStore store) {
+    public PlatformDeployPlanService(PlatformIntentStore store, GitDeployKeyStore gitDeployKeyStore) {
         this.store = store;
+        this.gitDeployKeyStore = gitDeployKeyStore;
     }
 
     public AppDeployPlan plan(String platformId) throws IOException {
@@ -21,6 +23,16 @@ public class PlatformDeployPlanService {
         List<String> actions = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         actions.add("CHANGE deploy-platform « " + p.id() + " » (" + p.services().size() + " service(s)).");
+        boolean sshGit = p.services().stream().anyMatch(s -> GitUrls.ssh(s.gitUrl()));
+        if (sshGit) {
+            if (!gitDeployKeyStore.present()) {
+                return AppDeployPlan.blocked(
+                        p.id(),
+                        actions,
+                        "Au moins un Git en SSH : génère la clé lecture seule, Deploy key read-only sur chaque dépôt privé, puis Déployer.");
+            }
+            actions.add("Poser la clé Git lecture seule sur le compte deploy.");
+        }
         for (PlatformServiceSpec s : p.services()) {
             String where = s.context().isBlank() ? "Dockerfile à la racine" : "Dockerfile dans « " + s.context() + " »";
             actions.add("Cloner « " + s.id() + " » : " + s.gitUrl() + " @" + s.gitRef() + " — " + where + ".");

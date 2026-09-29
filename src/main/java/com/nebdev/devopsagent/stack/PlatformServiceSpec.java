@@ -32,7 +32,6 @@ public record PlatformServiceSpec(
     }
 
     private static final Pattern SLUG = Pattern.compile("^[a-z][a-z0-9-]{0,31}$");
-    private static final Pattern GIT = Pattern.compile("^https://[A-Za-z0-9._~:/?#\\[\\]@!$&'()*+,;=%-]+$");
     private static final Pattern REF = Pattern.compile("^[A-Za-z0-9._/-]{1,80}$");
     private static final Pattern HOST = Pattern.compile(
             "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$");
@@ -74,16 +73,9 @@ public record PlatformServiceSpec(
             throw new IllegalArgumentException(OperatorMessage.of(
                     "Git absent pour le service « " + slug + " ».",
                     where + " · Git",
-                    "URL HTTPS publique, ex. https://github.com/org/repo.git"));
+                    "HTTPS public ou git@github.com:org/repo.git (clé lecture seule)."));
         }
-        String git = gitUrl.trim();
-        if (!GIT.matcher(git).matches() || git.contains("..")
-                || git.startsWith("git@") || git.startsWith("ssh://")) {
-            throw new IllegalArgumentException(OperatorMessage.of(
-                    "Git du service « " + slug + " » n’est pas une HTTPS publique.",
-                    where + " · Git",
-                    "pas de git@ / SSH. Dépôts privés : chantier V7-05, pas encore."));
-        }
+        String git = GitUrls.normalize(gitUrl);
         String ref = (gitRef == null || gitRef.isBlank()) ? "main" : gitRef.trim();
         if (!REF.matcher(ref).matches()) {
             throw new IllegalArgumentException(OperatorMessage.of(

@@ -39,7 +39,7 @@ Règles Cursor : [`.cursor/rules.md`](../.cursor/rules.md).
 | `architecture.md` | published | Couches, modules, flux |
 | `decisions.md` | published | ADR-001 → ADR-036 |
 | `security.md` | published | Risques, SSH, cibles interdites |
-| `api.md` | published | Endpoints V0–V7-04 |
+| `api.md` | published | Endpoints V0–V7-05 |
 | `conventions.md` | published | Gouvernance + code |
 | `glossary.md` | published | Vocabulaire |
 | `roadmap.md` | published | V0 → V9 |

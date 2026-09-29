@@ -39,7 +39,7 @@ L’IA **ne SSH pas en root librement**. Elle produit un plan ; seules des actio
 | Database | MariaDB (une base / projet), Redis à la demande | **instance + grants au deploy-app** (ADR-026 / ADR-029) ; Redis = plus tard |
 | Backup | dump, chiffrement, hors-site, preuve déchiffrement | **partiel V4** — exécutable (ADR-034) ; restore SQL complet plus tard |
 | Deploy | Git → image → Traefik ; compte `deploy` | **compte + deploy-app + cargo 1:1** (ADR-028→030) |
-| Plateforme cargo | N services (sites + API), Redis, volumes, un CHANGE | **V7-01 + V7-02 + V7-04** (`deploy-platform`, Host ou PathPrefix) |
+| Plateforme cargo | N services (sites + API), Redis, volumes, un CHANGE | **V7-01 + V7-02 + V7-04 + V7-05** (Host/PathPrefix, Git privé) |
 | Plateforme opérateurs | Auth, sessions, params par opérateur | **spécifié V9** (ADR-031) |
 
 ## 3. Dépôt (V0 : un module Maven)
