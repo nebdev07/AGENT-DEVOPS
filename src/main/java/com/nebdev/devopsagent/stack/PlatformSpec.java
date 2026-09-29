@@ -9,7 +9,7 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * Produit multi-services (ADR-036 / V7). Intention locale ; pas d’executor dans V7-01.
+ * Produit multi-services (ADR-036 / V7).
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PlatformSpec(
@@ -20,6 +20,7 @@ public record PlatformSpec(
 ) {
 
     public static final String ROUTING_HOST = "host";
+    public static final String ROUTING_PATH = "path";
 
     private static final Pattern SLUG = Pattern.compile("^[a-z][a-z0-9-]{0,31}$");
 
@@ -45,17 +46,14 @@ public record PlatformSpec(
         }
         String domain = PublicDomainStore.normalize(baseDomain == null ? "" : baseDomain);
         String route = routing == null || routing.isBlank() ? ROUTING_HOST : routing.trim().toLowerCase(Locale.ROOT);
-        if ("path".equals(route) || "prefix".equals(route)) {
-            throw new IllegalArgumentException(OperatorMessage.of(
-                    "le routage par chemin n’est pas encore disponible.",
-                    "Bande Plateformes — routage",
-                    "jour 1 = sous-domaines (www / api / admin). Les chemins /api viennent en V7-04."));
+        if ("prefix".equals(route)) {
+            route = ROUTING_PATH;
         }
-        if (!ROUTING_HOST.equals(route)) {
+        if (!ROUTING_HOST.equals(route) && !ROUTING_PATH.equals(route)) {
             throw new IllegalArgumentException(OperatorMessage.of(
                     "routage « " + route + " » inconnu.",
                     "Bande Plateformes — routage",
-                    "laisse « host » (sous-domaines)."));
+                    "sous-domaines (host) ou chemins (path) sur un seul DNS."));
         }
         if (services == null || services.isEmpty()) {
             throw new IllegalArgumentException(OperatorMessage.of(
@@ -69,10 +67,30 @@ public record PlatformSpec(
                     "Bande Plateformes — services",
                     "retire un service avant d’en ajouter."));
         }
+        boolean pathRouting = ROUTING_PATH.equals(route);
+        String sharedHost = null;
+        if (pathRouting) {
+            sharedHost = services.stream()
+                    .map(PlatformServiceSpec::hostname)
+                    .filter(h -> h != null && !h.isBlank())
+                    .map(h -> h.trim().toLowerCase(Locale.ROOT))
+                    .findFirst()
+                    .orElseGet(() -> PlatformServiceSpec.derivePlatformHost(slug, domain, vpsIp));
+        }
         List<PlatformServiceSpec> clean = new ArrayList<>();
         HashSet<String> ids = new HashSet<>();
         HashSet<String> hosts = new HashSet<>();
+        HashSet<String> paths = new HashSet<>();
         for (PlatformServiceSpec raw : services) {
+            if (pathRouting && raw.hostname() != null && !raw.hostname().isBlank()) {
+                String given = raw.hostname().trim().toLowerCase(Locale.ROOT);
+                if (!given.equals(sharedHost)) {
+                    throw new IllegalArgumentException(OperatorMessage.of(
+                            "en routage chemins, tous les services partagent un seul DNS.",
+                            "Bande Plateformes — Nom d’hôte",
+                            "un hôte pour le produit (ex. ma-asso.apps.exemple.com), des chemins /api /admin."));
+                }
+            }
             PlatformServiceSpec n = PlatformServiceSpec.normalized(
                     slug,
                     domain,
@@ -80,11 +98,13 @@ public record PlatformSpec(
                     raw.id(),
                     raw.gitUrl(),
                     raw.gitRef(),
-                    raw.hostname(),
+                    pathRouting ? sharedHost : raw.hostname(),
                     raw.port(),
                     raw.context(),
                     raw.needs(),
-                    raw.buildArgs()
+                    raw.buildArgs(),
+                    raw.pathPrefix(),
+                    pathRouting
             );
             if (!ids.add(n.id())) {
                 throw new IllegalArgumentException(OperatorMessage.of(
@@ -92,14 +112,25 @@ public record PlatformSpec(
                         "Bande Plateformes — Identifiant de service",
                         "chaque service un id distinct (api, www, admin)."));
             }
-            if (!hosts.add(n.hostname())) {
+            if (pathRouting) {
+                if (!paths.add(n.pathPrefix())) {
+                    throw new IllegalArgumentException(OperatorMessage.of(
+                            "chemin « " + n.pathPrefix() + " » utilisé deux fois.",
+                            "Bande Plateformes — Chemin URL",
+                            "un chemin par service, ex. / et /api."));
+                }
+            } else if (!hosts.add(n.hostname())) {
                 throw new IllegalArgumentException(OperatorMessage.of(
                         "hôte « " + n.hostname() + " » utilisé deux fois dans cette plateforme.",
                         "Bande Plateformes — Nom d’hôte",
-                        "un DNS par service."));
+                        "un DNS par service, ou passe en routage chemins."));
             }
             clean.add(n);
         }
-        return new PlatformSpec(slug, domain, ROUTING_HOST, List.copyOf(clean));
+        return new PlatformSpec(slug, domain, route, List.copyOf(clean));
+    }
+
+    public boolean pathRouting() {
+        return ROUTING_PATH.equals(routing);
     }
 }

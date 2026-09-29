@@ -59,11 +59,20 @@ public class PlatformIntentStore {
             for (PlatformSpec p : platforms) {
                 PlatformSpec n = PlatformSpec.normalized(p.id(), p.baseDomain(), p.routing(), p.services(), vpsIp);
                 for (PlatformServiceSpec s : n.services()) {
+                    if (n.pathRouting()) {
+                        if (!hosts.add(s.hostname())) {
+                            throw new IllegalArgumentException(OperatorMessage.of(
+                                    "l’hôte « " + s.hostname() + " » est déjà pris (app 1:1 ou autre plateforme).",
+                                    "Bande Plateformes — Nom d’hôte",
+                                    "en chemins, un DNS pour tout le produit ; il ne doit pas coller une app 1:1."));
+                        }
+                        break;
+                    }
                     if (!hosts.add(s.hostname())) {
                         throw new IllegalArgumentException(OperatorMessage.of(
                                 "l’hôte « " + s.hostname() + " » est déjà pris (app 1:1 ou autre plateforme).",
                                 "Bande Plateformes — Nom d’hôte",
-                                "chaque service et chaque app simple doit avoir son DNS."));
+                                "chaque service et chaque app simple doit avoir son DNS — ou routage chemins."));
                     }
                 }
                 byId.put(n.id(), n);

@@ -635,6 +635,7 @@ if ($("btnPublicDomain")) $("btnPublicDomain").addEventListener("click", savePub
 if ($("btnPlatAddSvc")) $("btnPlatAddSvc").addEventListener("click", () => addPlatServiceRow(null));
 if ($("btnPlatSave")) $("btnPlatSave").addEventListener("click", savePlatform);
 if ($("btnPlatClear")) $("btnPlatClear").addEventListener("click", clearPlatForm);
+if ($("platRouting")) $("platRouting").addEventListener("change", syncPlatRoutingHint);
 $("btnResultClose").addEventListener("click", hideResult);
 if ($("btnConfirmCancel")) $("btnConfirmCancel").addEventListener("click", () => settleConfirm(false));
 if ($("btnConfirmOk")) $("btnConfirmOk").addEventListener("click", () => {
@@ -1376,13 +1377,34 @@ function platNeedChecked(svc, key) {
   return n.includes(key);
 }
 
+function platRoutingMode() {
+  return ($("platRouting") && $("platRouting").value === "path") ? "path" : "host";
+}
+
+function syncPlatRoutingHint() {
+  const hint = $("platHostHint");
+  if (!hint) return;
+  if (platRoutingMode() === "path") {
+    hint.innerHTML = "Un seul DNS pour le produit (<code>plateforme.domaine</code>). Chaque service a un chemin : <code>/</code>, <code>/api</code>, <code>/admin</code>. Vide = auto.";
+  } else {
+    hint.innerHTML = "Hôte d’un service si le champ est vide : <code>id.plateforme.domaine</code> — ou sslip si tu as analysé une IP.";
+  }
+}
+
+function platPublicUrl(p, s) {
+  if (!s || !s.hostname) return "";
+  if (p && p.routing === "path" && s.pathPrefix && s.pathPrefix !== "/") {
+    return "https://" + s.hostname + s.pathPrefix + "/";
+  }
+  return "https://" + s.hostname + "/";
+}
+
 function addPlatServiceRow(svc) {
   const box = $("platServices");
   if (!box) return;
   const s = svc || {};
   const wrap = document.createElement("div");
   wrap.className = "plat-svc";
-  const needs = s.needs || [];
   const apiUrl = (s.buildArgs && s.buildArgs.NEXT_PUBLIC_API_URL) || "";
   wrap.innerHTML = '<div class="plat-svc-head"><strong>Service</strong>'
     + '<button type="button" class="ghost ghost-danger plat-svc-del">Retirer</button></div>'
@@ -1395,7 +1417,10 @@ function addPlatServiceRow(svc) {
     + '<label class="field">Branche<input class="plat-svc-ref" type="text" value="' + esc(s.gitRef || "main") + '" autocomplete="off" /></label>'
     + '<label class="field">Sous-dossier (optionnel)<input class="plat-svc-ctx" type="text" value="' + esc(s.context || "") + '" placeholder="backend/api" autocomplete="off" /></label>'
     + "</div>"
+    + '<div class="row2 app-fields">'
     + '<label class="field">Nom d’hôte (vide = auto)<input class="plat-svc-host" type="text" value="' + esc(s.hostname || "") + '" placeholder="api.ma-asso.apps.exemple.com" autocomplete="off" /></label>'
+    + '<label class="field">Chemin URL (routage chemins)<input class="plat-svc-path" type="text" value="' + esc(s.pathPrefix || "") + '" placeholder="/api" autocomplete="off" /></label>'
+    + "</div>"
     + '<label class="field">NEXT_PUBLIC_API_URL (optionnel)<input class="plat-svc-apiurl" type="url" value="' + esc(apiUrl) + '" placeholder="https://api…/" autocomplete="off" /></label>'
     + '<div class="plat-needs">'
     + '<label><input type="checkbox" class="plat-need-mariadb"' + (platNeedChecked(s, "mariadb") ? " checked" : "") + " /> MariaDB</label>"
@@ -1421,6 +1446,7 @@ function collectPlatServices() {
       gitUrl: el.querySelector(".plat-svc-git").value.trim(),
       gitRef: el.querySelector(".plat-svc-ref").value.trim() || "main",
       hostname: el.querySelector(".plat-svc-host").value.trim(),
+      pathPrefix: el.querySelector(".plat-svc-path") ? el.querySelector(".plat-svc-path").value.trim() : "",
       port: portRaw ? Number(portRaw) : 8080,
       context: el.querySelector(".plat-svc-ctx").value.trim(),
       needs,
@@ -1445,22 +1471,26 @@ function setPlatFormStatus(msg, kind) {
 function clearPlatForm() {
   platEditingId = "";
   if ($("platId")) $("platId").value = "";
+  if ($("platRouting")) $("platRouting").value = "host";
   if ($("platBase") && $("publicBaseDomain")) $("platBase").value = $("publicBaseDomain").value.trim();
   const box = $("platServices");
   if (box) box.innerHTML = "";
   addPlatServiceRow({ id: "api", port: 8080, needs: ["mariadb"] });
   addPlatServiceRow({ id: "www", port: 3000, needs: [] });
   setPlatFormStatus("");
+  syncPlatRoutingHint();
 }
 
 function fillPlatForm(p) {
   platEditingId = p.id;
   $("platId").value = p.id || "";
   $("platBase").value = p.baseDomain || "";
+  if ($("platRouting")) $("platRouting").value = p.routing === "path" ? "path" : "host";
   const box = $("platServices");
   box.innerHTML = "";
   (p.services || []).forEach((s) => addPlatServiceRow(s));
   if (!box.children.length) addPlatServiceRow(null);
+  syncPlatRoutingHint();
 }
 
 async function loadPlatforms() {
@@ -1490,10 +1520,11 @@ function renderPlatList(platforms, deployReady) {
   platforms.forEach((p) => {
     const row = document.createElement("div");
     row.className = "action-row READY";
-    const svcTxt = (p.services || []).map((s) => s.id + " → https://" + s.hostname + "/").join(" · ");
+    const svcTxt = (p.services || []).map((s) => s.id + " → " + platPublicUrl(p, s)).join(" · ");
     const info = document.createElement("div");
+    const routeLbl = p.routing === "path" ? "chemins" : "sous-domaines";
     info.innerHTML = "<span class=\"tag\">déclarée</span><strong>" + esc(p.id) + "</strong><p>"
-      + (p.services || []).length + " service(s) · sous-domaines · " + esc(svcTxt) + "</p>";
+      + (p.services || []).length + " service(s) · " + routeLbl + " · " + esc(svcTxt) + "</p>";
     row.appendChild(info);
     const actions = document.createElement("div");
     actions.className = "row-actions";
@@ -1574,14 +1605,15 @@ async function deployPlatform(p) {
     paint(j.snapshot, j.report, "ssh");
     const elapsed = formatElapsed(Date.now() - busyStartedAt);
     hideBusy();
-    const firstHost = (p.services && p.services[0] && p.services[0].hostname) ? p.services[0].hostname : "";
+    const firstUrl = (p.services && p.services[0]) ? platPublicUrl(p, p.services[0]) : "";
     setStatus(p.id + " : plateforme déployée.", "ok");
     showResult({
       ok: true,
       kicker: "CHANGE · réussi",
       title: "Plateforme " + p.id + " déployée",
-      detail: "Plan exécuté en " + elapsed + ". Chaque service a son HTTPS (sous-domaines).",
-      link: firstHost ? "https://" + firstHost + "/" : "",
+      detail: "Plan exécuté en " + elapsed + ". HTTPS "
+        + (p.routing === "path" ? "par chemins (un DNS)." : "par sous-domaines."),
+      link: firstUrl,
       next: "DNS wildcard vers le VPS si ce n’est pas du sslip. Redis/MariaDB doivent déjà être SKIP si tu les as cochés.",
     });
   } catch (e) {
@@ -1610,7 +1642,7 @@ async function savePlatform() {
     const spec = {
       id: $("platId").value.trim(),
       baseDomain: $("platBase").value.trim(),
-      routing: "host",
+      routing: platRoutingMode(),
       services,
     };
     const idx = list.findIndex((p) => p.id === (platEditingId || spec.id));
@@ -1657,6 +1689,7 @@ loadPlatforms();
 if ($("platServices") && !$("platServices").children.length) {
   addPlatServiceRow({ id: "api", port: 8080, needs: ["mariadb"] });
   addPlatServiceRow({ id: "www", port: 3000, needs: [] });
+  syncPlatRoutingHint();
 }
 loadRuntime().then(loadStack).catch(() => {
   setStatus("API injoignable.", "err");

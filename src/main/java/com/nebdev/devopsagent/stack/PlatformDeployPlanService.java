@@ -44,7 +44,8 @@ public class PlatformDeployPlanService {
             if (hasDf.isEmpty()) {
                 warnings.add("Préflight GitHub indisponible pour « " + s.id() + " » — le VPS vérifiera le Dockerfile.");
             }
-            actions.add("Construire l’image « " + s.id() + " » (port " + s.port() + ") → https://" + s.hostname() + "/");
+            actions.add("Construire l’image « " + s.id() + " » (port " + s.port() + ") → "
+                    + PlatformCompose.publicUrl(p, s));
         }
         if (PlatformCompose.needsDb(p)) {
             actions.add("Si MariaDB est là : base/user app_" + p.id().replace('-', '_') + " + db.env.");
@@ -52,7 +53,9 @@ public class PlatformDeployPlanService {
         if (PlatformCompose.needsRedis(p)) {
             actions.add("Injecter REDIS_HOST=redis (mot de passe hors git) pour les services qui en ont besoin.");
         }
-        actions.add("Générer le compose Traefik (réseau proxy, aucun port publié) + HTTPS.");
+        actions.add("Générer le compose Traefik ("
+                + (p.pathRouting() ? "PathPrefix + StripPrefix, un DNS" : "sous-domaines Host()")
+                + ", aucun port publié) + HTTPS.");
         actions.add("docker compose up --build sous /opt/vps-autopilot/platforms/" + p.id() + "/");
         return AppDeployPlan.ready(p.id(), actions, warnings, null);
     }

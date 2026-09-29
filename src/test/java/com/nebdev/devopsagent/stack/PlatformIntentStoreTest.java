@@ -43,7 +43,8 @@ class PlatformIntentStoreTest {
                         3000,
                         "",
                         List.of(),
-                        Map.of()
+                        Map.of(),
+                        ""
                 )),
                 null
         );
@@ -70,7 +71,8 @@ class PlatformIntentStoreTest {
                         8080,
                         "backend/api",
                         List.of("mariadb", "volume:uploads"),
-                        Map.of()
+                        Map.of(),
+                        ""
                 )),
                 null
         );

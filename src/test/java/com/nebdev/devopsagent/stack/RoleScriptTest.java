@@ -81,7 +81,8 @@ class RoleScriptTest {
                                 8080,
                                 "",
                                 List.of("mariadb", "redis"),
-                                Map.of()
+                                Map.of(),
+                                ""
                         ),
                         new PlatformServiceSpec(
                                 "www",
@@ -91,7 +92,8 @@ class RoleScriptTest {
                                 3000,
                                 "",
                                 List.of(),
-                                Map.of("NEXT_PUBLIC_API_URL", "https://api.ma-asso.apps.exemple.com")
+                                Map.of("NEXT_PUBLIC_API_URL", "https://api.ma-asso.apps.exemple.com"),
+                                ""
                         )
                 ),
                 null

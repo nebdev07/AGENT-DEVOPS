@@ -12,7 +12,7 @@
 | **V4** | Backup chiffré + copie hors-site (poste opérateur au moins) + restore par l’agent | **en cours** — dump+encrypt+copie+preuve OK (ADR-034) ; restore SQL complet plus tard |
 | **V5** | IA : langage naturel → plan structuré | spécifié |
 | **V6** | Autonomie contrôlée : plan → validation → exécution → vérification | spécifié |
-| **V7** | Plusieurs **produits** 1:1 sur un VPS **et** **plateforme cargo** (N services) | **en cours** — V7-01/02 livrés (`deploy-platform`) ; PathPrefix / Git privé / templates Java 11 ouverts |
+| **V7** | Plusieurs **produits** 1:1 sur un VPS **et** **plateforme cargo** (N services) | **en cours** — V7-01/02/04 livrés ; Git privé / templates Java 11 ouverts |
 | **V8** | Multi-serveurs (OVH, Hetzner, …) | spécifié |
 | **V9** | Plateforme **multi-opérateurs** : auth, sessions, paramètres par compte, cockpit en ligne derrière login | **spécifié** (ADR-031) — pas de code. Ne pas confondre avec V7 (plusieurs *services* d’un produit). |
 

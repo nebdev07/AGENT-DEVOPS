@@ -1,7 +1,7 @@
 # API — VPS Autopilot
 
 > Dernière mise à jour : 2026-09-29  
-> Implémenté : V0–V3 partiel + V7-01/V7-02 (plateformes). Base : `http://127.0.0.1:8088`
+> Implémenté : V0–V3 partiel + V7-01/02/04 (plateformes). Base : `http://127.0.0.1:8088`
 
 Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `cargo` (image Docker) : `/` + `GET /api/v1/health` seulement ; le reste → `403` (ADR-030).
 
@@ -100,6 +100,7 @@ PUT :
           "gitUrl": "https://github.com/org/api.git",
           "gitRef": "main",
           "hostname": "",
+          "pathPrefix": "/api",
           "port": 8080,
           "context": "backend/api",
           "needs": ["mariadb", "redis", "volume:uploads"],
@@ -110,6 +111,7 @@ PUT :
           "gitUrl": "https://github.com/org/site.git",
           "gitRef": "main",
           "hostname": "",
+          "pathPrefix": "/",
           "port": 3000,
           "context": "",
           "needs": [],
@@ -121,8 +123,8 @@ PUT :
 }
 ```
 
-Hôte vide → `service.plateforme.domaine` ou `service-plateforme.<IP>.sslip.io` si `vpsIp`.  
-`routing: path` → `400` (V7-04). Collision d’hôte avec une app 1:1 → `400`.  
+Hôte vide → `service.plateforme.domaine` (routage host) ou `plateforme.domaine` (routage path) ; sslip si `vpsIp`.  
+`routing: path` : un DNS partagé, `pathPrefix` par service (`/` , `/api`). Traefik `PathPrefix` + `StripPrefix` (sauf `/`). Collision d’hôte avec une app 1:1 → `400`.  
 Réponse : `{ platforms, deployReady: true, note }`.
 
 ## POST `/api/v1/platforms/deploy`

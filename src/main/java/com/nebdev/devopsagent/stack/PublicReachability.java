@@ -18,7 +18,13 @@ final class PublicReachability {
         if (hostname == null || hostname.isBlank()) {
             return;
         }
-        String url = "https://" + hostname.trim().toLowerCase() + "/";
+        checkHttpsUrl("https://" + hostname.trim().toLowerCase() + "/");
+    }
+
+    static void checkHttpsUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return;
+        }
         try {
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(12))

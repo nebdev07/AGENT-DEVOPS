@@ -21,8 +21,15 @@ public record PlatformServiceSpec(
         int port,
         String context,
         List<String> needs,
-        Map<String, String> buildArgs
+        Map<String, String> buildArgs,
+        String pathPrefix
 ) {
+
+    public PlatformServiceSpec {
+        pathPrefix = pathPrefix == null ? "" : pathPrefix;
+        needs = needs == null ? List.of() : needs;
+        buildArgs = buildArgs == null ? Map.of() : buildArgs;
+    }
 
     private static final Pattern SLUG = Pattern.compile("^[a-z][a-z0-9-]{0,31}$");
     private static final Pattern GIT = Pattern.compile("^https://[A-Za-z0-9._~:/?#\\[\\]@!$&'()*+,;=%-]+$");
@@ -32,6 +39,7 @@ public record PlatformServiceSpec(
     private static final Pattern CONTEXT = Pattern.compile("^[A-Za-z0-9._/-]{0,120}$");
     private static final Pattern BUILD_KEY = Pattern.compile("^[A-Z][A-Z0-9_]{0,47}$");
     private static final Pattern VOLUME = Pattern.compile("^volume:[a-z][a-z0-9-]{0,31}$");
+    private static final Pattern PATH = Pattern.compile("^/([a-z][a-z0-9-]{0,47})?$");
 
     public static PlatformServiceSpec normalized(
             String platformId,
@@ -44,7 +52,9 @@ public record PlatformServiceSpec(
             Integer port,
             String context,
             List<String> needs,
-            Map<String, String> buildArgs
+            Map<String, String> buildArgs,
+            String pathPrefix,
+            boolean pathRouting
     ) {
         String where = "Bande Plateformes — service";
         if (id == null || id.isBlank()) {
@@ -100,7 +110,9 @@ public record PlatformServiceSpec(
         }
         String host = hostname == null ? "" : hostname.trim().toLowerCase(Locale.ROOT);
         if (host.isBlank()) {
-            host = deriveHost(slug, platformId, baseDomain, vpsIp);
+            host = pathRouting
+                    ? derivePlatformHost(platformId, baseDomain, vpsIp)
+                    : deriveHost(slug, platformId, baseDomain, vpsIp);
         }
         if (host.startsWith("http://") || host.startsWith("https://") || host.contains("github.com") || host.contains("/")) {
             throw new IllegalArgumentException(OperatorMessage.of(
@@ -116,7 +128,55 @@ public record PlatformServiceSpec(
         }
         List<String> needList = normalizeNeeds(slug, needs);
         Map<String, String> args = normalizeBuildArgs(slug, buildArgs);
-        return new PlatformServiceSpec(slug, git, ref, host, p, ctx, needList, args);
+        String path = pathRouting ? normalizePath(slug, pathPrefix) : "";
+        return new PlatformServiceSpec(slug, git, ref, host, p, ctx, needList, args, path);
+    }
+
+    static String derivePlatformHost(String platformId, String baseDomain, String vpsIp) {
+        String base = baseDomain == null ? "" : baseDomain.trim().toLowerCase(Locale.ROOT);
+        if (!base.isEmpty()) {
+            return platformId + "." + base;
+        }
+        if (vpsIp != null && vpsIp.matches("\\d{1,3}(\\.\\d{1,3}){3}")) {
+            return platformId + "." + vpsIp + ".sslip.io";
+        }
+        throw new IllegalArgumentException(OperatorMessage.of(
+                "impossible de proposer un DNS pour la plateforme « " + platformId + " ».",
+                "Bande Plateformes — domaine ou hôte",
+                "saisis un domaine de base, ou analyse une IP (sslip), ou un nom d’hôte commun."));
+    }
+
+    static String derivePath(String serviceId) {
+        return switch (serviceId) {
+            case "www", "site", "front", "web" -> "/";
+            default -> "/" + serviceId;
+        };
+    }
+
+    private static String normalizePath(String slug, String pathPrefix) {
+        String raw = pathPrefix == null ? "" : pathPrefix.trim().toLowerCase(Locale.ROOT);
+        if (raw.isBlank()) {
+            raw = derivePath(slug);
+        }
+        if (!raw.startsWith("/")) {
+            raw = "/" + raw;
+        }
+        if (raw.length() > 1 && raw.endsWith("/")) {
+            raw = raw.substring(0, raw.length() - 1);
+        }
+        if (raw.contains("..") || raw.contains("//") || raw.contains("\\")) {
+            throw new IllegalArgumentException(OperatorMessage.of(
+                    "chemin « " + abbreviate(pathPrefix) + " » invalide (service " + slug + ").",
+                    "Bande Plateformes — Chemin URL",
+                    "un seul segment, ex. /api ou / (site). Pas de /api/v1."));
+        }
+        if (!PATH.matcher(raw).matches()) {
+            throw new IllegalArgumentException(OperatorMessage.of(
+                    "chemin « " + abbreviate(raw) + " » invalide (service " + slug + ").",
+                    "Bande Plateformes — Chemin URL",
+                    "ex. / , /api , /admin — a-z, chiffres, tirets."));
+        }
+        return raw;
     }
 
     static String deriveHost(String serviceId, String platformId, String baseDomain, String vpsIp) {

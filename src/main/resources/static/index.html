@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app18" />
+  <link rel="stylesheet" href="/console.css?v=app19" />
 </head>
 <body>
   <div class="bg"></div>
@@ -219,7 +219,8 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           <ul>
             <li>Pour un produit du type <strong>site + API</strong> (éventuellement admin, Redis, fichiers), utilise la bande <strong>Plateformes</strong>, pas trois apps 1:1 collées à la main.</li>
             <li>Identifiant = slug du produit. Chaque service = un Git HTTPS, un port interne, des besoins (MariaDB, Redis, volume fichiers). Sous-dossier optionnel si le Dockerfile n’est pas à la racine du dépôt (monorepo).</li>
-            <li>DNS proposés : <code>service.plateforme.ton-domaine</code>. Variable de build typique : <code>NEXT_PUBLIC_API_URL</code> vers l’URL publique de l’API.</li>
+            <li>DNS : <strong>sous-domaines</strong> (<code>api.</code> / <code>www.</code>) ou <strong>chemins</strong> sur un seul hôte (<code>/</code> + <code>/api</code> + <code>/admin</code>). En chemins, Traefik retire le préfixe : l’app écoute à la racine du conteneur.</li>
+            <li>Variable de build typique : <code>NEXT_PUBLIC_API_URL</code> vers l’URL publique de l’API (sous-domaine <em>ou</em> <code>https://hote/api</code>).</li>
             <li><strong>Enregistrer</strong> reste local. <strong>Déployer</strong> ouvre un popup de plan, puis un CHANGE : clone de chaque Git, build, Traefik HTTPS, aucun port publié. Redis / MariaDB doivent déjà être installés si tu les as cochés sur un service.</li>
             <li>Chaque service a besoin d’un <strong>Dockerfile</strong> (racine du dépôt ou sous-dossier). Pas de rattrapage template pour les plateformes (jour 1).</li>
             <li>Supprimer retire la fiche locale seulement (ne stoppe pas les conteneurs).</li>
@@ -393,8 +394,8 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           <article class="card hidden" id="platformsCard">
             <p class="kicker">V7 · Git → images → Traefik</p>
             <h2>Déclarer une plateforme</h2>
-            <p class="hint">Un produit = plusieurs services (site, API, admin…). Enregistre d’abord, puis <strong>Déployer</strong> (CHANGE confirmé). Compose généré, aucun port public, sous-domaines.</p>
-            <p class="hint">Routage jour 1 : <strong>sous-domaines</strong> (<code>api.</code> / <code>www.</code> / <code>admin.</code>). Les chemins sur un seul domaine viendront plus tard.</p>
+            <p class="hint">Un produit = plusieurs services (site, API, admin…). Enregistre d’abord, puis <strong>Déployer</strong> (CHANGE confirmé). Compose généré, aucun port public.</p>
+            <p class="hint">Routage : <strong>sous-domaines</strong> (un DNS par service) ou <strong>chemins</strong> (un DNS, <code>/</code> / <code>/api</code> / <code>/admin</code>).</p>
             <div class="row2 app-fields">
               <label class="field">Identifiant plateforme (slug)
                 <input id="platId" type="text" value="" placeholder="ma-asso" autocomplete="off" />
@@ -403,6 +404,12 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
                 <input id="platBase" type="text" value="" placeholder="apps.mondomaine.com" autocomplete="off" />
               </label>
             </div>
+            <label class="field">Routage
+              <select id="platRouting">
+                <option value="host">Sous-domaines (api. / www.)</option>
+                <option value="path">Chemins sur un seul hôte (/ et /api)</option>
+              </select>
+            </label>
             <p class="hint" id="platHostHint">Hôte d’un service si le champ est vide : <code>id.plateforme.domaine</code> — ou sslip si tu as analysé une IP.</p>
             <div id="platServices" class="plat-services"></div>
             <div class="app-form-actions">
@@ -488,6 +495,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app18"></script>
+  <script src="/console.js?v=app19"></script>
 </body>
 </html>

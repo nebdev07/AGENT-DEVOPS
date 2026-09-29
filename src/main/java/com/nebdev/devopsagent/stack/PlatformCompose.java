@@ -73,15 +73,7 @@ final class PlatformCompose {
             sb.append("      - traefik.docker.network=proxy\n");
             sb.append("      - vps.autopilot.platform=").append(platform.id()).append("\n");
             sb.append("      - vps.autopilot.service=").append(s.id()).append("\n");
-            sb.append("      - \"traefik.http.routers.").append(router)
-                    .append(".rule=Host(`").append(s.hostname()).append("`)\"").append("\n");
-            sb.append("      - traefik.http.routers.").append(router).append(".entrypoints=web\n");
-            sb.append("      - \"traefik.http.routers.").append(router)
-                    .append("-secure.rule=Host(`").append(s.hostname()).append("`)\"").append("\n");
-            sb.append("      - traefik.http.routers.").append(router).append("-secure.entrypoints=websecure\n");
-            sb.append("      - traefik.http.routers.").append(router).append("-secure.tls=true\n");
-            sb.append("      - traefik.http.routers.").append(router)
-                    .append("-secure.tls.certresolver=le\n");
+            appendRouterLabels(sb, router, s.hostname(), s.pathPrefix(), platform.pathRouting());
             sb.append("      - traefik.http.services.").append(router)
                     .append(".loadbalancer.server.port=").append(s.port()).append("\n");
         }
@@ -99,6 +91,14 @@ final class PlatformCompose {
         return sb.toString();
     }
 
+    static String publicUrl(PlatformSpec platform, PlatformServiceSpec s) {
+        if (platform.pathRouting() && s.pathPrefix() != null && !s.pathPrefix().isBlank()
+                && !"/".equals(s.pathPrefix())) {
+            return "https://" + s.hostname() + s.pathPrefix() + "/";
+        }
+        return "https://" + s.hostname() + "/";
+    }
+
     static String manifest(PlatformSpec platform) {
         StringBuilder sb = new StringBuilder();
         for (PlatformServiceSpec s : platform.services()) {
@@ -111,6 +111,34 @@ final class PlatformCompose {
                     .append(s.context());
         }
         return sb.toString();
+    }
+
+    private static void appendRouterLabels(
+            StringBuilder sb,
+            String router,
+            String hostname,
+            String pathPrefix,
+            boolean pathRouting
+    ) {
+        String rule = "Host(`" + hostname + "`)";
+        boolean strip = pathRouting && pathPrefix != null && !pathPrefix.isBlank() && !"/".equals(pathPrefix);
+        if (strip) {
+            rule = rule + " && PathPrefix(`" + pathPrefix + "`)";
+        }
+        sb.append("      - \"traefik.http.routers.").append(router).append(".rule=").append(rule).append("\"\n");
+        sb.append("      - traefik.http.routers.").append(router).append(".entrypoints=web\n");
+        sb.append("      - \"traefik.http.routers.").append(router).append("-secure.rule=").append(rule).append("\"\n");
+        sb.append("      - traefik.http.routers.").append(router).append("-secure.entrypoints=websecure\n");
+        sb.append("      - traefik.http.routers.").append(router).append("-secure.tls=true\n");
+        sb.append("      - traefik.http.routers.").append(router).append("-secure.tls.certresolver=le\n");
+        if (strip) {
+            String mw = router + "-strip";
+            sb.append("      - traefik.http.middlewares.").append(mw)
+                    .append(".stripprefix.prefixes=").append(pathPrefix).append("\n");
+            sb.append("      - traefik.http.routers.").append(router).append(".middlewares=").append(mw).append("\n");
+            sb.append("      - traefik.http.routers.").append(router)
+                    .append("-secure.middlewares=").append(mw).append("\n");
+        }
     }
 
     private static String yamlQuote(String raw) {

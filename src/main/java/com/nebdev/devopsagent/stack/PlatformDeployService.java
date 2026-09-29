@@ -152,7 +152,7 @@ public class PlatformDeployService {
         }
         DiscoveryService.DiscoveryResult discovery = discoveryService.discoverRemote(target);
         for (PlatformServiceSpec s : platform.services()) {
-            PublicReachability.checkHttps(s.hostname());
+            PublicReachability.checkHttpsUrl(PlatformCompose.publicUrl(platform, s));
         }
         return discovery;
     }

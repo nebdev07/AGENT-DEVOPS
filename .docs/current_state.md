@@ -7,7 +7,7 @@
 
 Produit Agent DevOps (V0→V9), Ansible dès les CHANGE, Traefik/MariaDB/backups, IA en V5, **plateforme cargo multi-services en V7 (ADR-036)**, plateforme multi-opérateurs en V9 (ADR-031). Catalogue : `documentation.md`.  
 V4 backups : dump chiffré + copie hors-site + preuve de déchiffrement minimale. **Option retenue** : dumps sur le **poste opérateur** (`state/backups/`). Rôle exécutable (ADR-034). Restore SQL complet : pas encore.  
-V7 : un produit = N conteneurs. **V7-01 + V7-02 livrés** (déclaration + `deploy-platform`). Routage chemins / Git privé / templates Java 11 : pas encore. Lab seulement (pas l’IP prod ARC).  
+V7 : un produit = N conteneurs. **V7-01 + V7-02 + V7-04 livrés** (déclaration, `deploy-platform`, chemins URL). Git privé / templates Java 11 : pas encore. Lab seulement (pas l’IP prod ARC).  
 V9 : auth + sessions ; chaque utilisateur ses paramètres ; cockpit en ligne seulement après login. **Pas encore de code.** Ne pas confondre V7 (plusieurs *services*) et V9 (plusieurs *opérateurs*).
 
 ## Implémenté (V0)
@@ -22,7 +22,7 @@ V9 : auth + sessions ; chaque utilisateur ses paramètres ; cockpit en ligne seu
 - Couleurs d’état : vert doux présent/sain, gris absent, ambre inconnu, rouge doux à surveiller. Cockpit en quatre bandes (état / logiciels / pile+install / rapport), filet gauche et teinte calme.
 - Pile voulue (ADR-017) : section **repliable** (fermée par défaut), **sous** la carte Installations. Détails cochables (ADR-020). Déjà installé = grisé. Plan d’install après analyse (ADR-018). Docker SKIP seulement si moteur **et** plus aucun détail coché non détecté. Nouvelle section `defaultEnabled` fusionnée une fois (`catalogSeen`).
 - CHANGE exécutable : `security`, `docker`, `traefik`, `mariadb`, `deploy`, **`redis`**, **`backups`**, **`deploy-app`**, **`deploy-platform`**. Premier cargo = ce dépôt (ADR-030). Nginx hôte : **pas proposé**.
-- Console : bandeau Applications **et Plateformes**. Apps : bouton Déployer. Plateformes : Enregistrer + **Déployer** (CHANGE `deploy-platform`, popup de plan). Compose N services, sous-domaines, Redis/`db.env`/volume uploads si cochés.
+- Console : bandeau Applications **et Plateformes**. Apps : bouton Déployer. Plateformes : Enregistrer + **Déployer**. Routage sous-domaines **ou** chemins (`PathPrefix`). Compose N services, Redis/`db.env`/volume uploads si cochés.
 - Bootstrap clé : mot de passe OVH ponctuel → `~/.ssh/authorized_keys` (ADR-016).
 - Clé dédiée `~\.ssh\vps-autopilot` (hors git). `.env` local sans hôte (saisi dans l’UI).
 - Console : aucune fixture affichée. Analyse seulement après IP + user SSH. Fixture CLI/tests uniquement.
@@ -30,7 +30,7 @@ V9 : auth + sessions ; chaque utilisateur ses paramètres ; cockpit en ligne seu
 
 ## Non implémenté
 
-Ansible, restore SQL complet (V4 suite), IA (V5), routage PathPrefix (V7-04), Git privé (V7-05), templates Spring 11 (V7-06), **plateforme multi-opérateurs V9** (ADR-031). Cargo public ≠ cockpit. Redis n’est **pas** injecté dans les apps 1:1 (seulement les plateformes qui le cochent).
+Ansible, restore SQL complet (V4 suite), IA (V5), Git privé (V7-05), templates Spring 11 (V7-06), **plateforme multi-opérateurs V9** (ADR-031). Cargo public ≠ cockpit. Redis n’est **pas** injecté dans les apps 1:1 (seulement les plateformes qui le cochent).
 
 ## Runtime
 
