@@ -3,6 +3,9 @@ package com.nebdev.devopsagent.stack;
 import com.nebdev.devopsagent.discovery.DiscoveryParser;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class StackPresenceTest {
@@ -42,5 +45,14 @@ class StackPresenceTest {
         var present = StackPresence.of(snap);
         assertThat(present.get("docker")).containsExactly("engine");
         assertThat(present.get("docker")).doesNotContain("compose", "docker-group");
+    }
+
+    @Test
+    void perProjectGrantsBringTheInstanceOnAFreshServer() {
+        var intent = Map.of("mariadb", List.of("per-project"));
+        assertThat(StackPresence.subtract(intent, Map.of()).get("mariadb"))
+                .containsExactly("instance", "per-project");
+        assertThat(StackPresence.subtract(intent, Map.of("mariadb", List.of("instance"))).get("mariadb"))
+                .containsExactly("per-project");
     }
 }

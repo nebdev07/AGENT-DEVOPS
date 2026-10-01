@@ -77,19 +77,27 @@ public final class StackPresence {
         if (details == null || details.isEmpty()) {
             return Map.of();
         }
-        if (present == null || present.isEmpty()) {
-            return details;
-        }
+        Map<String, List<String>> have = present == null ? Map.of() : present;
         Map<String, List<String>> out = new LinkedHashMap<>();
         for (Map.Entry<String, List<String>> e : details.entrySet()) {
-            Set<String> skip = Set.copyOf(present.getOrDefault(e.getKey(), List.of()));
-            List<String> kept = e.getValue() == null
+            Set<String> skip = Set.copyOf(have.getOrDefault(e.getKey(), List.of()));
+            List<String> kept = new ArrayList<>(e.getValue() == null
                     ? List.of()
-                    : e.getValue().stream().filter(id -> !skip.contains(id)).toList();
-            out.put(e.getKey(), kept);
+                    : e.getValue().stream().filter(id -> !skip.contains(id)).toList());
+            for (Map.Entry<String, String> req : PREREQUISITES.getOrDefault(e.getKey(), Map.of()).entrySet()) {
+                if (kept.contains(req.getKey()) && !skip.contains(req.getValue()) && !kept.contains(req.getValue())) {
+                    kept.add(0, req.getValue());
+                }
+            }
+            out.put(e.getKey(), List.copyOf(kept));
         }
         return out;
     }
+
+    /** Détail → détail de base requis quand la base manque sur le serveur (la pile voulue est commune à tous les VPS). */
+    private static final Map<String, Map<String, String>> PREREQUISITES = Map.of(
+            "mariadb", Map.of("per-project", "instance")
+    );
 
     static boolean ufwOn(ServerSnapshot snap) {
         if (snap.firewall() == null) {
