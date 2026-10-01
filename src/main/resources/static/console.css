@@ -861,28 +861,63 @@ body.is-busy { overflow: hidden; }
 }
 
 .confirm-card { border-left-color: var(--accent); }
+.confirm-overlay {
+  align-items: flex-start !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.confirm-overlay .confirm-card {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 2.5rem);
+  margin: 1.25rem auto;
+  display: flex;
+  flex-direction: column;
+}
+.confirm-head { flex: 0 0 auto; }
+.confirm-todo {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(143, 205, 192, 0.22);
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
 .confirm-actions {
-  margin: 0.75rem 0 0;
-  padding: 0 0 0 1.2rem;
+  margin: 0;
+  padding: 0 0.4rem 0 1.2rem;
   display: grid;
   gap: 0.45rem;
   color: var(--text);
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   line-height: 1.4;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 4rem;
+  max-height: min(48vh, 22rem);
 }
-.confirm-warnings { margin-top: 0.75rem; white-space: pre-line; }
+.confirm-actions li { overflow-wrap: anywhere; }
+.confirm-warnings { margin-top: 0.75rem; white-space: pre-line; flex: 0 0 auto; }
 .confirm-blocker {
   margin-top: 0.75rem;
   color: #e2c0c0;
   white-space: pre-line;
   font-size: 0.92rem;
   line-height: 1.45;
+  flex: 0 0 auto;
 }
 .confirm-actions-row {
   display: flex;
   gap: 0.65rem;
   flex-wrap: wrap;
   margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  background: var(--panel);
 }
 .confirm-actions-row button { width: auto; padding: 0.55rem 1.1rem; }
 
@@ -1002,3 +1037,18 @@ body:not(.guided) .journey-steps { display: none; }
 .gh-box { width: 14px; height: 14px; border: 1px solid #57606a; border-radius: 3px; background: #fff; flex: none; }
 .gh-warn { color: #cf222e; margin-left: auto; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.03em; }
 .gh-btn { display: inline-block; margin-top: 0.7rem; background: #1f883d; color: #fff; border-radius: 6px; padding: 0.3rem 0.8rem; font-weight: 600; }
+/* Console SQL */
+.sql-text { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.82rem; min-height: 8rem; }
+.sql-shortcut { align-self: center; margin: 0; }
+.sql-results { margin-top: 0.8rem; display: grid; gap: 0.7rem; }
+.sql-stmt { border: 1px solid var(--line); border-radius: 8px; padding: 0.55rem 0.7rem; background: var(--inset); }
+.sql-stmt > p { margin: 0 0 0.35rem; }
+.sql-stmt code { font-size: 0.78rem; }
+.tag.sql-ok { color: var(--ok); border-color: var(--ok); }
+.tag.sql-err { color: var(--danger); border-color: var(--danger); }
+.sql-error { color: var(--danger); white-space: pre-wrap; margin: 0.2rem 0 0; font-size: 0.85rem; }
+.sql-table-wrap { max-height: 360px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.sql-table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 0.78rem; font-family: ui-monospace, Consolas, monospace; }
+.sql-table th, .sql-table td { padding: 0.3rem 0.55rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sql-table th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 600; }
+.sql-table td.sql-null { color: var(--muted); font-style: italic; }

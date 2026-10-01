@@ -398,6 +398,17 @@ function showConfirmPlan({ kicker, title, detail, actions, warnings, canProceed,
     $("confirmKicker").textContent = kicker || "CHANGE · confirmation";
     $("confirmTitle").textContent = title || "Confirmer";
     $("confirmDetail").textContent = detail || "Voici ce que l’agent va faire si tu confirmes.";
+    const n = (actions || []).length;
+    const todo = $("confirmTodo");
+    if (todo) {
+      if (canProceed === false) {
+        todo.innerHTML = "À faire : lis le <strong>blocage</strong> ci-dessous, corrige, puis réessaie. <strong>Annuler</strong> ferme cette fenêtre — rien n’est envoyé.";
+      } else if (n) {
+        todo.innerHTML = "À faire : lis les <strong>" + n + " étape(s)</strong>, puis <strong>Confirmer le CHANGE</strong> (déploie sur le VPS) ou <strong>Annuler</strong> (rien ne part).";
+      } else {
+        todo.innerHTML = "À faire : <strong>Confirmer le CHANGE</strong> (envoie sur le VPS) ou <strong>Annuler</strong> (rien ne part).";
+      }
+    }
     const list = $("confirmActions");
     list.innerHTML = "";
     (actions || []).forEach((a) => {
@@ -405,6 +416,8 @@ function showConfirmPlan({ kicker, title, detail, actions, warnings, canProceed,
       li.textContent = a;
       list.appendChild(li);
     });
+    list.hidden = n === 0;
+    list.scrollTop = 0;
     const warn = $("confirmWarnings");
     if (warnings && warnings.length) {
       warn.hidden = false;
@@ -427,6 +440,7 @@ function showConfirmPlan({ kicker, title, detail, actions, warnings, canProceed,
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
     document.body.classList.add("is-busy");
+    overlay.scrollTop = 0;
     (canProceed === false ? $("btnConfirmCancel") : okBtn).focus();
   });
 }
@@ -1853,8 +1867,180 @@ async function restorePlatform() {
   }
 }
 
+function fillSqlPlatforms(platforms) {
+  const sel = $("sqlPlat");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  platforms.forEach((p) => {
+    const o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = p.id;
+    sel.appendChild(o);
+  });
+  if (prev && platforms.some((p) => p.id === prev)) sel.value = prev;
+}
+
+function sqlSay(msg, kind) {
+  const st = $("sqlStatus");
+  st.hidden = !msg;
+  st.textContent = msg || "";
+  st.className = "app-form-status" + (kind ? " " + kind : "");
+}
+
+function sqlShort(sql) {
+  const s = String(sql || "").replace(/\s+/g, " ").trim();
+  return s.length > 90 ? s.slice(0, 87) + "…" : s;
+}
+
+async function runSql(override) {
+  const t = target();
+  const id = $("sqlPlat") ? $("sqlPlat").value : "";
+  const sql = override || $("sqlText").value;
+  if (!t.host || !t.user) {
+    sqlSay("Cause : IP ou utilisateur SSH vide.\nOù : en haut de la console.\nÀ faire : remplis IP + utilisateur, Analyser, puis Exécuter.", "err");
+    return;
+  }
+  if (!id) {
+    sqlSay("Cause : aucune plateforme enregistrée.\nÀ faire : Enregistrer puis Déployer la plateforme.", "err");
+    return;
+  }
+  if (!sql.trim()) {
+    sqlSay("Cause : le script est vide.\nÀ faire : écris une requête, ex. SHOW TABLES;", "err");
+    return;
+  }
+  let analysis;
+  try {
+    const r = await fetch("/api/v1/platforms/sql/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sql }),
+    });
+    analysis = await r.json();
+    if (!r.ok) throw new Error(analysis.error || r.statusText);
+  } catch (e) {
+    sqlSay(e.message, "err");
+    return;
+  }
+  const write = analysis.risk === "CHANGE";
+  if (write) {
+    const shown = analysis.statements.slice(0, 15).map(sqlShort);
+    if (analysis.statements.length > shown.length) shown.push("… et " + (analysis.statements.length - shown.length) + " autre(s) instruction(s)");
+    const ok = await showConfirmPlan({
+      kicker: "CHANGE · écriture en base",
+      title: "Modifier la base de « " + id + " »",
+      detail: "L’agent sauvegarde d’abord toute la base sur le VPS (dossier backups de la plateforme), puis exécute ces instructions dans l’ordre. En cas d’erreur, il s’arrête : les instructions déjà passées restent appliquées, la sauvegarde permet de revenir en arrière.",
+      actions: shown,
+      warnings: analysis.warnings || [],
+      canProceed: true,
+    });
+    if (!ok) return;
+  }
+  const btn = $("btnSqlRun");
+  btn.disabled = true;
+  sqlSay(write ? "" : "Exécution sur " + t.host + "…");
+  if (write) {
+    showBusy({
+      risk: "CHANGE",
+      title: "Écriture dans la base de « " + id + " »",
+      detail: "Sauvegarde de la base, puis exécution. Ne ferme pas la page.",
+      steps: ["Envoi du script", "Sauvegarde de la base", "Exécution"],
+      currentStep: 0,
+    });
+  }
+  try {
+    const r = await fetch("/api/v1/platforms/sql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, host: t.host, port: t.port, user: t.user, sql, confirm: write }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    if (write) hideBusy();
+    renderSqlResults(j);
+    sqlSay(j.error ? "Arrêt sur erreur : " + j.error : (write ? "Écriture terminée." : ""), j.error ? "err" : (write ? "ok" : ""));
+  } catch (e) {
+    if (write) hideBusy();
+    sqlSay(e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function sqlTable(columns, rows) {
+  const head = "<tr>" + columns.map((c) => "<th>" + esc(c) + "</th>").join("") + "</tr>";
+  const body = rows.map((row) => "<tr>" + row.map((v) => v === null
+    ? "<td class=\"sql-null\">NULL</td>"
+    : "<td>" + esc(v) + "</td>").join("") + "</tr>").join("");
+  return "<div class=\"sql-table-wrap\"><table class=\"sql-table\"><thead>" + head + "</thead><tbody>" + body + "</tbody></table></div>";
+}
+
+function renderSqlResults(j) {
+  const box = $("sqlResults");
+  const meta = [];
+  if (j.database) meta.push("Base <code>" + esc(j.database) + "</code>");
+  if (j.backup) meta.push("Sauvegarde avant écriture : <code>" + esc(j.backup) + "</code>");
+  if (j.outputTruncated) meta.push("Sortie trop volumineuse : résultats tronqués.");
+  let html = meta.length ? "<p class=\"hint\">" + meta.join(" · ") + "</p>" : "";
+  (j.statements || []).forEach((s) => {
+    let tag;
+    let detail;
+    switch (s.status) {
+      case "ok":
+        tag = "<span class=\"tag sql-ok\">OK</span>";
+        if (s.affectedRows !== null && s.affectedRows !== undefined) {
+          detail = "<p class=\"hint\">" + s.affectedRows + " ligne(s) modifiée(s)</p>";
+        } else if (s.columns && s.columns.length) {
+          detail = "<p class=\"hint\">" + s.rows.length + " ligne(s)" + (s.rows.length >= 1000 ? " — limité à 1000, affine avec WHERE / LIMIT" : "") + "</p>" + sqlTable(s.columns, s.rows);
+        } else {
+          detail = "<p class=\"hint\">Exécutée" + (/^\s*(select|show|desc|explain|with)/i.test(s.sql) ? " — aucun résultat" : "") + ".</p>";
+        }
+        break;
+      case "error":
+        tag = "<span class=\"tag sql-err\">Erreur</span>";
+        detail = "<p class=\"sql-error\">" + esc(j.error) + "</p>";
+        break;
+      case "skipped":
+        tag = "<span class=\"tag\">Non exécutée</span>";
+        detail = "";
+        break;
+      default:
+        throw new Error("Statut SQL inconnu : " + s.status);
+    }
+    html += "<div class=\"sql-stmt\"><p>" + tag + " <code>" + esc(sqlShort(s.sql)) + "</code></p>" + detail + "</div>";
+  });
+  box.innerHTML = html;
+}
+
+if ($("btnSqlRun")) {
+  $("btnSqlRun").addEventListener("click", () => runSql());
+  $("btnSqlTables").addEventListener("click", () => runSql("SHOW TABLES"));
+  $("sqlText").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      runSql();
+    }
+  });
+  $("sqlFile").addEventListener("change", () => {
+    const f = $("sqlFile").files[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) {
+      sqlSay("Cause : fichier de plus de 5 Mo.\nÀ faire : pour un dump complet, utilise « Restaurer les données ».", "err");
+      $("sqlFile").value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      $("sqlText").value = String(reader.result || "");
+      sqlSay("Fichier « " + f.name + " » chargé. Relis-le, puis Exécuter.");
+    };
+    reader.readAsText(f, "utf-8");
+  });
+}
+
 function renderPlatList(platforms, deployReady) {
   fillRestorePlatforms(platforms);
+  fillSqlPlatforms(platforms);
   journey.platforms = platforms;
   renderJourney();
   const box = $("platList");
@@ -2154,7 +2340,7 @@ function renderJourney() {
   });
 
   const workloads = document.querySelector(".band-workloads");
-  const sectionFor = { platform: "platform", git: "git", data: "data" }[showing] || "";
+  const sectionFor = { platform: "platform", git: "git", data: "data", done: "sql" }[showing] || "";
   if (workloads) workloads.classList.toggle("journey-show", guided() && !!sectionFor);
   if ($("platformsCard")) {
     document.querySelectorAll("#platformsCard [data-jsec]").forEach((el) => {
@@ -2269,7 +2455,7 @@ function renderJourneyCard(step, current, done) {
       break;
     case "done":
       $("journeyTitle").textContent = "« " + p.id + " » est en ligne";
-      $("journeyText").textContent = "Tes applications répondent en HTTPS. Pour mettre à jour après un changement de code ou de domaine : modifie la fiche si besoin, puis Déployer.";
+      $("journeyText").textContent = "Tes applications répondent en HTTPS. Pour mettre à jour après un changement de code ou de domaine : modifie la fiche si besoin, puis Déployer. La console SQL de la base est juste en dessous.";
       renderStatusList();
       journeyButton("Vérifier à nouveau", () => refreshJourneyStatus(true), "ghost");
       journeyButton("Redéployer", async () => {

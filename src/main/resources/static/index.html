@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app24" />
+  <link rel="stylesheet" href="/console.css?v=app27" />
 </head>
 <body>
   <div class="bg"></div>
@@ -269,6 +270,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li><strong>Redis privé</strong> : un Redis sans mot de passe réservé à la plateforme (réseau interne), pour une app qui ne sait pas envoyer de mot de passe Redis.</li>
             <li><strong>Remplir le modèle ARC</strong> pré-remplit les 3 services ARC (site <code>/</code>, back-office <code>/arc-backoffice</code>, API <code>/arc-api</code>). Vérifie le domaine, puis Enregistrer.</li>
             <li><strong>Dépôts privés</strong> : GitHub refuse la même Deploy key sur deux dépôts. Sous la liste, une ligne par dépôt <code>git@…</code> : Générer, Copier, ouvrir le lien « Deploy keys », coller la clé avec <em>Allow write access</em> décoché.</li>
+            <li><strong>Console SQL</strong> (sous les clés Git, et à la dernière étape du parcours) : SQL dans la base de la plateforme, avec l’utilisateur de la plateforme. Lecture (SELECT, SHOW, DESCRIBE, EXPLAIN) immédiate, 1000 lignes max. Écriture (INSERT, UPDATE, DELETE, ALTER, CREATE…) : plan à confirmer, puis <strong>sauvegarde de toute la base</strong> sur le VPS (<code>backups/…-before-sql-….sql.gz</code>, 20 gardées) avant exécution. Arrêt à la première erreur. Refusé : DROP, TRUNCATE, droits, autres bases, fichiers du serveur, commandes client. Fichier <code>.sql</code> de 5 Mo max ; au-delà, « Restaurer les données ».</li>
             <li><strong>Restaurer les données</strong> : dump SQL (<code>.sql</code> / <code>.sql.gz</code>) et/ou archive des fichiers (<code>.tar.gz</code> / <code>.zip</code>, contenu à la racine). À faire <em>avant</em> le premier Déployer pour une app qui ne crée pas sa base seule (ARC). La base et les fichiers déjà présents sont sauvegardés sur le VPS (<code>/opt/vps-autopilot/platforms/&lt;id&gt;/backups</code>) avant d’être remplacés. Préfère une base de démonstration aux données réelles.</li>
             <li>Supprimer retire la fiche locale seulement (ne stoppe pas les conteneurs).</li>
           </ul>
@@ -523,6 +525,33 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <p class="hint">GitHub refuse la même Deploy key sur deux dépôts : une clé par dépôt <code>git@…</code>. Pour chaque ligne : <strong>Générer</strong>, <strong>Copier</strong>, ouvre le lien, colle la clé (case <em>Allow write access</em> décochée), puis Déployer.</p>
             <div id="gitRepoKeys" class="action-list"></div>
             </div>
+            <div id="secSql" data-jsec="sql">
+            <p class="kicker" style="margin-top:1.1rem">Console SQL · base de la plateforme</p>
+            <p class="hint">
+              Exécute du SQL dans la base de la plateforme sur le VPS, avec l’utilisateur de la plateforme (aucun accès aux autres bases).
+              <strong>Lecture</strong> (SELECT, SHOW, DESCRIBE, EXPLAIN) : immédiate, 1000 lignes max.
+              <strong>Écriture</strong> (INSERT, UPDATE, DELETE, ALTER, CREATE…) : tu confirmes, l’agent sauvegarde toute la base sur le VPS, puis exécute.
+              Refusé : DROP, TRUNCATE, droits, autres bases, fichiers du serveur.
+            </p>
+            <div class="row2 app-fields">
+              <label class="field">Plateforme
+                <select id="sqlPlat"></select>
+              </label>
+              <label class="field">Charger un fichier .sql (optionnel)
+                <input id="sqlFile" type="file" accept=".sql,.txt" />
+              </label>
+            </div>
+            <label class="field">Script SQL
+              <textarea id="sqlText" class="sql-text" rows="8" spellcheck="false" placeholder="SELECT * FROM ma_table LIMIT 20;"></textarea>
+            </label>
+            <div class="app-form-actions">
+              <button id="btnSqlRun" type="button">Exécuter</button>
+              <button id="btnSqlTables" type="button" class="ghost">Lister les tables</button>
+              <span class="hint sql-shortcut">Ctrl+Entrée pour exécuter</span>
+            </div>
+            <p id="sqlStatus" class="app-form-status" hidden></p>
+            <div id="sqlResults" class="sql-results"></div>
+            </div>
           </article>
         </div>
 
@@ -584,11 +613,14 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <div id="confirmOverlay" class="busy-overlay result-overlay hidden" aria-hidden="true" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmDetail">
+  <div id="confirmOverlay" class="busy-overlay result-overlay confirm-overlay hidden" aria-hidden="true" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmDetail">
     <div class="busy-card result-card confirm-card">
-      <p class="kicker" id="confirmKicker">CHANGE · confirmation</p>
-      <h2 id="confirmTitle">Confirmer</h2>
-      <p id="confirmDetail" class="busy-detail"></p>
+      <header class="confirm-head">
+        <p class="kicker" id="confirmKicker">CHANGE · confirmation</p>
+        <h2 id="confirmTitle">Confirmer</h2>
+        <p id="confirmDetail" class="busy-detail"></p>
+        <p id="confirmTodo" class="confirm-todo">À faire : lis le plan, puis <strong>Annuler</strong> ou <strong>Confirmer le CHANGE</strong>. Rien ne part sans ce clic.</p>
+      </header>
       <ol id="confirmActions" class="confirm-actions"></ol>
       <p id="confirmWarnings" class="hint confirm-warnings" hidden></p>
       <p id="confirmBlocker" class="confirm-blocker" hidden></p>
@@ -615,6 +647,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app24"></script>
+  <script src="/console.js?v=app27"></script>
 </body>
 </html>

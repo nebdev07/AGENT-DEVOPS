@@ -8,6 +8,8 @@ import com.nebdev.devopsagent.stack.PlatformDeployService;
 import com.nebdev.devopsagent.stack.PlatformIntentStore;
 import com.nebdev.devopsagent.stack.PlatformRestoreService;
 import com.nebdev.devopsagent.stack.PlatformSpec;
+import com.nebdev.devopsagent.stack.PlatformSqlService;
+import com.nebdev.devopsagent.stack.SqlConsolePolicy;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -38,15 +40,18 @@ public class PlatformController {
     private final PlatformIntentStore store;
     private final PlatformDeployService deployService;
     private final PlatformRestoreService restoreService;
+    private final PlatformSqlService sqlService;
 
     public PlatformController(
             PlatformIntentStore store,
             PlatformDeployService deployService,
-            PlatformRestoreService restoreService
+            PlatformRestoreService restoreService,
+            PlatformSqlService sqlService
     ) {
         this.store = store;
         this.deployService = deployService;
         this.restoreService = restoreService;
+        this.sqlService = sqlService;
     }
 
     @GetMapping
@@ -171,6 +176,33 @@ public class PlatformController {
         }
     }
 
+    @PostMapping("/sql/analyze")
+    public Map<String, Object> analyzeSql(@RequestBody SqlRequest body) {
+        SqlConsolePolicy.Analysis a = sqlService.analyze(body == null ? null : body.sql());
+        return Map.of(
+                "kind", a.kind(),
+                "risk", a.kind() == SqlConsolePolicy.Kind.READ ? "READ" : "CHANGE",
+                "statements", a.statements().stream().map(s -> Map.of("keyword", s.keyword(), "sql", s.sql())).toList(),
+                "warnings", a.warnings()
+        );
+    }
+
+    @PostMapping("/sql")
+    public PlatformSqlService.SqlResult runSql(@RequestBody SqlRequest body) throws IOException {
+        if (body == null || body.id() == null || body.id().isBlank()) {
+            throw new IllegalArgumentException("Indique la plateforme.");
+        }
+        if (body.host() == null || body.host().isBlank() || body.user() == null || body.user().isBlank()) {
+            throw new IllegalArgumentException("Indique l’hôte et l’utilisateur SSH.");
+        }
+        return sqlService.run(
+                body.id().trim(),
+                new SshTarget(body.host().trim(), body.port() == null ? 22 : body.port(), body.user().trim()),
+                body.sql(),
+                Boolean.TRUE.equals(body.confirm())
+        );
+    }
+
     private static PlatformRestoreService.RestoreFile toTemp(MultipartFile part, List<Path> temps) throws IOException {
         if (part == null || part.isEmpty()) {
             return null;
@@ -203,4 +235,6 @@ public class PlatformController {
     }
 
     public record DeployRequest(String id, String host, Integer port, String user, Boolean confirm) {}
+
+    public record SqlRequest(String id, String host, Integer port, String user, String sql, Boolean confirm) {}
 }

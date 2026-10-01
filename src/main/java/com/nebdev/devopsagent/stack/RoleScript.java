@@ -17,7 +17,7 @@ public final class RoleScript {
 
     private static final Set<String> ALLOWED = Set.of(
             "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups", "app", "platform",
-            "platform-restore");
+            "platform-restore", "platform-sql");
     private static final Pattern SAFE_TOKEN = Pattern.compile("^[A-Za-z0-9._-]{0,80}$");
     private static final Map<String, String> FLAGS = new LinkedHashMap<>();
 
@@ -166,6 +166,20 @@ public final class RoleScript {
         prefix.append("UPLOADS_SUBDIR=").append(uploadsSubdir == null ? "" : uploadsSubdir).append('\n');
         prefix.append("PLATFORM_SERVICES='").append(String.join(" ", services)).append("'\n");
         return prefix + load("platform-restore");
+    }
+
+    public static String loadPlatformSql(PlatformSpec platform, String remoteDir, SqlConsolePolicy.Kind kind) {
+        if (platform == null) {
+            throw new IllegalArgumentException("Plateforme manquante.");
+        }
+        if (remoteDir == null || !remoteDir.matches("^/tmp/autopilot-sql-[a-z0-9-]{1,80}$")) {
+            throw new IllegalArgumentException("Dossier distant de la console SQL invalide.");
+        }
+        String mode = switch (kind) {
+            case READ -> "read";
+            case WRITE -> "write";
+        };
+        return "PLATFORM_ID=" + platform.id() + "\nSQL_DIR=" + remoteDir + "\nSQL_MODE=" + mode + "\n" + load("platform-sql");
     }
 
     private static String b64(String text) {
