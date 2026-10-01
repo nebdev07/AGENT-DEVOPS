@@ -98,10 +98,26 @@ if [ "$APPLY_SSH" = "1" ]; then
     PERMIT_ROOT="no"
     ALLOW_USERS="$REMOTE_USER"
   fi
+  DROPIN=/etc/ssh/sshd_config.d/00-vps-autopilot.conf
+  # Ne jamais enfermer dehors un admin humain (ex. nebdev) : on garde les AllowUsers déjà posés
+  # et chaque membre du groupe sudo qui a une clé dans son authorized_keys.
+  if [ "$(id -u)" -ne 0 ]; then
+    PREV="$($SUDO awk '/^AllowUsers /{for (i=2; i<=NF; i++) print $i}' "$DROPIN" 2>/dev/null || true)"
+    ADMINS=""
+    for U in $(getent group sudo | cut -d: -f4 | tr ',' ' '); do
+      H="$(getent passwd "$U" | cut -d: -f6)"
+      if [ -n "$H" ] && $SUDO grep -qE '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|sk-ssh-ed25519) ' "$H/.ssh/authorized_keys" 2>/dev/null; then
+        ADMINS="$ADMINS $U"
+      fi
+    done
+    for U in $PREV $ADMINS; do
+      case " $ALLOW_USERS " in *" $U "*) ;; *) ALLOW_USERS="$ALLOW_USERS $U" ;; esac
+    done
+  fi
+  echo "SSH_ALLOWED=$ALLOW_USERS"
   $SUDO mkdir -p /etc/ssh/sshd_config.d
   # OpenSSH : première valeur gagnante. Un drop-in 50-cloud-init
   # (PasswordAuthentication yes) l’emporte sur un fichier 99-*.
-  DROPIN=/etc/ssh/sshd_config.d/00-vps-autopilot.conf
   printf '%s\n' \
     "PasswordAuthentication no" \
     "KbdInteractiveAuthentication no" \

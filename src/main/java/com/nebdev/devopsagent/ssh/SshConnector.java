@@ -4,14 +4,19 @@ import com.nebdev.devopsagent.config.DevopsProperties;
 import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.common.SecurityUtils;
 import net.schmizz.sshj.connection.channel.direct.Session;
+import net.schmizz.sshj.sftp.SFTPClient;
 import net.schmizz.sshj.transport.verification.HostKeyVerifier;
+import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
 import net.schmizz.sshj.userauth.keyprovider.KeyProvider;
+import net.schmizz.sshj.xfer.FileSystemFile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.PublicKey;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -50,6 +55,46 @@ public class SshConnector {
         });
     }
 
+    /**
+     * Envoie des fichiers locaux dans {@code remoteDir} (créé en 700) par SFTP, clé de l’agent.
+     * @param files nom distant → fichier local
+     */
+    public void uploadFiles(SshTarget target, String remoteDir, Map<String, Path> files) throws IOException {
+        DevopsProperties.Ssh ssh = properties.getSsh();
+        if (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank()) {
+            throw new IllegalStateException("DEVOPS_SSH_KEY est vide. Renseigner .env (chemin de la clé privée).");
+        }
+        try (SSHClient client = new SSHClient()) {
+            if (ssh.isTrustUnknown()) {
+                client.addHostKeyVerifier(new PromiscuousVerifier());
+            } else {
+                client.addHostKeyVerifier(new StoredFingerprintVerifier(trustedHostStore));
+            }
+            client.setConnectTimeout(ssh.getTimeoutSeconds() * 1000);
+            client.connect(target.host(), target.port());
+            KeyProvider keys = ssh.getPassphrase() == null || ssh.getPassphrase().isBlank()
+                    ? client.loadKeys(ssh.getPrivateKeyPath())
+                    : client.loadKeys(ssh.getPrivateKeyPath(), ssh.getPassphrase());
+            client.authPublickey(target.user(), keys);
+            try (Session session = client.startSession()) {
+                Session.Command cmd = session.exec("mkdir -p -m 700 '" + remoteDir + "'");
+                cmd.join(30, TimeUnit.SECONDS);
+                Integer status = cmd.getExitStatus();
+                if (status != null && status != 0) {
+                    throw new IOException("Impossible de créer " + remoteDir + " sur le VPS (exit=" + status + ").");
+                }
+            }
+            try (SFTPClient sftp = client.newSFTPClient()) {
+                for (Map.Entry<String, Path> e : files.entrySet()) {
+                    sftp.put(new FileSystemFile(e.getValue().toFile()), remoteDir + "/" + e.getKey());
+                }
+            }
+        } catch (IOException e) {
+            rethrow(e, target, false);
+            throw e;
+        }
+    }
+
     public String runStdinScriptWithPassword(String script, SshTarget target, String password) throws IOException {
         if (password == null || password.isBlank()) {
             throw new IllegalArgumentException("Mot de passe SSH vide.");
@@ -74,7 +119,7 @@ public class SshConnector {
         int timeout = timeoutSeconds <= 0 ? ssh.getTimeoutSeconds() : timeoutSeconds;
         try (SSHClient client = new SSHClient()) {
             if (ssh.isTrustUnknown()) {
-                client.addHostKeyVerifier(new net.schmizz.sshj.transport.verification.PromiscuousVerifier());
+                client.addHostKeyVerifier(new PromiscuousVerifier());
             } else {
                 client.addHostKeyVerifier(new StoredFingerprintVerifier(trustedHostStore));
             }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app20" />
+  <link rel="stylesheet" href="/console.css?v=app22" />
 </head>
 <body>
   <div class="bg"></div>
@@ -119,11 +119,22 @@
             Fichiers : <code>vps-autopilot</code> (secret) et <code>vps-autopilot.pub</code> (à coller sur le serveur).
           </p>
           <p id="genStatus" class="ok-line hidden">Clé déjà présente sur ce PC.</p>
-          <p>Clé publique de cet agent (une seule ligne) :</p>
+          <div class="callout">
+            <strong>Quelle clé mettre sur le VPS ?</strong> Uniquement la <strong>publique</strong> :
+            le fichier <code>vps-autopilot.pub</code>, affiché juste en dessous. C’est <strong>une seule ligne</strong>
+            qui commence par <code>ssh-ed25519 AAAA…</code> et finit par <code>vps-autopilot-personal</code>.
+            Ne colle jamais <code>vps-autopilot</code> (sans <code>.pub</code>) : c’est la clé secrète, elle reste sur ce PC.
+          </div>
+          <p>Clé publique de cet agent (une seule ligne) — c’est <strong>celle-ci</strong> à copier :</p>
           <div class="copyrow">
             <pre id="guidePubKey">Chargement…</pre>
             <button id="btnCopyKey" type="button" class="ghost slim">Copier</button>
           </div>
+          <p class="hint">
+            Pour l’afficher toi-même dans PowerShell : <code>Get-Content $HOME\.ssh\vps-autopilot.pub</code>.
+            Elle va sur le VPS dans <code>~/.ssh/authorized_keys</code> de l’utilisateur avec lequel l’agent se connecte
+            (<code>ubuntu</code> ou <code>root</code>, le même que dans le champ Utilisateur).
+          </p>
           <p>Trois façons de la poser <em>sur le VPS</em> :</p>
           <div class="methods">
             <section class="method">
@@ -146,7 +157,10 @@ chmod 600 ~/.ssh/authorized_keys
 nano ~/.ssh/authorized_keys</pre>
                 <button id="btnCopyKvm" type="button" class="ghost slim">Copier</button>
               </div>
-              <p class="hint">Colle la clé, une ligne. Enregistrer : Ctrl+O, Entrée, Ctrl+X.</p>
+              <p class="hint">
+                Dans <code>nano</code>, colle la ligne <code>ssh-ed25519 …</code> copiée plus haut (clic droit dans la console KVM),
+                sur une seule ligne, sans espace avant. Enregistrer : Ctrl+O, Entrée, Ctrl+X.
+              </p>
             </section>
             <section class="method">
               <h4>C — PowerShell</h4>
@@ -157,6 +171,13 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
               </div>
             </section>
           </div>
+          <p><strong>Vérifier</strong> (PowerShell) : cette commande doit ouvrir une session <em>sans demander de mot de passe</em>.</p>
+          <pre>ssh -i $HOME\.ssh\vps-autopilot ubuntu@IP</pre>
+          <p class="hint">
+            Remplace <code>ubuntu</code> et <code>IP</code>. Si elle demande un mot de passe : la clé n’est pas dans le bon
+            <code>authorized_keys</code> (mauvais utilisateur, ou ligne coupée). Tape <code>exit</code>, puis
+            <strong>Analyser le VPS</strong> dans la console.
+          </p>
         </li>
 
         <li class="step">
@@ -218,11 +239,17 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           <h3>7b. Déclarer une plateforme (plusieurs services)</h3>
           <ul>
             <li>Pour un produit du type <strong>site + API</strong> (éventuellement admin, Redis, fichiers), utilise la bande <strong>Plateformes</strong>, pas trois apps 1:1 collées à la main.</li>
-            <li>Identifiant = slug du produit. Chaque service = un Git (HTTPS public ou <code>git@…</code> + même clé lecture seule), un port interne, des besoins (MariaDB, Redis, volume fichiers). Sous-dossier optionnel si le Dockerfile n’est pas à la racine du dépôt (monorepo).</li>
+            <li>Identifiant = slug du produit. Chaque service = un Git (HTTPS public ou <code>git@…</code> + une clé lecture seule par dépôt), un port interne, des besoins (MariaDB, Redis, volume fichiers). Sous-dossier optionnel si le Dockerfile n’est pas à la racine du dépôt (monorepo).</li>
             <li>DNS : <strong>sous-domaines</strong> (<code>api.</code> / <code>www.</code>) ou <strong>chemins</strong> sur un seul hôte (<code>/</code> + <code>/api</code> + <code>/admin</code>). En chemins, Traefik retire le préfixe : l’app écoute à la racine du conteneur.</li>
             <li>Variable de build typique : <code>NEXT_PUBLIC_API_URL</code> vers l’URL publique de l’API (sous-domaine <em>ou</em> <code>https://hote/api</code>).</li>
             <li><strong>Enregistrer</strong> reste local. <strong>Déployer</strong> ouvre un popup de plan, puis un CHANGE : clone de chaque Git, build, Traefik HTTPS, aucun port publié. Redis / MariaDB doivent déjà être installés si tu les as cochés sur un service.</li>
-            <li>Chaque service a besoin d’un <strong>Dockerfile</strong> (racine du dépôt ou sous-dossier). Pas de rattrapage template pour les plateformes (jour 1).</li>
+            <li>Chaque service a besoin d’un <strong>Dockerfile</strong> (racine du dépôt ou sous-dossier) <em>ou</em> d’un <strong>modèle</strong> choisi dans la liste « Dockerfile » : Next.js, Node, Spring Boot (Java 11 / 17 / 21). L’agent écrit alors <code>Dockerfile.autopilot</code> sur le serveur, sans toucher au dépôt. <em>(Avant V7-06 : pas de modèle pour les plateformes.)</em></li>
+            <li><strong>Garder le préfixe</strong> : à cocher quand l’app sait déjà qu’elle vit sous <code>/chemin</code> (Next <code>basePath</code>, Spring <code>context-path</code>). Sinon Traefik retire le préfixe.</li>
+            <li><strong>Variables de build</strong> (une par ligne, <code>CLE=valeur</code>) : figées dans l’image, ex. <code>NEXT_PUBLIC_API_URL</code>. <strong>Variables d’exécution</strong> : lues au démarrage du conteneur, ex. <code>SPRING_PROFILES_ACTIVE</code>. <code>{{HOST}}</code> est remplacé par le nom d’hôte du service. Les secrets (mots de passe, tokens) s’affichent <code>********</code> : laisse-les ainsi pour garder la valeur enregistrée. Réglage manuel possible sur le VPS dans <code>svc-&lt;id&gt;.local.env</code>.</li>
+            <li><strong>Redis privé</strong> : un Redis sans mot de passe réservé à la plateforme (réseau interne), pour une app qui ne sait pas envoyer de mot de passe Redis.</li>
+            <li><strong>Remplir le modèle ARC</strong> pré-remplit les 3 services ARC (site <code>/</code>, back-office <code>/arc-backoffice</code>, API <code>/arc-api</code>). Vérifie le domaine, puis Enregistrer.</li>
+            <li><strong>Dépôts privés</strong> : GitHub refuse la même Deploy key sur deux dépôts. Sous la liste, une ligne par dépôt <code>git@…</code> : Générer, Copier, ouvrir le lien « Deploy keys », coller la clé avec <em>Allow write access</em> décoché.</li>
+            <li><strong>Restaurer les données</strong> : dump SQL (<code>.sql</code> / <code>.sql.gz</code>) et/ou archive des fichiers (<code>.tar.gz</code> / <code>.zip</code>, contenu à la racine). À faire <em>avant</em> le premier Déployer pour une app qui ne crée pas sa base seule (ARC). La base et les fichiers déjà présents sont sauvegardés sur le VPS (<code>/opt/vps-autopilot/platforms/&lt;id&gt;/backups</code>) avant d’être remplacés. Préfère une base de démonstration aux données réelles.</li>
             <li>Supprimer retire la fiche locale seulement (ne stoppe pas les conteneurs).</li>
           </ul>
         </li>
@@ -424,9 +451,35 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
               <button id="btnPlatAddSvc" type="button" class="ghost">Ajouter un service</button>
               <button id="btnPlatSave" type="button" class="ghost">Enregistrer la plateforme</button>
               <button id="btnPlatClear" type="button" class="ghost">Nouvelle fiche</button>
+              <button id="btnPlatArc" type="button" class="ghost">Remplir le modèle ARC</button>
             </div>
             <p id="platFormStatus" class="app-form-status" hidden></p>
             <div id="platList" class="action-list"></div>
+            <p class="kicker" style="margin-top:1.1rem">Restaurer les données (avant ou après Déployer)</p>
+            <p class="hint">Pour une appli qui ne sait pas créer sa base seule (ex. ARC) : envoie un <strong>dump SQL</strong> (<code>.sql</code> ou <code>.sql.gz</code>, MySQL ou MariaDB) et/ou une <strong>archive des fichiers</strong> (<code>.tar.gz</code> ou <code>.zip</code>, contenu à la racine). La base actuelle est sauvegardée sur le VPS avant d’être remplacée. Utilise de préférence une base de démonstration, pas les données réelles des membres.</p>
+            <div class="row2 app-fields">
+              <label class="field">Plateforme
+                <select id="restorePlat"></select>
+              </label>
+              <label class="field">Sous-dossier des fichiers dans le volume (optionnel)
+                <input id="restoreSubdir" type="text" value="" placeholder="nwanyo" autocomplete="off" />
+              </label>
+            </div>
+            <div class="row2 app-fields">
+              <label class="field">Dump SQL
+                <input id="restoreSql" type="file" accept=".sql,.gz" />
+              </label>
+              <label class="field">Archive des fichiers
+                <input id="restoreUploads" type="file" accept=".tar,.gz,.tgz,.zip" />
+              </label>
+            </div>
+            <div class="app-form-actions">
+              <button id="btnPlatRestore" type="button" class="change">Restaurer sur le VPS</button>
+            </div>
+            <p id="restoreStatus" class="app-form-status" hidden></p>
+            <p class="kicker" style="margin-top:1.1rem">Clés Git par dépôt privé</p>
+            <p class="hint">GitHub refuse la même Deploy key sur deux dépôts : une clé par dépôt <code>git@…</code>. Pour chaque ligne : <strong>Générer</strong>, <strong>Copier</strong>, ouvre le lien, colle la clé (case <em>Allow write access</em> décochée), puis Déployer.</p>
+            <div id="gitRepoKeys" class="action-list"></div>
           </article>
         </div>
 
@@ -503,6 +556,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app20"></script>
+  <script src="/console.js?v=app22"></script>
 </body>
 </html>

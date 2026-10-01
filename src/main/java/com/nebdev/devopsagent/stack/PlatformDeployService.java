@@ -11,9 +11,14 @@ import com.nebdev.devopsagent.state.StateStore;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Service
 public class PlatformDeployService {
+
+    /** Premier build d’un produit type ARC (2 Next + Maven) : ~20 min sur 4 vCPU sans cache. */
+    static final int DEPLOY_TIMEOUT_SECONDS = 2700;
 
     private final PlatformIntentStore store;
     private final PlatformDeployPlanService planService;
@@ -103,13 +108,16 @@ public class PlatformDeployService {
                     "Popup confirmation — plateforme",
                     "corrige les Dockerfile Git, Enregistrer, puis Déployer."));
         }
-        String gitKey = platform.services().stream().anyMatch(s -> GitUrls.ssh(s.gitUrl()))
-                ? gitDeployKeyStore.privateKeyBase64()
-                : null;
-        String script = RoleScript.loadPlatform(platform, gitKey);
+        Map<String, String> gitKeys = new LinkedHashMap<>();
+        for (PlatformServiceSpec s : platform.services()) {
+            if (GitUrls.ssh(s.gitUrl())) {
+                gitKeys.put(GitDeployKeyStore.keyId(s.gitUrl()), gitDeployKeyStore.privateKeyBase64(s.gitUrl()));
+            }
+        }
+        String script = RoleScript.loadPlatform(platform, gitKeys);
         String raw;
         try {
-            raw = sshConnector.runStdinScript(script, target, 1200);
+            raw = sshConnector.runStdinScript(script, target, DEPLOY_TIMEOUT_SECONDS);
         } catch (IOException e) {
             AppSpec dummy = AppSpec.normalized(
                     platform.id(),

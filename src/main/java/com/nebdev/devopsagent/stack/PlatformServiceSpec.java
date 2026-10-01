@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -22,13 +23,63 @@ public record PlatformServiceSpec(
         String context,
         List<String> needs,
         Map<String, String> buildArgs,
-        String pathPrefix
+        String pathPrefix,
+        String template,
+        Map<String, String> env,
+        boolean keepPath
 ) {
 
     public PlatformServiceSpec {
         pathPrefix = pathPrefix == null ? "" : pathPrefix;
         needs = needs == null ? List.of() : needs;
         buildArgs = buildArgs == null ? Map.of() : buildArgs;
+        template = template == null ? "" : template;
+        env = env == null ? Map.of() : env;
+    }
+
+    public PlatformServiceSpec(
+            String id,
+            String gitUrl,
+            String gitRef,
+            String hostname,
+            int port,
+            String context,
+            List<String> needs,
+            Map<String, String> buildArgs,
+            String pathPrefix
+    ) {
+        this(id, gitUrl, gitRef, hostname, port, context, needs, buildArgs, pathPrefix, "", Map.of(), false);
+    }
+
+    public static final String NEED_REDIS_PRIVATE = "redis-private";
+    /** ASCII : survit aux clients qui décodent mal l’UTF-8 (PowerShell 5). */
+    public static final String SECRET_MASK = "********";
+    public static final String HOST_PLACEHOLDER = "{{HOST}}";
+    static final Set<String> TEMPLATES = Set.of("next", "node", "spring-boot-11", "spring-boot-17", "spring-boot-21");
+    private static final Pattern ENV_KEY = Pattern.compile("^[A-Z][A-Z0-9_]{0,63}$");
+    private static final Pattern SECRET_KEY = Pattern.compile("(?i).*(PASSWORD|SECRET|TOKEN|PRIVATE|API_KEY|_PWD).*");
+
+    public static boolean secretKey(String key) {
+        return key != null && SECRET_KEY.matcher(key).matches();
+    }
+
+    public boolean templated() {
+        return !template.isBlank();
+    }
+
+    public boolean stripPath(boolean pathRouting) {
+        return pathRouting && !keepPath && !pathPrefix.isBlank() && !"/".equals(pathPrefix);
+    }
+
+    /** Copie pour l’API : valeurs sensibles masquées. */
+    public PlatformServiceSpec masked() {
+        if (env.isEmpty()) {
+            return this;
+        }
+        Map<String, String> out = new LinkedHashMap<>();
+        env.forEach((k, v) -> out.put(k, secretKey(k) && v != null && !v.isEmpty() ? SECRET_MASK : v));
+        return new PlatformServiceSpec(id, gitUrl, gitRef, hostname, port, context, needs, buildArgs, pathPrefix,
+                template, Map.copyOf(out), keepPath);
     }
 
     private static final Pattern SLUG = Pattern.compile("^[a-z][a-z0-9-]{0,31}$");
@@ -53,7 +104,10 @@ public record PlatformServiceSpec(
             List<String> needs,
             Map<String, String> buildArgs,
             String pathPrefix,
-            boolean pathRouting
+            boolean pathRouting,
+            String template,
+            Map<String, String> env,
+            boolean keepPath
     ) {
         String where = "Bande Plateformes — service";
         if (id == null || id.isBlank()) {
@@ -119,9 +173,69 @@ public record PlatformServiceSpec(
                     "remplis le domaine de la plateforme, ou un DNS complet par service."));
         }
         List<String> needList = normalizeNeeds(slug, needs);
-        Map<String, String> args = normalizeBuildArgs(slug, buildArgs);
+        Map<String, String> args = withHost(normalizeBuildArgs(slug, buildArgs), host);
         String path = pathRouting ? normalizePath(slug, pathPrefix) : "";
-        return new PlatformServiceSpec(slug, git, ref, host, p, ctx, needList, args, path);
+        String tpl = normalizeTemplate(slug, template);
+        Map<String, String> envMap = withHost(normalizeEnv(slug, env), host);
+        boolean keep = pathRouting && keepPath && !"/".equals(path);
+        return new PlatformServiceSpec(slug, git, ref, host, p, ctx, needList, args, path, tpl, envMap, keep);
+    }
+
+    private static Map<String, String> withHost(Map<String, String> values, String host) {
+        if (values.values().stream().noneMatch(v -> v.contains(HOST_PLACEHOLDER))) {
+            return values;
+        }
+        Map<String, String> out = new LinkedHashMap<>();
+        values.forEach((k, v) -> out.put(k, v.replace(HOST_PLACEHOLDER, host)));
+        return Map.copyOf(out);
+    }
+
+    private static String normalizeTemplate(String slug, String template) {
+        String t = template == null ? "" : template.trim().toLowerCase(Locale.ROOT);
+        if (t.isEmpty() || "none".equals(t) || "repo".equals(t)) {
+            return "";
+        }
+        if (!TEMPLATES.contains(t)) {
+            throw new IllegalArgumentException(OperatorMessage.of(
+                    "modèle Dockerfile « " + abbreviate(template) + " » inconnu (service " + slug + ").",
+                    "Bande Plateformes — Dockerfile",
+                    "vide (Dockerfile du dépôt), next, node, spring-boot-11, spring-boot-17 ou spring-boot-21."));
+        }
+        return t;
+    }
+
+    private static Map<String, String> normalizeEnv(String slug, Map<String, String> env) {
+        if (env == null || env.isEmpty()) {
+            return Map.of();
+        }
+        if (env.size() > 60) {
+            throw new IllegalArgumentException(OperatorMessage.of(
+                    "plus de 60 variables d’exécution (service " + slug + ").",
+                    "Bande Plateformes — variables",
+                    "garde l’essentiel ; le reste dans svc-" + slug + ".local.env sur le VPS."));
+        }
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Map.Entry<String, String> e : env.entrySet()) {
+            if (e.getKey() == null || e.getKey().isBlank()) {
+                continue;
+            }
+            String key = e.getKey().trim();
+            if (!ENV_KEY.matcher(key).matches()) {
+                throw new IllegalArgumentException(OperatorMessage.of(
+                        "variable « " + abbreviate(key) + " » invalide (service " + slug + ").",
+                        "Bande Plateformes — variables",
+                        "MAJUSCULES_ET_CHIFFRES, ex. SPRING_PROFILES_ACTIVE"));
+            }
+            String val = e.getValue() == null ? "" : e.getValue();
+            if (val.length() > 1024 || val.contains("\n") || val.contains("\r")) {
+                throw new IllegalArgumentException(OperatorMessage.of(
+                        "valeur de " + key + " invalide (service " + slug + ").",
+                        "Bande Plateformes — variables",
+                        "une ligne, max 1024 caractères."));
+            }
+            out.put(key, val);
+        }
+        return Map.copyOf(out);
     }
 
     static String derivePlatformHost(String platformId, String baseDomain, String vpsIp) {
@@ -198,7 +312,11 @@ public record PlatformServiceSpec(
             if ("uploads".equals(n) || "files".equals(n)) {
                 n = "volume:uploads";
             }
-            boolean ok = "mariadb".equals(n) || "redis".equals(n) || VOLUME.matcher(n).matches();
+            if ("cache".equals(n)) {
+                n = NEED_REDIS_PRIVATE;
+            }
+            boolean ok = "mariadb".equals(n) || "redis".equals(n) || NEED_REDIS_PRIVATE.equals(n)
+                    || VOLUME.matcher(n).matches();
             if (!ok) {
                 throw new IllegalArgumentException(OperatorMessage.of(
                         "besoin « " + abbreviate(raw) + " » inconnu (service " + slug + ").",

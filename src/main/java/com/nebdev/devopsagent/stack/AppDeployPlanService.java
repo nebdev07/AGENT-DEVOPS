@@ -24,7 +24,7 @@ public class AppDeployPlanService {
         List<String> warnings = new ArrayList<>();
         actions.add("Cloner « " + app.gitUrl() + " » (branche « " + app.gitRef() + " ») sur le VPS.");
         if (GitUrls.ssh(app.gitUrl())) {
-            if (!gitDeployKeyStore.present()) {
+            if (!gitDeployKeyStore.present(app.gitUrl())) {
                 return AppDeployPlan.blocked(
                         app.id(),
                         actions,

@@ -1,13 +1,14 @@
 # État actuel — VPS Autopilot
 
 > Distinguer spécifié vs implémenté.  
-> Dernière mise à jour : 2026-09-29
+> Dernière mise à jour : 2026-10-01
 
 ## Spécifié
 
 Produit Agent DevOps (V0→V9), Ansible dès les CHANGE, Traefik/MariaDB/backups, IA en V5, **plateforme cargo multi-services en V7 (ADR-036)**, plateforme multi-opérateurs en V9 (ADR-031). Catalogue : `documentation.md`.  
 V4 backups : dump chiffré + copie hors-site + preuve de déchiffrement minimale. **Option retenue** : dumps sur le **poste opérateur** (`state/backups/`). Rôle exécutable (ADR-034). Restore SQL complet : pas encore.  
-V7 : un produit = N conteneurs. **V7-01 + V7-02 + V7-04 + V7-05 livrés**. Templates Java 11 : pas encore. Lab seulement (pas l’IP prod ARC).  
+V7 : un produit = N conteneurs. **V7-01 + V7-02 + V7-04 + V7-05 livrés**. ~~Templates Java 11 : pas encore.~~ (obsolète 2026-10-01 : **V7-06 livré**, voir Implémenté). Lab seulement (pas l’IP prod ARC).  
+2026-10-01 : **V7-06 implémenté** (modèles Dockerfile par service, variables build/exécution, `keepPath`, Redis privé, clés Git par dépôt, préréglage ARC, **restauration des données** `restore-platform`). Testé : build des modèles ARC sur le lab, rôle de restauration sur le lab (import MySQL 8 → MariaDB, sauvegarde avant remplacement), API restore de bout en bout (SFTP). **Pas encore fait** : déploiement complet ARC depuis la console sur le nouveau VPS (en attente de l’IP).  
 V9 : auth + sessions ; chaque utilisateur ses paramètres ; cockpit en ligne seulement après login. **Pas encore de code.** Ne pas confondre V7 (plusieurs *services*) et V9 (plusieurs *opérateurs*).
 
 ## Implémenté (V0)
@@ -23,6 +24,9 @@ V9 : auth + sessions ; chaque utilisateur ses paramètres ; cockpit en ligne seu
 - Pile voulue (ADR-017) : section **repliable** (fermée par défaut), **sous** la carte Installations. Détails cochables (ADR-020). Déjà installé = grisé. Plan d’install après analyse (ADR-018). Docker SKIP seulement si moteur **et** plus aucun détail coché non détecté. Nouvelle section `defaultEnabled` fusionnée une fois (`catalogSeen`).
 - CHANGE exécutable : `security`, `docker`, `traefik`, `mariadb`, `deploy`, **`redis`**, **`backups`**, **`deploy-app`**, **`deploy-platform`**. Premier cargo = ce dépôt (ADR-030). Nginx hôte : **pas proposé**.
 - Console : bandeau Applications **et Plateformes**. Git HTTPS **ou** `git@github.com` + clé lecture seule (V7-05). Apps : bouton Déployer. Plateformes : Enregistrer + **Déployer**. Routage sous-domaines **ou** chemins (`PathPrefix`).
+- **V7-06 (2026-10-01)** : par service de plateforme, `template` (`next`, `node`, `spring-boot-11/17/21` → `Dockerfile.autopilot` + entrypoint Spring `DB_*`→`SPRING_DATASOURCE_*`), `buildArgs` et `env` (lignes `CLE=valeur`, `{{HOST}}` remplacé à l’enregistrement), `keepPath` (pas de StripPrefix), besoin `redis-private` (sidecar `platform-cache`, réseau `internal`). Secrets d’env masqués `********` dans l’API, valeur conservée à l’enregistrement si le masque revient. Volume fichiers nommé fixe `plat_<id>_uploads`.
+- Clés Git **par dépôt** : `state/git-deploy-keys/<keyId>` ; `GET/POST /api/v1/git-deploy-key/repos` (liste des dépôts `git@` des apps et plateformes, lien Deploy keys GitHub/GitLab). Clé unique `state/git-deploy` = repli.
+- **Restauration** `POST /api/v1/platforms/restore` (multipart, CHANGE `restore-platform` confirmé) : SFTP vers `/tmp/autopilot-restore-<id>-<hex>`, rôle `roles/platform-restore/apply.sh` : arrêt des services, sauvegarde de la base / des fichiers existants dans `/opt/vps-autopilot/platforms/<id>/backups`, base `app_<id>` recréée (utf8mb4_unicode_ci), import avec réécriture collations `0900`, retrait `DEFINER` / `USE` / `CREATE DATABASE`, archive `.tar.gz`/`.zip` extraite dans le volume (sous-dossier optionnel), redémarrage. Utilisable avant le premier Déployer.
 - Bootstrap clé : mot de passe OVH ponctuel → `~/.ssh/authorized_keys` (ADR-016).
 - Clé dédiée `~\.ssh\vps-autopilot` (hors git). `.env` local sans hôte (saisi dans l’UI).
 - Console : aucune fixture affichée. Analyse seulement après IP + user SSH. Fixture CLI/tests uniquement.
@@ -30,7 +34,7 @@ V9 : auth + sessions ; chaque utilisateur ses paramètres ; cockpit en ligne seu
 
 ## Non implémenté
 
-Ansible, restore SQL complet (V4 suite), IA (V5), templates Spring 11 (V7-06), **plateforme multi-opérateurs V9** (ADR-031). Cargo public ≠ cockpit. Redis n’est **pas** injecté dans les apps 1:1 (seulement les plateformes qui le cochent).
+Ansible, restore SQL complet des backups V4 (la restauration d’un dump fourni par l’opérateur existe depuis V7-06), IA (V5), ~~templates Spring 11 (V7-06)~~ (livré 2026-10-01), assistant « Préparer le serveur » pour débutant, **plateforme multi-opérateurs V9** (ADR-031). Cargo public ≠ cockpit. Redis n’est **pas** injecté dans les apps 1:1 (seulement les plateformes qui le cochent).
 
 ## Runtime
 

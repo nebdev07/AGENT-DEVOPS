@@ -10,10 +10,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Component
 public class PlatformIntentStore {
@@ -55,9 +57,14 @@ public class PlatformIntentStore {
         for (AppSpec app : appIntentStore.load()) {
             hosts.add(app.hostname());
         }
+        Map<String, PlatformSpec> previous = new HashMap<>();
+        for (PlatformSpec p : load()) {
+            previous.put(p.id(), p);
+        }
         if (platforms != null) {
             for (PlatformSpec p : platforms) {
-                PlatformSpec n = PlatformSpec.normalized(p.id(), p.baseDomain(), p.routing(), p.services(), vpsIp);
+                List<PlatformServiceSpec> services = unmaskSecrets(p, previous);
+                PlatformSpec n = PlatformSpec.normalized(p.id(), p.baseDomain(), p.routing(), services, vpsIp);
                 for (PlatformServiceSpec s : n.services()) {
                     if (n.pathRouting()) {
                         if (!hosts.add(s.hostname())) {
@@ -102,6 +109,34 @@ public class PlatformIntentStore {
         }
         List<PlatformSpec> kept = current.stream().filter(p -> !p.id().equals(slug)).toList();
         return save(kept, null);
+    }
+
+    private static List<PlatformServiceSpec> unmaskSecrets(PlatformSpec incoming, Map<String, PlatformSpec> previous) {
+        List<PlatformServiceSpec> services = incoming.services() == null ? List.of() : incoming.services();
+        String slug = incoming.id() == null ? "" : incoming.id().trim().toLowerCase(Locale.ROOT).replace('_', '-');
+        PlatformSpec old = previous.get(slug);
+        if (old == null) {
+            return services;
+        }
+        Map<String, PlatformServiceSpec> oldById = new HashMap<>();
+        for (PlatformServiceSpec s : old.services()) {
+            oldById.put(s.id(), s);
+        }
+        List<PlatformServiceSpec> out = new ArrayList<>();
+        for (PlatformServiceSpec s : services) {
+            String sid = s.id() == null ? "" : s.id().trim().toLowerCase(Locale.ROOT).replace('_', '-');
+            PlatformServiceSpec before = oldById.get(sid);
+            if (before == null || !s.env().containsValue(PlatformServiceSpec.SECRET_MASK)) {
+                out.add(s);
+                continue;
+            }
+            Map<String, String> env = new LinkedHashMap<>();
+            s.env().forEach((k, v) -> env.put(k,
+                    PlatformServiceSpec.SECRET_MASK.equals(v) ? before.env().getOrDefault(k, "") : v));
+            out.add(new PlatformServiceSpec(s.id(), s.gitUrl(), s.gitRef(), s.hostname(), s.port(), s.context(),
+                    s.needs(), s.buildArgs(), s.pathPrefix(), s.template(), env, s.keepPath()));
+        }
+        return out;
     }
 
     public PlatformSpec require(String id) throws IOException {

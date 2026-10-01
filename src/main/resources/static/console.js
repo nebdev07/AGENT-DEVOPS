@@ -637,6 +637,8 @@ if ($("btnGitKeyCopy")) $("btnGitKeyCopy").addEventListener("click", copyGitDepl
 if ($("btnPlatAddSvc")) $("btnPlatAddSvc").addEventListener("click", () => addPlatServiceRow(null));
 if ($("btnPlatSave")) $("btnPlatSave").addEventListener("click", savePlatform);
 if ($("btnPlatClear")) $("btnPlatClear").addEventListener("click", clearPlatForm);
+if ($("btnPlatArc")) $("btnPlatArc").addEventListener("click", fillArcPreset);
+if ($("btnPlatRestore")) $("btnPlatRestore").addEventListener("click", restorePlatform);
 if ($("platRouting")) $("platRouting").addEventListener("change", syncPlatRoutingHint);
 $("btnResultClose").addEventListener("click", hideResult);
 if ($("btnConfirmCancel")) $("btnConfirmCancel").addEventListener("click", () => settleConfirm(false));
@@ -1465,7 +1467,8 @@ function addPlatServiceRow(svc) {
   const s = svc || {};
   const wrap = document.createElement("div");
   wrap.className = "plat-svc";
-  const apiUrl = (s.buildArgs && s.buildArgs.NEXT_PUBLIC_API_URL) || "";
+  const tpl = s.template || "";
+  const tplOpt = (v, label) => '<option value="' + v + '"' + (tpl === v ? " selected" : "") + ">" + label + "</option>";
   wrap.innerHTML = '<div class="plat-svc-head"><strong>Service</strong>'
     + '<button type="button" class="ghost ghost-danger plat-svc-del">Retirer</button></div>'
     + '<div class="row2 app-fields">'
@@ -1481,10 +1484,23 @@ function addPlatServiceRow(svc) {
     + '<label class="field">Nom d’hôte (vide = auto)<input class="plat-svc-host" type="text" value="' + esc(s.hostname || "") + '" placeholder="api.ma-asso.apps.exemple.com" autocomplete="off" /></label>'
     + '<label class="field">Chemin URL (routage chemins)<input class="plat-svc-path" type="text" value="' + esc(s.pathPrefix || "") + '" placeholder="/api" autocomplete="off" /></label>'
     + "</div>"
-    + '<label class="field">NEXT_PUBLIC_API_URL (optionnel)<input class="plat-svc-apiurl" type="url" value="' + esc(apiUrl) + '" placeholder="https://api…/" autocomplete="off" /></label>'
+    + '<div class="row2 app-fields">'
+    + '<label class="field">Dockerfile<select class="plat-svc-tpl">'
+    + tplOpt("", "Celui du dépôt")
+    + tplOpt("next", "Modèle Next.js")
+    + tplOpt("node", "Modèle Node")
+    + tplOpt("spring-boot-11", "Modèle Spring Boot (Java 11)")
+    + tplOpt("spring-boot-17", "Modèle Spring Boot (Java 17)")
+    + tplOpt("spring-boot-21", "Modèle Spring Boot (Java 21)")
+    + "</select></label>"
+    + '<label class="field plat-keep">&nbsp;<span><input type="checkbox" class="plat-svc-keep"' + (s.keepPath ? " checked" : "") + " /> Garder le préfixe (basePath Next, context-path Spring)</span></label>"
+    + "</div>"
+    + '<label class="field">Variables de build (une par ligne, CLE=valeur — <code>{{HOST}}</code> = nom d’hôte)<textarea class="plat-svc-build" rows="2" placeholder="NEXT_PUBLIC_API_URL=https://{{HOST}}/api">' + esc(kvLines(s.buildArgs)) + "</textarea></label>"
+    + '<label class="field">Variables d’exécution (CLE=valeur ; secrets masqués ********, laisse-les tels quels pour les garder)<textarea class="plat-svc-env" rows="3" placeholder="SPRING_PROFILES_ACTIVE=staging">' + esc(kvLines(s.env)) + "</textarea></label>"
     + '<div class="plat-needs">'
     + '<label><input type="checkbox" class="plat-need-mariadb"' + (platNeedChecked(s, "mariadb") ? " checked" : "") + " /> MariaDB</label>"
-    + '<label><input type="checkbox" class="plat-need-redis"' + (platNeedChecked(s, "redis") ? " checked" : "") + " /> Redis</label>"
+    + '<label><input type="checkbox" class="plat-need-redis"' + (platNeedChecked(s, "redis") ? " checked" : "") + " /> Redis partagé</label>"
+    + '<label><input type="checkbox" class="plat-need-redis-private"' + (platNeedChecked(s, "redis-private") ? " checked" : "") + " /> Redis privé (sans mot de passe)</label>"
     + '<label><input type="checkbox" class="plat-need-uploads"' + (platNeedChecked(s, "uploads") ? " checked" : "") + " /> Volume fichiers</label>"
     + "</div>";
   wrap.querySelector(".plat-svc-del").addEventListener("click", () => wrap.remove());
@@ -1496,10 +1512,8 @@ function collectPlatServices() {
     const needs = [];
     if (el.querySelector(".plat-need-mariadb").checked) needs.push("mariadb");
     if (el.querySelector(".plat-need-redis").checked) needs.push("redis");
+    if (el.querySelector(".plat-need-redis-private").checked) needs.push("redis-private");
     if (el.querySelector(".plat-need-uploads").checked) needs.push("volume:uploads");
-    const apiUrl = el.querySelector(".plat-svc-apiurl").value.trim();
-    const buildArgs = {};
-    if (apiUrl) buildArgs.NEXT_PUBLIC_API_URL = apiUrl;
     const portRaw = el.querySelector(".plat-svc-port").value;
     return {
       id: el.querySelector(".plat-svc-id").value.trim(),
@@ -1510,9 +1524,29 @@ function collectPlatServices() {
       port: portRaw ? Number(portRaw) : 8080,
       context: el.querySelector(".plat-svc-ctx").value.trim(),
       needs,
-      buildArgs,
+      buildArgs: parseKvLines(el.querySelector(".plat-svc-build").value),
+      env: parseKvLines(el.querySelector(".plat-svc-env").value),
+      template: el.querySelector(".plat-svc-tpl").value,
+      keepPath: el.querySelector(".plat-svc-keep").checked,
     };
   });
+}
+
+function kvLines(map) {
+  if (!map) return "";
+  return Object.keys(map).sort().map((k) => k + "=" + map[k]).join("\n");
+}
+
+function parseKvLines(text) {
+  const out = {};
+  String(text || "").split(/\r?\n/).forEach((line) => {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) return;
+    const i = t.indexOf("=");
+    if (i <= 0) return;
+    out[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+  });
+  return out;
 }
 
 function setPlatFormStatus(msg, kind) {
@@ -1553,7 +1587,143 @@ function fillPlatForm(p) {
   syncPlatRoutingHint();
 }
 
+const ARC_PRESET = {
+  id: "arc",
+  routing: "path",
+  services: [
+    {
+      id: "www", port: 3000, gitUrl: "git@github.com:nebdev07/arc-client.git", gitRef: "main",
+      pathPrefix: "/", template: "next", needs: [],
+      buildArgs: { NEXT_PUBLIC_API_URL: "https://{{HOST}}/arc-api" },
+    },
+    {
+      id: "backoffice", port: 3000, gitUrl: "git@github.com:nebdev07/arc-backoffice.git", gitRef: "main",
+      pathPrefix: "/arc-backoffice", template: "next", keepPath: true, needs: [],
+      buildArgs: {
+        NEXT_PUBLIC_BASE_PATH: "/arc-backoffice",
+        NEXT_PUBLIC_API_URL: "https://{{HOST}}/arc-api",
+        NEXT_PUBLIC_APP_URL: "https://{{HOST}}/arc-backoffice",
+        NEXT_PUBLIC_CLIENT_URL: "https://{{HOST}}",
+      },
+    },
+    {
+      id: "api", port: 8080, gitUrl: "git@github.com:nebdev07/arc-backend.git", gitRef: "main", context: "src",
+      pathPrefix: "/arc-api", template: "spring-boot-11", keepPath: true,
+      needs: ["mariadb", "redis-private", "volume:uploads"],
+      env: {
+        SPRING_PROFILES_ACTIVE: "staging",
+        SERVER_SERVLET_CONTEXT_PATH: "/arc-api",
+        APP_PUBLIC_BASE_URL: "https://{{HOST}}/arc-api",
+        APP_FILE_UPLOAD_BASE_PATH: "/app/data/nwanyo",
+        FILE_UPLOAD_DIRECTORY: "/app/data",
+        FILE_UPLOAD_DIR: "/app/data",
+        SPRING_WEB_RESOURCES_STATIC_LOCATIONS: "file:/app/data/nwanyo/",
+        APP_MEMBER_LOGIN_URL: "https://{{HOST}}/connexion",
+        APP_LOGIN_URL: "https://{{HOST}}/arc-backoffice",
+        LOGS_DIRECTORY: "/app/data/logs",
+        REDIS_HOST: "platform-cache",
+      },
+    },
+  ],
+};
+
+function fillArcPreset() {
+  const box = $("platServices");
+  if (box && box.querySelector(".plat-svc-git") && Array.from(box.querySelectorAll(".plat-svc-git")).some((i) => i.value.trim())
+    && !window.confirm("Remplacer la fiche en cours par le modèle ARC ?")) {
+    return;
+  }
+  platEditingId = "";
+  $("platId").value = ARC_PRESET.id;
+  if ($("platRouting")) $("platRouting").value = ARC_PRESET.routing;
+  if (box) box.innerHTML = "";
+  ARC_PRESET.services.forEach((s) => addPlatServiceRow(s));
+  syncPlatRoutingHint();
+  setPlatFormStatus("Modèle ARC chargé : vérifie les dépôts et le domaine, puis Enregistrer. "
+    + "Ensuite une clé Git par dépôt (liste ci-dessous) et la restauration des données avant d’ouvrir le site.", "ok");
+}
+
+async function loadRepoKeys() {
+  const box = $("gitRepoKeys");
+  if (!box) return;
+  try {
+    const r = await fetch("/api/v1/git-deploy-key/repos");
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    renderRepoKeys(j);
+  } catch {
+    box.innerHTML = "<p class=\"hint\">Liste des clés Git injoignable.</p>";
+  }
+}
+
+function renderRepoKeys(j) {
+  const box = $("gitRepoKeys");
+  if (!box) return;
+  const repos = j.repos || [];
+  if (!repos.length) {
+    box.innerHTML = "<p class=\"hint\">" + esc(j.note || "Aucun dépôt git@… enregistré.") + "</p>";
+    return;
+  }
+  box.innerHTML = "";
+  repos.forEach((k) => {
+    const row = document.createElement("div");
+    row.className = "action-row " + (k.present ? "READY" : "BLOCKED");
+    const info = document.createElement("div");
+    const state = k.present ? "clé prête" : (k.fallback ? "clé commune (repli)" : "pas de clé");
+    info.innerHTML = "<span class=\"tag\">" + esc(state) + "</span><strong>" + esc(k.repo) + "</strong>"
+      + "<p>" + esc((k.usedBy || []).join(" · ")) + (k.fingerprint ? " — " + esc(k.fingerprint) : "") + "</p>"
+      + (k.publicKey ? "<textarea class=\"git-key-pub\" readonly rows=\"2\">" + esc(k.publicKey) + "</textarea>" : "")
+      + (k.deployKeyPage ? "<p class=\"hint\"><a href=\"" + esc(k.deployKeyPage) + "\" target=\"_blank\" rel=\"noopener\">Ouvrir la page Deploy keys du dépôt</a> — titre libre, <em>Allow write access</em> décoché.</p>" : "");
+    row.appendChild(info);
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    const btnGen = document.createElement("button");
+    btnGen.type = "button";
+    btnGen.className = "ghost";
+    btnGen.textContent = k.present ? "Régénérer" : "Générer";
+    btnGen.addEventListener("click", () => generateRepoKey(k.repo, !!k.present));
+    actions.appendChild(btnGen);
+    if (k.publicKey) {
+      const btnCopy = document.createElement("button");
+      btnCopy.type = "button";
+      btnCopy.className = "ghost";
+      btnCopy.textContent = "Copier";
+      btnCopy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(k.publicKey);
+          setStatus("Clé publique de " + k.repo + " copiée.", "ok");
+        } catch {
+          setStatus("Copie impossible — sélectionne le champ et Ctrl+C.", "err");
+        }
+      });
+      actions.appendChild(btnCopy);
+    }
+    row.appendChild(actions);
+    box.appendChild(row);
+  });
+}
+
+async function generateRepoKey(repo, rotate) {
+  if (rotate && !window.confirm("Remplacer la clé de " + repo + " ? L’ancienne Deploy key collée sur le dépôt ne marchera plus.")) {
+    return;
+  }
+  try {
+    const r = await fetch("/api/v1/git-deploy-key/repos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo, confirm: true, rotate }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    renderRepoKeys(j);
+    setStatus("Clé prête pour " + repo + ". Copie-la en Deploy key (lecture seule) sur ce dépôt.", "ok");
+  } catch (e) {
+    setStatus(e.message, "err");
+  }
+}
+
 async function loadPlatforms() {
+  loadRepoKeys();
   const box = $("platList");
   if (!box) return;
   try {
@@ -1569,7 +1739,90 @@ async function loadPlatforms() {
   }
 }
 
+function fillRestorePlatforms(platforms) {
+  const sel = $("restorePlat");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  platforms.forEach((p) => {
+    const o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = p.id;
+    sel.appendChild(o);
+  });
+  if (prev && platforms.some((p) => p.id === prev)) sel.value = prev;
+  if (!$("restoreSubdir").value && sel.value === "arc") $("restoreSubdir").value = "nwanyo";
+}
+
+async function restorePlatform() {
+  const t = target();
+  const st = $("restoreStatus");
+  const say = (msg, kind) => {
+    st.hidden = !msg;
+    st.textContent = msg || "";
+    st.className = "app-form-status" + (kind ? " " + kind : "");
+  };
+  const id = $("restorePlat") ? $("restorePlat").value : "";
+  const sql = $("restoreSql").files[0];
+  const up = $("restoreUploads").files[0];
+  if (!t.host || !t.user) {
+    say("Cause : IP ou utilisateur SSH vide.\nOù : en haut de la console.\nÀ faire : remplis IP + utilisateur, Analyser, puis Restaurer.", "err");
+    return;
+  }
+  if (!id) {
+    say("Cause : aucune plateforme enregistrée.\nOù : liste Plateformes.\nÀ faire : Enregistrer la plateforme d’abord.", "err");
+    return;
+  }
+  if (!sql && !up) {
+    say("Cause : aucun fichier choisi.\nÀ faire : choisis un dump SQL et/ou une archive des fichiers.", "err");
+    return;
+  }
+  const what = [sql ? "la base (" + sql.name + ")" : "", up ? "les fichiers (" + up.name + ")" : ""].filter(Boolean).join(" et ");
+  if (!window.confirm("CHANGE sur " + t.user + "@" + t.host + " :\nremplacer " + what + " de « " + id + " ».\n\n"
+    + "L’existant est sauvegardé sur le VPS (dossier backups de la plateforme) avant remplacement. Continuer ?")) {
+    return;
+  }
+  const fd = new FormData();
+  fd.append("id", id);
+  fd.append("host", t.host);
+  fd.append("port", String(t.port));
+  fd.append("user", t.user);
+  fd.append("confirm", "true");
+  fd.append("uploadsSubdir", $("restoreSubdir").value.trim());
+  if (sql) fd.append("sql", sql);
+  if (up) fd.append("uploads", up);
+  say("");
+  showBusy({
+    risk: "CHANGE",
+    title: "Restauration de « " + id + " »",
+    detail: "Envoi SFTP puis import sur le VPS. Ne ferme pas la page.",
+    steps: ["Envoi des fichiers", "Sauvegarde de l’existant", "Import", "Redémarrage des services"],
+    currentStep: 0,
+  });
+  try {
+    const r = await fetch("/api/v1/platforms/restore", { method: "POST", body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    hideBusy();
+    const report = (j.report || []).join("\n");
+    say("Restauré.\n" + report, "ok");
+    showResult({
+      ok: true,
+      kicker: "CHANGE · réussi",
+      title: "Données de " + id + " restaurées",
+      detail: report,
+      next: "Si la plateforme n’est pas encore déployée : Déployer. Sinon, recharge le site.",
+    });
+  } catch (e) {
+    hideBusy();
+    say(e.message, "err");
+    showResult({ ok: false, kicker: "CHANGE · échec", title: "Restauration interrompue", detail: e.message,
+      next: "Lis Cause / Où / À faire. La base précédente reste sauvegardée sur le VPS." });
+  }
+}
+
 function renderPlatList(platforms, deployReady) {
+  fillRestorePlatforms(platforms);
   const box = $("platList");
   if (!box) return;
   if (!platforms.length) {
@@ -1718,6 +1971,7 @@ async function savePlatform() {
     if (!r.ok) throw new Error(j.error || r.statusText);
     platEditingId = spec.id;
     renderPlatList(j.platforms || []);
+    loadRepoKeys();
     setPlatFormStatus(j.note || "Enregistré (local, pas de SSH).", "ok");
     setStatus("Plateforme enregistrée. Tu peux Déployer (CHANGE confirmé).", "ok");
   } catch (e) {

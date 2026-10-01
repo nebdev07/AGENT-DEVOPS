@@ -1,6 +1,8 @@
 set -eu
 # VPS Autopilot — plateforme N services. Compose généré par l’agent. Pas de port public.
 # Variables : PLATFORM_ID PLATFORM_COMPOSE_B64 PLATFORM_MANIFEST_B64 PLATFORM_NEED_DB PLATFORM_NEED_REDIS
+#             PLATFORM_FILES_B64 (Dockerfile de modèle, env) GIT_KEYS_B64 (une clé lecture seule par dépôt)
+# Manifeste : sid<TAB>git<TAB>ref<TAB>context<TAB>template<TAB>keyId — « - » = vide.
 PLATFORM_ID="${PLATFORM_ID:-}"
 PLATFORM_COMPOSE_B64="${PLATFORM_COMPOSE_B64:-}"
 PLATFORM_MANIFEST_B64="${PLATFORM_MANIFEST_B64:-}"
@@ -64,39 +66,49 @@ if ! $SUDO docker compose version >/dev/null 2>&1 && ! command -v docker-compose
   $SUDO apt-get install -y docker-compose-v2 || $SUDO apt-get install -y docker-compose
 fi
 
-setup_git_ssh() {
-  GIT_SSH_COMMAND=""
-  if [ -n "${GIT_DEPLOY_KEY_B64:-}" ]; then
-    KEYDIR=/home/deploy/.ssh
-    $SUDO mkdir -p "$KEYDIR"
-    printf '%s' "$GIT_DEPLOY_KEY_B64" | base64 -d | $SUDO tee "$KEYDIR/git-deploy" >/dev/null
-    $SUDO chmod 700 "$KEYDIR"
-    $SUDO chmod 600 "$KEYDIR/git-deploy"
-    $SUDO chown -R deploy:deploy "$KEYDIR"
-    GIT_SSH_COMMAND="ssh -i /home/deploy/.ssh/git-deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
-  fi
+KEYDIR=/home/deploy/.ssh
+# Une clé par dépôt (GitHub refuse une même Deploy key sur deux dépôts) : lignes « id<TAB>base64 ».
+setup_git_keys() {
+  [ -z "${GIT_KEYS_B64:-}" ] && return 0
+  $SUDO mkdir -p "$KEYDIR"
+  printf '%s' "$GIT_KEYS_B64" | base64 -d | while IFS="$(printf '\t')" read -r KID KB64 || [ -n "${KID:-}" ]; do
+    [ -z "${KID:-}" ] && continue
+    case "$KID" in *[!a-z0-9.-]*) echo "BAD_KEY_ID=$KID"; exit 1 ;; esac
+    printf '%s' "$KB64" | base64 -d | $SUDO tee "$KEYDIR/git-$KID" >/dev/null
+    $SUDO chmod 600 "$KEYDIR/git-$KID"
+  done
+  $SUDO chmod 700 "$KEYDIR"
+  $SUDO chown -R deploy:deploy "$KEYDIR"
 }
 
+# git_as_deploy <keyId|-> args…
 git_as_deploy() {
-  if [ -n "${GIT_SSH_COMMAND:-}" ]; then
-    $SUDO -u deploy env GIT_SSH_COMMAND="$GIT_SSH_COMMAND" git "$@"
+  KID="$1"
+  shift
+  if [ -n "$KID" ] && [ "$KID" != "-" ]; then
+    $SUDO -u deploy env GIT_SSH_COMMAND="ssh -i $KEYDIR/git-$KID -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" git "$@"
   else
     $SUDO -u deploy git "$@"
   fi
 }
 
-require_git_ssh_if_needed() {
-  case "$1" in
+require_git_key_if_needed() {
+  case "$2" in
     git@*|ssh://git@*)
-      if [ -z "${GIT_DEPLOY_KEY_B64:-}" ]; then
+      if [ -z "$3" ] || [ "$3" = "-" ] || ! $SUDO test -s "$KEYDIR/git-$3"; then
         echo NEED_GIT_DEPLOY_KEY
+        echo "SERVICE=$1"
         exit 1
       fi
       ;;
   esac
 }
 
-setup_git_ssh
+undash() {
+  [ "$1" = "-" ] && printf '' || printf '%s' "$1"
+}
+
+setup_git_keys
 
 $SUDO docker network inspect proxy >/dev/null 2>&1 || { echo NEED_TRAEFIK; exit 1; }
 if [ "$PLATFORM_NEED_DB" = "1" ] || [ "$PLATFORM_NEED_REDIS" = "1" ]; then
@@ -107,40 +119,79 @@ ROOT=/opt/vps-autopilot/platforms/$PLATFORM_ID
 $SUDO mkdir -p "$ROOT/src"
 $SUDO chown -R deploy:deploy "$ROOT"
 
+# clone_one <sid> <git> <ref> <keyId|->
 clone_one() {
   SID="$1"
   SGIT="$2"
   SREF="${3:-main}"
-  require_git_ssh_if_needed "$SGIT"
+  SKEY="${4:--}"
+  require_git_key_if_needed "$SID" "$SGIT" "$SKEY"
   SRC="$ROOT/src/$SID"
+  CLONE_LOG="$(mktemp)"
   if [ -d "$SRC/.git" ]; then
-    git_as_deploy -C "$SRC" fetch --depth 1 origin "$SREF" || git_as_deploy -C "$SRC" fetch --depth 1 origin
-    git_as_deploy -C "$SRC" checkout -f "$SREF" || git_as_deploy -C "$SRC" checkout -f FETCH_HEAD
+    if ! git_as_deploy "$SKEY" -C "$SRC" fetch --depth 1 origin "$SREF" >"$CLONE_LOG" 2>&1; then
+      echo GIT_CLONE_FAILED
+      echo "SERVICE=$SID"
+      tail -n 20 "$CLONE_LOG" || true
+      rm -f "$CLONE_LOG"
+      exit 1
+    fi
+    git_as_deploy "$SKEY" -C "$SRC" checkout -f FETCH_HEAD >>"$CLONE_LOG" 2>&1
   else
     $SUDO rm -rf "$SRC"
-    CLONE_LOG="$(mktemp)"
-    if ! git_as_deploy clone --depth 1 --branch "$SREF" "$SGIT" "$SRC" >"$CLONE_LOG" 2>&1; then
-      if ! git_as_deploy clone --depth 1 "$SGIT" "$SRC" >>"$CLONE_LOG" 2>&1; then
+    if ! git_as_deploy "$SKEY" clone --depth 1 --branch "$SREF" "$SGIT" "$SRC" >"$CLONE_LOG" 2>&1; then
+      if ! git_as_deploy "$SKEY" clone --depth 1 "$SGIT" "$SRC" >>"$CLONE_LOG" 2>&1; then
         echo GIT_CLONE_FAILED
         echo "SERVICE=$SID"
         tail -n 20 "$CLONE_LOG" || true
         rm -f "$CLONE_LOG"
         exit 1
       fi
-      git_as_deploy -C "$SRC" checkout "$SREF" || true
+      git_as_deploy "$SKEY" -C "$SRC" checkout "$SREF" || true
     fi
-    rm -f "$CLONE_LOG"
   fi
+  rm -f "$CLONE_LOG"
+  echo "CLONED=$SID@$(git_as_deploy - -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo '?')"
 }
 
 MANIFEST="$(printf '%s' "$PLATFORM_MANIFEST_B64" | base64 -d)"
-while IFS="$(printf '\t')" read -r SID SGIT SREF SCTX || [ -n "${SID:-}" ]; do
+while IFS="$(printf '\t')" read -r SID SGIT SREF SCTX STPL SKEY || [ -n "${SID:-}" ]; do
   [ -z "${SID:-}" ] && continue
-  clone_one "$SID" "$SGIT" "$SREF"
-  DF="$ROOT/src/$SID/Dockerfile"
-  if [ -n "${SCTX:-}" ]; then
-    DF="$ROOT/src/$SID/$SCTX/Dockerfile"
-  fi
+  clone_one "$SID" "$SGIT" "$SREF" "${SKEY:--}"
+done <<EOF
+$MANIFEST
+EOF
+
+# Fichiers posés par l’agent : Dockerfile de modèle, entrypoint, svc-<id>.env (régénéré à chaque déploiement).
+if [ -n "${PLATFORM_FILES_B64:-}" ]; then
+  FILES="$(printf '%s' "$PLATFORM_FILES_B64" | base64 -d)"
+  while IFS="$(printf '\t')" read -r FSID FPATH FB64 || [ -n "${FSID:-}" ]; do
+    [ -z "${FSID:-}" ] && continue
+    case "$FSID$FPATH" in *..*) echo "BAD_FILE_PATH=$FSID/$FPATH"; exit 1 ;; esac
+    if [ "$FPATH" = "@env" ]; then
+      DEST="$ROOT/svc-${FSID}.env"
+      printf '%s' "$FB64" | base64 -d | $SUDO tee "$DEST" >/dev/null
+      $SUDO chmod 600 "$DEST"
+    else
+      DEST="$ROOT/src/$FSID/$FPATH"
+      $SUDO mkdir -p "$(dirname "$DEST")"
+      printf '%s' "$FB64" | base64 -d | $SUDO tee "$DEST" >/dev/null
+      case "$DEST" in *.sh) $SUDO chmod 755 "$DEST" ;; esac
+    fi
+    $SUDO chown deploy:deploy "$DEST"
+  done <<EOF
+$FILES
+EOF
+fi
+
+while IFS="$(printf '\t')" read -r SID SGIT SREF SCTX STPL SKEY || [ -n "${SID:-}" ]; do
+  [ -z "${SID:-}" ] && continue
+  SCTX="$(undash "${SCTX:--}")"
+  STPL="$(undash "${STPL:--}")"
+  DIR="$ROOT/src/$SID"
+  [ -n "$SCTX" ] && DIR="$DIR/$SCTX"
+  DF="$DIR/Dockerfile"
+  [ -n "$STPL" ] && DF="$DIR/Dockerfile.autopilot"
   if [ ! -f "$DF" ]; then
     echo NEED_DOCKERFILE
     echo "SERVICE=$SID"
@@ -178,7 +229,7 @@ ENV
   ROOT_PW="$($SUDO cat /opt/vps-autopilot/mariadb/root.pw)"
   DB_PW="$($SUDO grep '^DB_PASSWORD=' "$DB_FILE" | cut -d= -f2-)"
   printf '%s\n' \
-    "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;" \
+    "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" \
     "CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PW}';" \
     "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';" \
     "FLUSH PRIVILEGES;" \
@@ -196,19 +247,20 @@ REDIS_PASSWORD=${REDIS_PW}"
   unset REDIS_PW
 fi
 
-while IFS="$(printf '\t')" read -r SID SGIT SREF SCTX || [ -n "${SID:-}" ]; do
+while IFS="$(printf '\t')" read -r SID SGIT SREF SCTX STPL SKEY || [ -n "${SID:-}" ]; do
   [ -z "${SID:-}" ] && continue
   ENVF="$ROOT/svc-${SID}.env"
   if ! $SUDO test -s "$ENVF"; then
-    $SUDO tee "$ENVF" >/dev/null <<ENV
-NODE_ENV=production
-${REDIS_LINE}
-ENV
+    printf 'NODE_ENV=production\n' | $SUDO tee "$ENVF" >/dev/null
     $SUDO chmod 600 "$ENVF"
-  elif [ -n "$REDIS_LINE" ] && ! $SUDO grep -q '^REDIS_HOST=' "$ENVF"; then
+  fi
+  # Redis partagé seulement si le service n’a pas déjà un REDIS_HOST (ex. Redis privé platform-cache).
+  if [ -n "$REDIS_LINE" ] && ! $SUDO grep -q '^REDIS_HOST=' "$ENVF"; then
     printf '%s\n' "$REDIS_LINE" | $SUDO tee -a "$ENVF" >/dev/null
   fi
-  $SUDO chown deploy:deploy "$ENVF"
+  LOCALF="$ROOT/svc-${SID}.local.env"
+  $SUDO test -f "$LOCALF" || { $SUDO touch "$LOCALF"; $SUDO chmod 600 "$LOCALF"; }
+  $SUDO chown deploy:deploy "$ENVF" "$LOCALF"
 done <<EOF
 $MANIFEST
 EOF

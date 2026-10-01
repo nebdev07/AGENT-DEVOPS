@@ -4,15 +4,21 @@ import org.springframework.core.io.ClassPathResource;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public final class RoleScript {
 
     private static final Set<String> ALLOWED = Set.of(
-            "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups", "app", "platform");
+            "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups", "app", "platform",
+            "platform-restore");
+    private static final Pattern SAFE_TOKEN = Pattern.compile("^[A-Za-z0-9._-]{0,80}$");
     private static final Map<String, String> FLAGS = new LinkedHashMap<>();
 
     static {
@@ -61,7 +67,7 @@ public final class RoleScript {
             }
             return body;
         }
-        Set<String> on = new java.util.LinkedHashSet<>(selected);
+        Set<String> on = new LinkedHashSet<>(selected);
         if ("traefik".equals(id)) {
             on.add("proxy");
             on.add("https");
@@ -100,25 +106,69 @@ public final class RoleScript {
     }
 
     public static String loadPlatform(PlatformSpec platform) {
-        return loadPlatform(platform, null);
+        return loadPlatform(platform, Map.of());
     }
 
-    public static String loadPlatform(PlatformSpec platform, String gitDeployKeyBase64) {
+    /**
+     * @param gitKeysById clé privée (base64) par {@link GitDeployKeyStore#keyId(String)} des dépôts SSH
+     */
+    public static String loadPlatform(PlatformSpec platform, Map<String, String> gitKeysById) {
         if (platform == null) {
             throw new IllegalArgumentException("Plateforme manquante.");
         }
-        String compose = PlatformCompose.yaml(platform);
-        String manifest = PlatformCompose.manifest(platform);
-        String b64c = java.util.Base64.getEncoder().encodeToString(compose.getBytes(StandardCharsets.UTF_8));
-        String b64m = java.util.Base64.getEncoder().encodeToString(manifest.getBytes(StandardCharsets.UTF_8));
         StringBuilder prefix = new StringBuilder();
         prefix.append("PLATFORM_ID=").append(platform.id()).append('\n');
         prefix.append("PLATFORM_NEED_DB=").append(PlatformCompose.needsDb(platform) ? "1" : "0").append('\n');
         prefix.append("PLATFORM_NEED_REDIS=").append(PlatformCompose.needsRedis(platform) ? "1" : "0").append('\n');
-        prefix.append("PLATFORM_COMPOSE_B64=").append(b64c).append('\n');
-        prefix.append("PLATFORM_MANIFEST_B64=").append(b64m).append('\n');
-        appendGitKey(prefix, gitDeployKeyBase64);
+        prefix.append("PLATFORM_COMPOSE_B64=").append(b64(PlatformCompose.yaml(platform))).append('\n');
+        prefix.append("PLATFORM_MANIFEST_B64=").append(b64(PlatformCompose.manifest(platform))).append('\n');
+        prefix.append("PLATFORM_FILES_B64=").append(b64(PlatformFiles.bundle(platform))).append('\n');
+        if (gitKeysById != null && !gitKeysById.isEmpty()) {
+            StringBuilder keys = new StringBuilder();
+            gitKeysById.forEach((id, key) -> keys.append(id).append('\t').append(key.replaceAll("\\s", "")).append('\n'));
+            prefix.append("GIT_KEYS_B64=").append(b64(keys.toString())).append('\n');
+        }
         return prefix + load("platform");
+    }
+
+    /**
+     * Restauration : les fichiers sont déjà dans {@code remoteDir} (SFTP). Noms de fichiers fixés par l’agent.
+     */
+    public static String loadPlatformRestore(
+            PlatformSpec platform,
+            String remoteDir,
+            String sqlFile,
+            String uploadsFile,
+            String uploadsSubdir
+    ) {
+        if (platform == null) {
+            throw new IllegalArgumentException("Plateforme manquante.");
+        }
+        if (remoteDir == null || !remoteDir.matches("^/tmp/autopilot-restore-[a-z0-9-]{1,80}$")) {
+            throw new IllegalArgumentException("Dossier distant de restauration invalide.");
+        }
+        for (String token : new String[] {sqlFile, uploadsFile, uploadsSubdir}) {
+            if (token != null && (!SAFE_TOKEN.matcher(token).matches() || token.contains(".."))) {
+                throw new IllegalArgumentException("Nom de fichier de restauration invalide.");
+            }
+        }
+        List<String> services = new ArrayList<>();
+        for (PlatformServiceSpec s : platform.services()) {
+            services.add(s.id());
+        }
+        StringBuilder prefix = new StringBuilder();
+        prefix.append("PLATFORM_ID=").append(platform.id()).append('\n');
+        prefix.append("RESTORE_DIR=").append(remoteDir).append('\n');
+        prefix.append("RESTORE_SQL=").append(sqlFile == null ? "" : sqlFile).append('\n');
+        prefix.append("RESTORE_UPLOADS=").append(uploadsFile == null ? "" : uploadsFile).append('\n');
+        prefix.append("UPLOADS_VOLUME=").append(PlatformCompose.uploadsVolume(platform)).append('\n');
+        prefix.append("UPLOADS_SUBDIR=").append(uploadsSubdir == null ? "" : uploadsSubdir).append('\n');
+        prefix.append("PLATFORM_SERVICES='").append(String.join(" ", services)).append("'\n");
+        return prefix + load("platform-restore");
+    }
+
+    private static String b64(String text) {
+        return Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8));
     }
 
     private static void appendGitKey(StringBuilder prefix, String gitDeployKeyBase64) {

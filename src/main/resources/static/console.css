@@ -168,7 +168,8 @@ body {
   letter-spacing: 0.04em;
 }
 .field input,
-.field select {
+.field select,
+.field textarea {
   display: block;
   width: 100%;
   margin-top: 0.3rem;
@@ -178,6 +179,21 @@ body {
   border-radius: 10px;
   padding: 0.65rem 0.75rem;
   font-size: 0.95rem;
+}
+.field textarea {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8rem;
+  resize: vertical;
+}
+.field.plat-keep input {
+  display: inline;
+  width: auto;
+  margin: 0 0.35rem 0 0;
+}
+.field.plat-keep span {
+  display: block;
+  margin-top: 0.6rem;
+  color: var(--text);
 }
 .field input.need {
   border-color: var(--warn);

@@ -23,19 +23,28 @@ public class PlatformDeployPlanService {
         List<String> actions = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         actions.add("CHANGE deploy-platform « " + p.id() + " » (" + p.services().size() + " service(s)).");
-        boolean sshGit = p.services().stream().anyMatch(s -> GitUrls.ssh(s.gitUrl()));
-        if (sshGit) {
-            if (!gitDeployKeyStore.present()) {
+        for (PlatformServiceSpec s : p.services()) {
+            if (GitUrls.ssh(s.gitUrl()) && !gitDeployKeyStore.present(s.gitUrl())) {
                 return AppDeployPlan.blocked(
                         p.id(),
                         actions,
-                        "Au moins un Git en SSH : génère la clé lecture seule, Deploy key read-only sur chaque dépôt privé, puis Déployer.");
+                        "Dépôt privé sans clé pour « " + s.id() + " » (" + s.gitUrl()
+                                + ") : génère sa clé (Clés Git), ajoute-la en Deploy key lecture seule sur ce dépôt, puis Déployer.");
             }
-            actions.add("Poser la clé Git lecture seule sur le compte deploy.");
+        }
+        if (p.services().stream().anyMatch(s -> GitUrls.ssh(s.gitUrl()))) {
+            actions.add("Poser une clé Git lecture seule par dépôt privé sur le compte deploy.");
         }
         for (PlatformServiceSpec s : p.services()) {
-            String where = s.context().isBlank() ? "Dockerfile à la racine" : "Dockerfile dans « " + s.context() + " »";
+            String where = s.templated()
+                    ? "Dockerfile fourni par l’agent (modèle " + s.template() + ")"
+                    : s.context().isBlank() ? "Dockerfile à la racine" : "Dockerfile dans « " + s.context() + " »";
             actions.add("Cloner « " + s.id() + " » : " + s.gitUrl() + " @" + s.gitRef() + " — " + where + ".");
+            if (s.templated() || GitUrls.ssh(s.gitUrl())) {
+                actions.add("Construire l’image « " + s.id() + " » (port " + s.port() + ") → "
+                        + PlatformCompose.publicUrl(p, s));
+                continue;
+            }
             AppSpec probe = AppSpec.normalized(
                     "probe",
                     s.gitUrl(),
@@ -51,7 +60,7 @@ public class PlatformDeployPlanService {
                         p.id(),
                         actions,
                         "Pas de Dockerfile pour le service « " + s.id()
-                                + " » (GitHub). Ajoute-le au dépôt (racine ou sous-dossier déclaré), pousse, puis Déployer. Pas de rattrapage auto en V7-02.");
+                                + " » (GitHub). Choisis un modèle Dockerfile (next, spring-boot-11…) pour ce service, ou ajoute un Dockerfile au dépôt, puis Déployer.");
             }
             if (hasDf.isEmpty()) {
                 warnings.add("Préflight GitHub indisponible pour « " + s.id() + " » — le VPS vérifiera le Dockerfile.");
@@ -65,8 +74,16 @@ public class PlatformDeployPlanService {
         if (PlatformCompose.needsRedis(p)) {
             actions.add("Injecter REDIS_HOST=redis (mot de passe hors git) pour les services qui en ont besoin.");
         }
+        if (PlatformCompose.needsRedisPrivate(p)) {
+            actions.add("Redis privé « " + PlatformCompose.CACHE_SERVICE
+                    + " » (réseau interne à la plateforme, sans mot de passe, non exposé).");
+        }
+        long envCount = p.services().stream().mapToLong(s -> s.env().size()).sum();
+        if (envCount > 0) {
+            actions.add("Écrire " + envCount + " variable(s) d’exécution dans svc-<id>.env (secrets masqués dans la console).");
+        }
         actions.add("Générer le compose Traefik ("
-                + (p.pathRouting() ? "PathPrefix + StripPrefix, un DNS" : "sous-domaines Host()")
+                + (p.pathRouting() ? "PathPrefix, un DNS (préfixe retiré ou conservé par service)" : "sous-domaines Host()")
                 + ", aucun port publié) + HTTPS.");
         actions.add("docker compose up --build sous /opt/vps-autopilot/platforms/" + p.id() + "/");
         return AppDeployPlan.ready(p.id(), actions, warnings, null);

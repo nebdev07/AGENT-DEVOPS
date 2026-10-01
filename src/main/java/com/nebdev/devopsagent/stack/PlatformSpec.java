@@ -104,8 +104,17 @@ public record PlatformSpec(
                     raw.needs(),
                     raw.buildArgs(),
                     raw.pathPrefix(),
-                    pathRouting
+                    pathRouting,
+                    raw.template(),
+                    raw.env(),
+                    raw.keepPath()
             );
+            if (PlatformCompose.CACHE_SERVICE.equals(n.id())) {
+                throw new IllegalArgumentException(OperatorMessage.of(
+                        "l’id « " + n.id() + " » est réservé au Redis privé de la plateforme.",
+                        "Bande Plateformes — Identifiant de service",
+                        "choisis un autre id (api, www, admin)."));
+            }
             if (!ids.add(n.id())) {
                 throw new IllegalArgumentException(OperatorMessage.of(
                         "deux services ont l’id « " + n.id() + " ».",
@@ -132,5 +141,10 @@ public record PlatformSpec(
 
     public boolean pathRouting() {
         return ROUTING_PATH.equals(routing);
+    }
+
+    public PlatformSpec masked() {
+        return new PlatformSpec(id, baseDomain, routing,
+                services.stream().map(PlatformServiceSpec::masked).toList());
     }
 }

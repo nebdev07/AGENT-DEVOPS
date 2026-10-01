@@ -27,6 +27,8 @@ Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `c
 | DELETE | `/api/v1/platforms?id=` | Retire une plateforme de la liste locale | oui |
 | GET | `/api/v1/platforms/deploy-plan` | Plan CHANGE avant confirmation | **oui V7-02** |
 | POST | `/api/v1/platforms/deploy` | CHANGE `deploy-platform` (`confirm: true`) | **oui V7-02** |
+| POST | `/api/v1/platforms/restore` | CHANGE `restore-platform`, multipart : `id host port user confirm uploadsSubdir` + fichiers `sql` (`.sql`/`.sql.gz`) et/ou `uploads` (`.tar.gz`/`.tgz`/`.tar`/`.zip`). Réponse `{status, id, risk, report[]}` | **oui V7-06** |
+| GET / POST | `/api/v1/git-deploy-key/repos` | Une clé par dépôt `git@` (apps + plateformes) : `{repos:[{repo, keyId, usedBy, present, fallback, publicKey, fingerprint, deployKeyPage}]}`. POST `{repo, confirm, rotate}` | **oui V7-06** |
 
 ## POST `/api/v1/discover`
 

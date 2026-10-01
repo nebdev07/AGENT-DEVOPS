@@ -115,7 +115,7 @@ public class AppDeployService {
             DockerfilePreflight.assertPresentOrSkip(app);
         }
 
-        String gitKey = GitUrls.ssh(effective.gitUrl()) ? gitDeployKeyStore.privateKeyBase64() : null;
+        String gitKey = GitUrls.ssh(effective.gitUrl()) ? gitDeployKeyStore.privateKeyBase64(effective.gitUrl()) : null;
         String script = RoleScript.loadApp(effective, scaffoldB64, gitKey);
         String raw;
         try {

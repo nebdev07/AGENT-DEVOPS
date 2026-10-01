@@ -21,7 +21,8 @@ public class ActionGuard {
             "install-redis",
             "install-backups",
             "deploy-app",
-            "deploy-platform"
+            "deploy-platform",
+            "restore-platform"
     );
 
     public void assertAllowed(RiskLevel level, String action) {

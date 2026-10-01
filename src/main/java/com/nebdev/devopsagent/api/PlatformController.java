@@ -6,8 +6,10 @@ import com.nebdev.devopsagent.ssh.SshTarget;
 import com.nebdev.devopsagent.stack.AppDeployPlan;
 import com.nebdev.devopsagent.stack.PlatformDeployService;
 import com.nebdev.devopsagent.stack.PlatformIntentStore;
+import com.nebdev.devopsagent.stack.PlatformRestoreService;
 import com.nebdev.devopsagent.stack.PlatformSpec;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -17,9 +19,13 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,19 +37,29 @@ public class PlatformController {
 
     private final PlatformIntentStore store;
     private final PlatformDeployService deployService;
+    private final PlatformRestoreService restoreService;
 
-    public PlatformController(PlatformIntentStore store, PlatformDeployService deployService) {
+    public PlatformController(
+            PlatformIntentStore store,
+            PlatformDeployService deployService,
+            PlatformRestoreService restoreService
+    ) {
         this.store = store;
         this.deployService = deployService;
+        this.restoreService = restoreService;
     }
 
     @GetMapping
     public Map<String, Object> list() throws IOException {
         return Map.of(
-                "platforms", store.load(),
+                "platforms", masked(store.load()),
                 "deployReady", true,
                 "note", "Déployer = CHANGE confirmé (V7-02). Enregistrer reste local."
         );
+    }
+
+    private static List<PlatformSpec> masked(List<PlatformSpec> platforms) {
+        return platforms.stream().map(PlatformSpec::masked).toList();
     }
 
     @PutMapping
@@ -52,7 +68,7 @@ public class PlatformController {
         String vpsIp = body == null ? null : body.vpsIp();
         List<PlatformSpec> saved = store.save(incoming, vpsIp);
         return Map.of(
-                "platforms", saved,
+                "platforms", masked(saved),
                 "deployReady", true,
                 "note", "Enregistré sur ce poste. Déployer demande une confirmation CHANGE."
         );
@@ -62,7 +78,7 @@ public class PlatformController {
     public Map<String, Object> delete(@RequestParam("id") String id) throws IOException {
         List<PlatformSpec> saved = store.delete(id);
         return Map.of(
-                "platforms", saved,
+                "platforms", masked(saved),
                 "removed", id.trim().toLowerCase(),
                 "note", "Ligne retirée de la liste locale. Rien n’a été arrêté sur un VPS."
         );
@@ -104,6 +120,55 @@ public class PlatformController {
                 "snapshot", result.snapshot(),
                 "report", result.report()
         );
+    }
+
+    @PostMapping(value = "/restore", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> restore(
+            @RequestParam("id") String id,
+            @RequestParam("host") String host,
+            @RequestParam(value = "port", required = false) Integer port,
+            @RequestParam("user") String user,
+            @RequestParam(value = "confirm", required = false) Boolean confirm,
+            @RequestParam(value = "uploadsSubdir", required = false) String uploadsSubdir,
+            @RequestPart(value = "sql", required = false) MultipartFile sql,
+            @RequestPart(value = "uploads", required = false) MultipartFile uploads
+    ) throws IOException {
+        if (host == null || host.isBlank() || user == null || user.isBlank()) {
+            throw new IllegalArgumentException("Indique l’hôte et l’utilisateur SSH.");
+        }
+        List<Path> temps = new ArrayList<>();
+        try {
+            PlatformRestoreService.RestoreFile sqlFile = toTemp(sql, temps);
+            PlatformRestoreService.RestoreFile uploadsFile = toTemp(uploads, temps);
+            PlatformRestoreService.RestoreResult result = restoreService.restore(
+                    id.trim(),
+                    new SshTarget(host.trim(), port == null ? 22 : port, user.trim()),
+                    Boolean.TRUE.equals(confirm),
+                    sqlFile,
+                    uploadsFile,
+                    uploadsSubdir
+            );
+            return Map.of(
+                    "status", "ok",
+                    "id", result.platformId(),
+                    "risk", "CHANGE",
+                    "report", result.report()
+            );
+        } finally {
+            for (Path p : temps) {
+                Files.deleteIfExists(p);
+            }
+        }
+    }
+
+    private static PlatformRestoreService.RestoreFile toTemp(MultipartFile part, List<Path> temps) throws IOException {
+        if (part == null || part.isEmpty()) {
+            return null;
+        }
+        Path tmp = Files.createTempFile("autopilot-restore-", ".bin");
+        temps.add(tmp);
+        part.transferTo(tmp);
+        return new PlatformRestoreService.RestoreFile(tmp, part.getOriginalFilename());
     }
 
     @ExceptionHandler(UnsafeActionException.class)

@@ -1,7 +1,18 @@
 # Changelog — VPS Autopilot
 
 > Ne jamais effacer une entrée.  
-> Dernière mise à jour : 2026-09-29
+> Dernière mise à jour : 2026-10-01
+
+## 2026-10-01
+
+- **V7-06** livré : modèles Dockerfile par service de plateforme (Next, Node, Spring Boot Java 11/17/21, `Dockerfile.autopilot` écrit sur le serveur), variables de build et d’exécution (`CLE=valeur`, `{{HOST}}`), **Garder le préfixe** (`keepPath`, pas de StripPrefix), **Redis privé** (`platform-cache`, réseau interne). Secrets d’env masqués `********` dans l’API et conservés à l’enregistrement. Volume fichiers au nom fixe `plat_<id>_uploads` (`name:` dans le compose).
+- **Clés Git par dépôt** (GitHub refuse la même Deploy key sur deux dépôts) : `GET/POST /api/v1/git-deploy-key/repos`, liste dans la bande Plateformes avec Générer / Copier / lien Deploy keys.
+- **Restaurer les données** : `POST /api/v1/platforms/restore` + rôle `platform-restore` (SFTP, sauvegarde de l’existant avant remplacement, import MySQL 8 → MariaDB, archive de fichiers vers le volume). CHANGE `restore-platform` whitelisté. Testé sur le lab (script puis API complète), puis nettoyé.
+- Bouton **Remplir le modèle ARC** (3 services, chemins `/`, `/arc-backoffice`, `/arc-api`). Aide §7b complétée. Cache `?v=app22`. Tests : 89 → 101 (`PlatformTemplatesTest`, `PlatformRestoreTest`).
+
+- Rôle **sécurité** : `AllowUsers` ne contient plus seulement l’utilisateur de l’agent. Il garde les utilisateurs déjà autorisés et ajoute chaque membre du groupe `sudo` ayant une clé dans `authorized_keys` (admin humain, ex. `nebdev`, à côté d’un compte agent dédié, ex. `agentuser`). Sortie `SSH_ALLOWED=…`.
+
+- Guide SSH (étape 3) : précise **quelle** clé poser sur le VPS (`vps-autopilot.pub`, une ligne `ssh-ed25519 …`, jamais la privée), dans quel `authorized_keys` (utilisateur de connexion), commande `Get-Content` pour l’afficher, et une **vérification** `ssh -i … ubuntu@IP` sans mot de passe. Cache `?v=app21`.
 
 ## 2026-09-29
 

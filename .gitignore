@@ -18,6 +18,7 @@ state/backups/
 state/backup.key
 state/git-deploy
 state/git-deploy.pub
+state/git-deploy-keys/
 infrastructure/lab/keys/
 
 # OS

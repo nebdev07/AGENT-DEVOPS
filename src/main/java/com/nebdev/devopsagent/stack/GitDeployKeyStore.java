@@ -8,28 +8,82 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Clé SSH lecture seule pour cloner des dépôts privés (V7-05). Hors git : {@code state/git-deploy}.
+ * Clés SSH lecture seule pour cloner des dépôts privés (V7-05). Hors git, sous {@code state/}.
+ * GitHub refuse une même Deploy key sur deux dépôts : une clé par dépôt ({@code state/git-deploy-keys/}),
+ * la clé unique historique {@code state/git-deploy} reste un repli.
  */
 @Component
 public class GitDeployKeyStore {
 
+    private static final Pattern SSH_REPO = Pattern.compile(
+            "^(?:git@|ssh://git@)([a-z0-9.-]+)[:/](.+?)(?:\\.git)?/?$", Pattern.CASE_INSENSITIVE);
+
     private final Path privateKey;
     private final Path publicKey;
+    private final Path repoDir;
 
     public GitDeployKeyStore(DevopsProperties properties) {
         Path dir = Path.of(properties.getStateDir());
         this.privateKey = dir.resolve("git-deploy");
         this.publicKey = dir.resolve("git-deploy.pub");
+        this.repoDir = dir.resolve("git-deploy-keys");
+    }
+
+    /** Identifiant de fichier stable pour un dépôt SSH, ex. {@code github.com-org-repo}. Vide si HTTPS. */
+    public static String keyId(String gitUrl) {
+        if (gitUrl == null) {
+            return "";
+        }
+        Matcher m = SSH_REPO.matcher(gitUrl.trim());
+        if (!m.matches()) {
+            return "";
+        }
+        String raw = (m.group(1) + "-" + m.group(2)).toLowerCase(Locale.ROOT);
+        return raw.replaceAll("[^a-z0-9.-]+", "-").replaceAll("-{2,}", "-");
+    }
+
+    /** Page où coller la Deploy key (GitHub / GitLab), vide si inconnue. */
+    public static String deployKeyPage(String gitUrl) {
+        if (gitUrl == null) {
+            return "";
+        }
+        Matcher m = SSH_REPO.matcher(gitUrl.trim());
+        if (!m.matches()) {
+            return "";
+        }
+        String host = m.group(1).toLowerCase(Locale.ROOT);
+        String path = m.group(2);
+        if ("github.com".equals(host)) {
+            return "https://github.com/" + path + "/settings/keys/new";
+        }
+        if ("gitlab.com".equals(host)) {
+            return "https://gitlab.com/" + path + "/-/settings/repository";
+        }
+        return "";
     }
 
     public boolean present() {
         return Files.isRegularFile(privateKey) && Files.isRegularFile(publicKey);
+    }
+
+    public boolean hasRepoKey(String gitUrl) {
+        String id = keyId(gitUrl);
+        return !id.isEmpty() && Files.isRegularFile(repoPrivate(id)) && Files.isRegularFile(repoPublic(id));
+    }
+
+    /** Une clé utilisable pour ce dépôt (dédiée ou repli historique). */
+    public boolean present(String gitUrl) {
+        return hasRepoKey(gitUrl) || present();
     }
 
     public String publicKeyText() throws IOException {
@@ -39,23 +93,39 @@ public class GitDeployKeyStore {
         return Files.readString(publicKey, StandardCharsets.UTF_8).trim();
     }
 
+    public String publicKeyText(String gitUrl) throws IOException {
+        if (!hasRepoKey(gitUrl)) {
+            return "";
+        }
+        return Files.readString(repoPublic(keyId(gitUrl)), StandardCharsets.UTF_8).trim();
+    }
+
     public String fingerprint() throws IOException {
         if (!present()) {
             return "";
         }
-        List<String> lines = runSshKeygen(List.of("-lf", publicKey.toAbsolutePath().toString()), 15);
-        return lines.isEmpty() ? "" : lines.get(0).trim();
+        return fingerprintOf(publicKey);
+    }
+
+    public String fingerprint(String gitUrl) throws IOException {
+        if (!hasRepoKey(gitUrl)) {
+            return "";
+        }
+        return fingerprintOf(repoPublic(keyId(gitUrl)));
     }
 
     public String privateKeyBase64() throws IOException {
         if (!present()) {
-            throw new IllegalStateException(OperatorMessage.of(
-                    "aucune clé Git lecture seule sur ce poste.",
-                    "Bande Applications — clé Git",
-                    "Génère la clé, copie la publique en Deploy key (lecture seule) sur GitHub/GitLab, puis Déployer."));
+            throw missingKey();
         }
-        byte[] raw = Files.readAllBytes(privateKey);
-        return Base64.getEncoder().encodeToString(raw);
+        return Base64.getEncoder().encodeToString(Files.readAllBytes(privateKey));
+    }
+
+    public String privateKeyBase64(String gitUrl) throws IOException {
+        if (hasRepoKey(gitUrl)) {
+            return Base64.getEncoder().encodeToString(Files.readAllBytes(repoPrivate(keyId(gitUrl))));
+        }
+        return privateKeyBase64();
     }
 
     public void generate(boolean rotate) throws IOException {
@@ -65,36 +135,74 @@ public class GitDeployKeyStore {
                     "Bande Applications — clé Git",
                     "copie la publique sur le dépôt. Pour en créer une nouvelle : régénérer (l’ancienne Deploy key ne marchera plus)."));
         }
-        Files.createDirectories(privateKey.getParent());
+        createKey(privateKey, publicKey, rotate, "vps-autopilot-git-readonly");
+    }
+
+    public void generate(String gitUrl, boolean rotate) throws IOException {
+        String id = keyId(gitUrl);
+        if (id.isEmpty()) {
+            throw new IllegalArgumentException(OperatorMessage.of(
+                    "ce dépôt n’est pas en SSH (git@…).",
+                    "Clés Git — dépôt",
+                    "un dépôt HTTPS public n’a pas besoin de clé ; privé : utilise git@github.com:org/repo.git."));
+        }
+        if (hasRepoKey(gitUrl) && !rotate) {
+            throw new IllegalStateException(OperatorMessage.of(
+                    "une clé existe déjà pour " + id + ".",
+                    "Clés Git — dépôt",
+                    "copie la publique en Deploy key de ce dépôt. Régénérer invalide l’ancienne."));
+        }
+        Files.createDirectories(repoDir);
+        createKey(repoPrivate(id), repoPublic(id), rotate, "vps-autopilot-" + id);
+    }
+
+    private void createKey(Path priv, Path pub, boolean rotate, String comment) throws IOException {
+        Files.createDirectories(priv.getParent());
         if (rotate) {
-            Files.deleteIfExists(privateKey);
-            Files.deleteIfExists(publicKey);
+            Files.deleteIfExists(priv);
+            Files.deleteIfExists(pub);
         }
         runSshKeygen(List.of(
                 "-t", "ed25519",
-                "-f", privateKey.toAbsolutePath().toString(),
+                "-f", priv.toAbsolutePath().toString(),
                 "-N", "",
-                "-C", "vps-autopilot-git-readonly"
+                "-C", comment
         ), 30);
-        if (!present()) {
+        if (!Files.isRegularFile(priv) || !Files.isRegularFile(pub)) {
             throw new IllegalStateException(OperatorMessage.of(
-                    "ssh-keygen n’a pas écrit state/git-deploy.",
-                    "Bande Applications — clé Git",
+                    "ssh-keygen n’a pas écrit la clé.",
+                    "Clés Git",
                     "installe le client OpenSSH (ssh-keygen), puis réessaie."));
         }
-        restrictPrivate();
-    }
-
-    private void restrictPrivate() {
         try {
-            Files.setPosixFilePermissions(privateKey, EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+            Files.setPosixFilePermissions(priv, EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
         } catch (UnsupportedOperationException | IOException ignored) {
             // Windows : pas POSIX ; le fichier reste hors git.
         }
     }
 
+    private Path repoPrivate(String id) {
+        return repoDir.resolve(id);
+    }
+
+    private Path repoPublic(String id) {
+        return repoDir.resolve(id + ".pub");
+    }
+
+    private static IllegalStateException missingKey() {
+        return new IllegalStateException(OperatorMessage.of(
+                "aucune clé Git lecture seule sur ce poste.",
+                "Clés Git",
+                "Génère la clé du dépôt, copie la publique en Deploy key (lecture seule) sur GitHub/GitLab, puis Déployer."));
+    }
+
+    private static String fingerprintOf(Path pub) throws IOException {
+        List<String> lines = runSshKeygen(List.of("-lf", pub.toAbsolutePath().toString()), 15);
+        return lines.isEmpty() ? "" : lines.get(0).trim();
+    }
+
     private static List<String> runSshKeygen(List<String> args, int timeoutSec) throws IOException {
-        java.util.ArrayList<String> cmd = new java.util.ArrayList<>();
+        List<String> cmd = new ArrayList<>();
         cmd.add("ssh-keygen");
         cmd.addAll(args);
         ProcessBuilder pb = new ProcessBuilder(cmd);
@@ -105,7 +213,7 @@ public class GitDeployKeyStore {
         } catch (IOException e) {
             throw new IllegalStateException(OperatorMessage.of(
                     "ssh-keygen introuvable.",
-                    "Bande Applications — clé Git",
+                    "Clés Git",
                     "installe OpenSSH Client (Windows : Paramètres → Fonctionnalités facultatives), puis réessaie."), e);
         }
         try {
@@ -114,7 +222,7 @@ public class GitDeployKeyStore {
                 p.destroyForcibly();
                 throw new IllegalStateException(OperatorMessage.of(
                         "ssh-keygen n’a pas répondu.",
-                        "Bande Applications — clé Git",
+                        "Clés Git",
                         "relance Générer. Si ça bloque : ferme un prompt ssh-keygen ouvert."));
             }
         } catch (InterruptedException e) {
@@ -129,7 +237,7 @@ public class GitDeployKeyStore {
             }
             throw new IllegalStateException(OperatorMessage.of(
                     "ssh-keygen a échoué.",
-                    "Bande Applications — clé Git",
+                    "Clés Git",
                     detail.isBlank() ? "code " + p.exitValue() : detail));
         }
         if (out.isBlank()) {

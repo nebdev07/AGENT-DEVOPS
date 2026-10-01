@@ -1,5 +1,12 @@
 server.port: 8088
 
+spring:
+  servlet:
+    multipart:
+      max-file-size: 4GB
+      max-request-size: 8GB
+      file-size-threshold: 1MB
+
 devops:
   state-dir: ./state
   lab-fixture: classpath:fixtures/ubuntu-vps2-blank.txt
