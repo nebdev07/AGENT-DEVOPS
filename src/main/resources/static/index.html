@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app23" />
+  <link rel="stylesheet" href="/console.css?v=app24" />
 </head>
 <body>
   <div class="bg"></div>
@@ -198,7 +198,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           </p>
           <ul>
             <li><strong>Préparer le serveur</strong> — un seul plan à confirmer, puis Sécurité, Docker, Traefik, MariaDB et compte deploy s’enchaînent (ce qui est déjà posé est sauté).</li>
-            <li><strong>Accès Git</strong> — une clé par dépôt ; colle-la sur GitHub, puis <strong>Vérifier</strong> (lecture seule, aucun clone).</li>
+            <li><strong>Accès Git</strong> — une clé par dépôt ; colle-la sur GitHub, puis <strong>Vérifier</strong> (lecture seule, aucun clone). Un <strong>tuto en 5 étapes</strong> s’ouvre la première fois (Générer, Copier, ouvrir la page Deploy keys, remplir le formulaire avec <em>Allow write access</em> décoché, Vérifier) ; rejouable avec « Suivre le tuto » ou le bouton <strong>Tuto</strong> de chaque dépôt.</li>
             <li><strong>Données</strong> — restaurer un dump et des fichiers, ou passer l’étape.</li>
             <li><strong>En ligne</strong> — l’agent teste chaque adresse HTTPS (certificat valide exigé).</li>
           </ul>
@@ -599,6 +599,22 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app23"></script>
+  <div id="tutoOverlay" class="busy-overlay result-overlay hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="tutoTitle">
+    <div class="busy-card result-card tuto-card">
+      <p class="kicker" id="tutoKicker">Tuto · 1 minute</p>
+      <h2 id="tutoTitle">Donner accès au dépôt</h2>
+      <ol id="tutoDots" class="tuto-dots" aria-hidden="true"></ol>
+      <div id="tutoBody" class="tuto-body"></div>
+      <div id="tutoDo" class="tuto-do"></div>
+      <p id="tutoMsg" class="hint" hidden></p>
+      <div class="confirm-actions-row">
+        <button id="btnTutoClose" type="button" class="ghost">Fermer</button>
+        <button id="btnTutoPrev" type="button" class="ghost">Précédent</button>
+        <button id="btnTutoNext" type="button">Suivant</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/console.js?v=app24"></script>
 </body>
 </html>

@@ -978,3 +978,27 @@ body:not(.guided) .journey-steps { display: none; }
 @media (max-width: 900px) {
   .journey-steps { grid-template-columns: repeat(3, 1fr); }
 }
+/* Tuto Deploy key */
+.tuto-card { max-width: 560px; text-align: left; }
+.tuto-dots { display: flex; gap: 0.35rem; list-style: none; padding: 0; margin: 0.2rem 0 0.8rem; }
+.tuto-dots li { flex: 1; height: 4px; border-radius: 2px; background: var(--line-hi); }
+.tuto-dots li.done { background: var(--accent-dim); box-shadow: inset 0 0 0 1px var(--accent); }
+.tuto-dots li.current { background: var(--accent); }
+.tuto-body p { margin: 0.45rem 0; line-height: 1.5; }
+.tuto-repo { color: var(--muted); font-size: 0.85rem; }
+.tuto-do { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0 0.4rem; }
+.tuto-do button { width: auto; margin: 0; }
+.tuto-do textarea { width: 100%; font-size: 0.75rem; }
+#tutoMsg.ok { color: var(--ok); }
+#tutoMsg.err { color: var(--danger); }
+.gh-mock { background: #f6f8fa; color: #1f2328; border-radius: 8px; padding: 0.8rem 1rem; margin: 0.6rem 0; font: 0.85rem/1.4 system-ui, sans-serif; }
+.gh-mock-bar { font-weight: 600; border-bottom: 1px solid #d0d7de; padding-bottom: 0.4rem; margin-bottom: 0.5rem; }
+.gh-label { display: block; font-weight: 600; margin-top: 0.4rem; }
+.gh-field { background: #fff; border: 1px solid #d0d7de; border-radius: 6px; padding: 0.3rem 0.5rem; margin-top: 0.2rem; }
+.gh-key { font-family: ui-monospace, monospace; font-size: 0.75rem; }
+.gh-key em { color: #57606a; font-family: system-ui, sans-serif; }
+.gh-mock small { color: #57606a; }
+.gh-check { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.7rem; padding: 0.35rem 0.5rem; border: 2px dashed #cf222e; border-radius: 6px; }
+.gh-box { width: 14px; height: 14px; border: 1px solid #57606a; border-radius: 3px; background: #fff; flex: none; }
+.gh-warn { color: #cf222e; margin-left: auto; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.03em; }
+.gh-btn { display: inline-block; margin-top: 0.7rem; background: #1f883d; color: #fff; border-radius: 6px; padding: 0.3rem 0.8rem; font-weight: 600; }

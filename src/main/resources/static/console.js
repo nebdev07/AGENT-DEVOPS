@@ -1721,6 +1721,12 @@ function renderRepoKeys(j) {
       });
       actions.appendChild(btnCheck);
     }
+    const btnTuto = document.createElement("button");
+    btnTuto.type = "button";
+    btnTuto.className = "ghost";
+    btnTuto.textContent = "Tuto";
+    btnTuto.addEventListener("click", () => openTuto(k.repo));
+    actions.appendChild(btnTuto);
     row.appendChild(actions);
     box.appendChild(row);
   });
@@ -2224,13 +2230,20 @@ function renderJourneyCard(step, current, done) {
       const repos = journeyRepos(p);
       $("journeyTitle").textContent = repos.length ? "Donner accès à tes dépôts privés" : "Aucun dépôt privé";
       $("journeyText").textContent = repos.length
-        ? "Pour chaque dépôt ci-dessous : Générer, Copier, ouvrir le lien, coller la clé sur GitHub (case « Allow write access » décochée). Puis Vérifier."
+        ? "L’agent a besoin de lire chaque dépôt privé. Le tuto te guide dépôt par dépôt : créer la clé, la coller sur GitHub, vérifier (environ 1 minute par dépôt)."
         : "Tes dépôts sont publics (HTTPS) : rien à faire ici.";
       journeyListItems(repos.map((r) => ({
         html: esc(r.repo) + (gitVerified(r.repo) ? " — accès confirmé" : r.present ? " — clé générée, à coller puis vérifier" : " — pas encore de clé"),
         cls: gitVerified(r.repo) ? "ok" : "",
       })));
-      if (repos.length) journeyButton("Tout vérifier", verifyAllRepos, "");
+      if (repos.length) {
+        journeyButton(repos.every((r) => gitVerified(r.repo)) ? "Revoir le tuto" : "Suivre le tuto (1 min par dépôt)", () => openTuto(""), "");
+        journeyButton("Tout vérifier", verifyAllRepos, "ghost");
+        if (step === current && !repos.every((r) => gitVerified(r.repo)) && !localStorage.getItem("vpsap.tuto.git")) {
+          localStorage.setItem("vpsap.tuto.git", "1");
+          setTimeout(() => openTuto(""), 300);
+        }
+      }
       break;
     }
     case "data":
@@ -2396,6 +2409,193 @@ async function prepareServer() {
       next: "Ce qui est déjà installé reste en place. Corrige, puis relance « Préparer le serveur »." });
   }
   renderJourney();
+}
+
+const tuto = { repo: "", step: 0 };
+
+function repoKeyInfo(repo) {
+  return (journey.repos || []).find((k) => k.repo === repo) || { repo };
+}
+
+function repoOnGitlab(repo) {
+  return /gitlab/i.test(repo);
+}
+
+function tutoFormMock(k) {
+  const gl = repoOnGitlab(k.repo);
+  const write = gl ? "Grant write permissions to this key" : "Allow write access";
+  return "<div class=\"gh-mock\" aria-label=\"Formulaire à remplir\">"
+    + "<div class=\"gh-mock-bar\">" + (gl ? "Add new deploy key" : "Add deploy key") + "</div>"
+    + "<span class=\"gh-label\">Title</span><div class=\"gh-field\">vps-autopilot " + esc(target().host || "mon-serveur") + "</div>"
+    + "<small>Texte libre, juste pour la reconnaître.</small>"
+    + "<span class=\"gh-label\">Key</span><div class=\"gh-field gh-key\">ssh-ed25519 AAAA… <em>(Ctrl+V)</em></div>"
+    + "<div class=\"gh-check\"><span class=\"gh-box\" aria-hidden=\"true\"></span>" + esc(write)
+    + " <strong class=\"gh-warn\">laisser décoché</strong></div>"
+    + "<div class=\"gh-btn\">Add key</div>"
+    + "</div>";
+}
+
+function tutoSteps(k) {
+  const site = repoOnGitlab(k.repo) ? "GitLab" : "GitHub";
+  const page = repoOnGitlab(k.repo) ? "Settings → Repository → Deploy keys" : "Settings → Deploy keys → Add deploy key";
+  return [
+    {
+      title: "Créer la clé de ce dépôt",
+      html: "<p>L’agent crée une clé réservée à <code>" + esc(k.repo) + "</code>. " + site + " refuse la même clé sur deux dépôts : une clé par dépôt.</p>"
+        + "<p>Rien n’est encore envoyé, ni au serveur ni à " + site + ".</p>",
+      action: k.present ? "" : "generate",
+    },
+    {
+      title: "Copier la clé publique",
+      html: "<p>Une seule ligne qui commence par <code>ssh-ed25519</code>. Elle est <strong>publique</strong> : la coller ne présente aucun risque. La clé privée ne quitte jamais l’agent.</p>",
+      action: "copy",
+    },
+    {
+      title: "Ouvrir la page Deploy keys",
+      html: "<p>Le bouton ouvre directement <strong>" + page + "</strong> de ce dépôt, dans un nouvel onglet.</p>"
+        + "<p>Connecte-toi avec un compte <strong>administrateur</strong> du dépôt. Page 404 : mauvais compte, ou droits insuffisants.</p>",
+      action: "open",
+    },
+    {
+      title: "Remplir le formulaire",
+      html: tutoFormMock(k)
+        + "<p>Laisse la case d’écriture <strong>décochée</strong> : l’agent ne fait que lire ton code. Une clé en écriture permettrait de le modifier si le serveur était un jour compromis.</p>"
+        + "<p>" + site + " peut redemander ton mot de passe ou ton code 2FA : c’est normal.</p>",
+      action: "",
+    },
+    {
+      title: "Revenir ici et vérifier",
+      html: "<p>L’agent teste la clé en lecture seule (aucun clone, rien n’est modifié).</p>",
+      action: "verify",
+    },
+  ];
+}
+
+function tutoButton(label, onClick, kind) {
+  const b = document.createElement("button");
+  b.type = "button";
+  if (kind) b.className = kind;
+  b.textContent = label;
+  b.addEventListener("click", onClick);
+  $("tutoDo").appendChild(b);
+}
+
+function tutoMessage(text, ok) {
+  const m = $("tutoMsg");
+  m.hidden = !text;
+  m.textContent = text || "";
+  m.classList.toggle("ok", !!ok);
+  m.classList.toggle("err", ok === false);
+}
+
+function nextUnverifiedRepo(after) {
+  return journeyRepos(journeyPlatform()).find((r) => r.repo !== after && !gitVerified(r.repo));
+}
+
+function renderTuto() {
+  const k = repoKeyInfo(tuto.repo);
+  const steps = tutoSteps(k);
+  const s = steps[tuto.step];
+  $("tutoKicker").textContent = "Tuto · étape " + (tuto.step + 1) + " sur " + steps.length;
+  $("tutoTitle").textContent = s.title;
+  $("tutoDots").innerHTML = steps.map((_, i) => "<li class=\"" + (i < tuto.step ? "done" : i === tuto.step ? "current" : "") + "\"></li>").join("");
+  $("tutoBody").innerHTML = "<p class=\"tuto-repo\">Dépôt : <code>" + esc(k.repo) + "</code></p>" + s.html;
+  $("tutoDo").innerHTML = "";
+  switch (s.action) {
+    case "":
+      break;
+    case "generate":
+      tutoButton("Générer la clé", async () => {
+        await generateRepoKey(k.repo, false);
+        if (repoKeyInfo(tuto.repo).present) {
+          tutoMessage("Clé créée.", true);
+          tuto.step += 1;
+        }
+        renderTuto();
+      }, "");
+      break;
+    case "copy":
+      if (!k.publicKey) {
+        tutoMessage("Pas encore de clé : reviens à l’étape 1.", false);
+        break;
+      }
+      tutoButton("Copier la clé", async () => {
+        try {
+          await navigator.clipboard.writeText(k.publicKey);
+          tutoMessage("Clé copiée. Étape suivante : ouvrir " + (repoOnGitlab(k.repo) ? "GitLab" : "GitHub") + ".", true);
+        } catch {
+          tutoMessage("Copie impossible : sélectionne la clé ci-dessous puis Ctrl+C.", false);
+        }
+      }, "");
+      $("tutoDo").insertAdjacentHTML("beforeend", "<textarea class=\"git-key-pub\" readonly rows=\"2\">" + esc(k.publicKey) + "</textarea>");
+      break;
+    case "open":
+      if (k.deployKeyPage) {
+        tutoButton("Ouvrir la page du dépôt", () => window.open(k.deployKeyPage, "_blank", "noopener"), "");
+      } else {
+        tutoMessage("Hébergeur non reconnu : ouvre les réglages du dépôt, rubrique Deploy keys.", false);
+      }
+      break;
+    case "verify":
+      tutoButton(gitVerified(k.repo) ? "Accès confirmé · revérifier" : "Vérifier l’accès", async () => {
+        tutoMessage("Vérification…");
+        try {
+          const v = await verifyRepo(k.repo);
+          tutoMessage(v.ok
+            ? "Accès confirmé pour " + k.repo + "."
+            : "Clé refusée. Vérifie qu’elle est collée sur ce dépôt-là (pas un autre), puis réessaie. Détail : " + v.message, v.ok);
+        } catch (e) {
+          tutoMessage(e.message, false);
+        }
+        renderRepoKeys({ repos: journey.repos });
+        renderTuto();
+      }, "");
+      break;
+    default:
+      throw new Error("Action de tuto inconnue : " + s.action);
+  }
+  $("btnTutoPrev").disabled = tuto.step === 0;
+  const last = tuto.step === steps.length - 1;
+  const following = last && gitVerified(k.repo) ? nextUnverifiedRepo(k.repo) : null;
+  $("btnTutoNext").textContent = !last ? "Suivant" : following ? "Dépôt suivant : " + following.repo.replace(/^.*[:/]([^/]+?)(\.git)?$/, "$1") : "Terminer";
+}
+
+function openTuto(repo) {
+  const chosen = repo || (nextUnverifiedRepo("") || journeyRepos(journeyPlatform())[0] || {}).repo;
+  if (!chosen) return;
+  tuto.repo = chosen;
+  tuto.step = repoKeyInfo(chosen).present ? 1 : 0;
+  tutoMessage("");
+  renderTuto();
+  $("tutoOverlay").classList.remove("hidden");
+  $("tutoOverlay").setAttribute("aria-hidden", "false");
+}
+
+function closeTuto() {
+  $("tutoOverlay").classList.add("hidden");
+  $("tutoOverlay").setAttribute("aria-hidden", "true");
+  renderJourney();
+}
+
+if ($("tutoOverlay")) {
+  $("btnTutoClose").addEventListener("click", closeTuto);
+  $("btnTutoPrev").addEventListener("click", () => {
+    tuto.step = Math.max(0, tuto.step - 1);
+    tutoMessage("");
+    renderTuto();
+  });
+  $("btnTutoNext").addEventListener("click", () => {
+    const total = tutoSteps(repoKeyInfo(tuto.repo)).length;
+    if (tuto.step < total - 1) {
+      tuto.step += 1;
+      tutoMessage("");
+      renderTuto();
+      return;
+    }
+    const following = gitVerified(tuto.repo) ? nextUnverifiedRepo(tuto.repo) : null;
+    if (following) openTuto(following.repo);
+    else closeTuto();
+  });
 }
 
 if ($("btnExpert")) $("btnExpert").addEventListener("click", () => setGuided(!guided()));
