@@ -5,6 +5,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import javax.net.ssl.SSLException;
 
 /**
  * Vérification post-déploiement (slice V6) : le hostname répond en HTTPS.
@@ -41,10 +42,34 @@ final class PublicReachability {
         }
     }
 
+    /** Let’s Encrypt peut mettre une à deux minutes à émettre le certificat d’un nouveau nom d’hôte. */
+    private static final Duration CERT_WAIT = Duration.ofMinutes(3);
+    private static final Duration RETRY_EVERY = Duration.ofSeconds(10);
+
     static void checkHttpsUrl(String url) {
         if (url == null || url.isBlank()) {
             return;
         }
+        long deadline = System.nanoTime() + CERT_WAIT.toNanos();
+        while (true) {
+            try {
+                checkHttpsUrlOnce(url);
+                return;
+            } catch (IllegalStateException e) {
+                if (System.nanoTime() + RETRY_EVERY.toNanos() > deadline) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(RETRY_EVERY.toMillis());
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
+    }
+
+    private static void checkHttpsUrlOnce(String url) {
         try {
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(12))
@@ -65,6 +90,12 @@ final class PublicReachability {
                     "Traefik / DNS / conteneur. L’app peut être UP localement mais pas joignable publiquement."));
         } catch (IllegalStateException e) {
             throw e;
+        } catch (SSLException e) {
+            throw new IllegalStateException(OperatorMessage.of(
+                    "après déploiement, HTTPS « " + url + " » : certificat pas encore valide après "
+                            + CERT_WAIT.toMinutes() + " min (" + e.getMessage() + ").",
+                    "Vérification post-deploy (V6)",
+                    "Let’s Encrypt n’a pas encore émis le certificat : le nom d’hôte doit pointer vers ce serveur, ports 80/443 ouverts. Relance « Vérifier l’accès » dans quelques minutes."), e);
         } catch (Exception e) {
             throw new IllegalStateException(OperatorMessage.of(
                     "après déploiement, HTTPS « " + url + " » injoignable : " + e.getMessage(),
