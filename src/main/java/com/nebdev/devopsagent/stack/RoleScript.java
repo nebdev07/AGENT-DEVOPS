@@ -112,10 +112,11 @@ public final class RoleScript {
     /**
      * @param gitKeysById clé privée (base64) par {@link GitDeployKeyStore#keyId(String)} des dépôts SSH
      */
-    public static String loadPlatform(PlatformSpec platform, Map<String, String> gitKeysById) {
-        if (platform == null) {
+    public static String loadPlatform(PlatformSpec declared, Map<String, String> gitKeysById) {
+        if (declared == null) {
             throw new IllegalArgumentException("Plateforme manquante.");
         }
+        PlatformSpec platform = declared.resolved();
         StringBuilder prefix = new StringBuilder();
         prefix.append("PLATFORM_ID=").append(platform.id()).append('\n');
         prefix.append("PLATFORM_NEED_DB=").append(PlatformCompose.needsDb(platform) ? "1" : "0").append('\n');

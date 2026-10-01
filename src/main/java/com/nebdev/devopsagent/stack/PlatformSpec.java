@@ -143,6 +143,11 @@ public record PlatformSpec(
         return ROUTING_PATH.equals(routing);
     }
 
+    public PlatformSpec resolved() {
+        return new PlatformSpec(id, baseDomain, routing,
+                services.stream().map(PlatformServiceSpec::resolved).toList());
+    }
+
     public PlatformSpec masked() {
         return new PlatformSpec(id, baseDomain, routing,
                 services.stream().map(PlatformServiceSpec::masked).toList());

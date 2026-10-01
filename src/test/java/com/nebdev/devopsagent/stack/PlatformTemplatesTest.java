@@ -31,12 +31,16 @@ class PlatformTemplatesTest {
     }
 
     @Test
-    void hostPlaceholderIsReplacedAndCacheAliasesRedisPrivate() {
+    void hostPlaceholderIsKeptInIntentAndResolvedForTheServer() {
         PlatformSpec p = arcLike();
-        PlatformServiceSpec www = p.services().get(0);
-        PlatformServiceSpec api = p.services().get(1);
+        assertThat(p.services().get(0).buildArgs().get("NEXT_PUBLIC_API_URL")).isEqualTo("https://{{HOST}}/arc-api");
+        PlatformServiceSpec www = p.resolved().services().get(0);
+        PlatformServiceSpec api = p.resolved().services().get(1);
         assertThat(www.buildArgs().get("NEXT_PUBLIC_API_URL")).isEqualTo("https://arc.apps.exemple.com/arc-api");
         assertThat(api.env().get("APP_PUBLIC_BASE_URL")).isEqualTo("https://arc.apps.exemple.com/arc-api");
+        assertThat(PlatformCompose.yaml(p.resolved()))
+                .doesNotContain("{{HOST}}")
+                .contains("https://arc.apps.exemple.com/arc-api");
         assertThat(api.needs()).contains(PlatformServiceSpec.NEED_REDIS_PRIVATE);
         assertThat(api.keepPath()).isTrue();
         assertThat(www.keepPath()).isFalse();

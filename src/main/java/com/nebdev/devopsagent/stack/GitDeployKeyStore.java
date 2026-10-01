@@ -1,6 +1,10 @@
 package com.nebdev.devopsagent.stack;
 
 import com.nebdev.devopsagent.config.DevopsProperties;
+import net.schmizz.sshj.SSHClient;
+import net.schmizz.sshj.connection.channel.direct.Session;
+import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
+import net.schmizz.sshj.userauth.UserAuthException;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -126,6 +130,51 @@ public class GitDeployKeyStore {
             return Base64.getEncoder().encodeToString(Files.readAllBytes(repoPrivate(keyId(gitUrl))));
         }
         return privateKeyBase64();
+    }
+
+    public record Verification(boolean ok, String message) {}
+
+    /**
+     * READ : le dépôt accepte-t-il la clé ? Demande la liste des références (comme un clone), sans rien écrire.
+     * La clé privée ne quitte pas le poste (authentification par signature).
+     */
+    public Verification verify(String gitUrl) {
+        Matcher m = gitUrl == null ? null : SSH_REPO.matcher(gitUrl.trim());
+        if (m == null || !m.matches()) {
+            return new Verification(true, "Dépôt HTTPS : pas de clé nécessaire.");
+        }
+        Path key = hasRepoKey(gitUrl) ? repoPrivate(keyId(gitUrl)) : (present() ? privateKey : null);
+        if (key == null) {
+            return new Verification(false, "Pas encore de clé pour ce dépôt : clique Générer.");
+        }
+        String host = m.group(1);
+        String repoPath = m.group(2) + ".git";
+        try (SSHClient client = new SSHClient()) {
+            client.addHostKeyVerifier(new PromiscuousVerifier());
+            client.setConnectTimeout(10_000);
+            client.setTimeout(15_000);
+            client.connect(host, 22);
+            try {
+                client.authPublickey("git", client.loadKeys(key.toAbsolutePath().toString()));
+            } catch (UserAuthException e) {
+                return new Verification(false,
+                        "Clé refusée par " + host + " : colle la clé publique en Deploy key sur ce dépôt.");
+            }
+            try (Session session = client.startSession()) {
+                Session.Command cmd = session.exec("git-upload-pack '" + repoPath.replace("'", "") + "'");
+                byte[] buf = new byte[16];
+                int n = cmd.getInputStream().read(buf);
+                if (n > 0) {
+                    return new Verification(true, "Accès en lecture confirmé.");
+                }
+                String err = new String(cmd.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).strip();
+                return new Verification(false, err.isBlank()
+                        ? "Dépôt introuvable avec cette clé : vérifie qu’elle est collée sur CE dépôt."
+                        : "Refus du dépôt : " + err);
+            }
+        } catch (IOException e) {
+            return new Verification(false, "Contrôle impossible (" + e.getMessage() + "). Réessaie.");
+        }
     }
 
     public void generate(boolean rotate) throws IOException {

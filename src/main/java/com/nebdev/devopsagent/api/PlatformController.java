@@ -99,6 +99,16 @@ public class PlatformController {
         return out;
     }
 
+    @GetMapping("/status")
+    public Map<String, Object> status(@RequestParam("id") String id) throws IOException {
+        List<PlatformDeployService.ServiceStatus> services = deployService.status(id.trim());
+        return Map.of(
+                "id", id.trim().toLowerCase(),
+                "services", services,
+                "online", !services.isEmpty() && services.stream().allMatch(PlatformDeployService.ServiceStatus::online)
+        );
+    }
+
     @PostMapping("/deploy")
     public Map<String, Object> deploy(@RequestBody DeployRequest body) throws IOException {
         if (body == null || body.id() == null || body.id().isBlank()) {

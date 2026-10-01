@@ -162,6 +162,9 @@ function paint(snapshot, report, mode) {
   $("report").textContent = report || "—";
   lastAppsRunning = Array.isArray(snapshot.apps) ? snapshot.apps : [];
   if (mode) $("modePill").textContent = mode === "ssh" ? "SSH réel" : "Prêt pour le VPS";
+  journey.snapshot = snapshot;
+  document.body.classList.add("connected");
+  renderJourney();
   loadStack().then(loadPlan);
   loadApps();
   loadPlatforms();
@@ -880,6 +883,8 @@ function renderAppsGate(snapshot) {
 }
 
 function renderPlan(plan) {
+  journey.plan = plan;
+  renderJourney();
   const box = $("installActions");
   if (!box) return;
   const actions = plan && plan.actions ? plan.actions.slice() : [];
@@ -1471,7 +1476,7 @@ function addPlatServiceRow(svc) {
   const tplOpt = (v, label) => '<option value="' + v + '"' + (tpl === v ? " selected" : "") + ">" + label + "</option>";
   wrap.innerHTML = '<div class="plat-svc-head"><strong>Service</strong>'
     + '<button type="button" class="ghost ghost-danger plat-svc-del">Retirer</button></div>'
-    + '<div class="row2 app-fields">'
+    + '<div class="row2 app-fields plat-idport">'
     + '<label class="field">Identifiant<input class="plat-svc-id" type="text" value="' + esc(s.id || "") + '" placeholder="api" autocomplete="off" /></label>'
     + '<label class="field">Port<input class="plat-svc-port" type="number" value="' + (s.port || 8080) + '" min="1" max="65535" /></label>'
     + "</div>"
@@ -1635,6 +1640,7 @@ function fillArcPreset() {
   }
   platEditingId = "";
   $("platId").value = ARC_PRESET.id;
+  if ($("platBase")) $("platBase").value = "";
   if ($("platRouting")) $("platRouting").value = ARC_PRESET.routing;
   if (box) box.innerHTML = "";
   ARC_PRESET.services.forEach((s) => addPlatServiceRow(s));
@@ -1660,6 +1666,8 @@ function renderRepoKeys(j) {
   const box = $("gitRepoKeys");
   if (!box) return;
   const repos = j.repos || [];
+  journey.repos = repos;
+  renderJourney();
   if (!repos.length) {
     box.innerHTML = "<p class=\"hint\">" + esc(j.note || "Aucun dépôt git@… enregistré.") + "</p>";
     return;
@@ -1697,6 +1705,21 @@ function renderRepoKeys(j) {
         }
       });
       actions.appendChild(btnCopy);
+      const btnCheck = document.createElement("button");
+      btnCheck.type = "button";
+      btnCheck.className = "ghost";
+      btnCheck.textContent = gitVerified(k.repo) ? "Accès confirmé" : "Vérifier";
+      btnCheck.addEventListener("click", async () => {
+        try {
+          const v = await verifyRepo(k.repo);
+          setStatus(k.repo + " : " + v.message, v.ok ? "ok" : "err");
+          btnCheck.textContent = v.ok ? "Accès confirmé" : "Vérifier";
+        } catch (e) {
+          setStatus(e.message, "err");
+        }
+        renderJourney();
+      });
+      actions.appendChild(btnCheck);
     }
     row.appendChild(actions);
     box.appendChild(row);
@@ -1806,6 +1829,9 @@ async function restorePlatform() {
     hideBusy();
     const report = (j.report || []).join("\n");
     say("Restauré.\n" + report, "ok");
+    localStorage.setItem("vpsap.data." + t.host + "." + id, "done");
+    journey.viewing = "";
+    renderJourney();
     showResult({
       ok: true,
       kicker: "CHANGE · réussi",
@@ -1823,6 +1849,8 @@ async function restorePlatform() {
 
 function renderPlatList(platforms, deployReady) {
   fillRestorePlatforms(platforms);
+  journey.platforms = platforms;
+  renderJourney();
   const box = $("platList");
   if (!box) return;
   if (!platforms.length) {
@@ -1970,6 +1998,8 @@ async function savePlatform() {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.statusText);
     platEditingId = spec.id;
+    localStorage.setItem("vpsap.plat", spec.id);
+    journey.viewing = "";
     renderPlatList(j.platforms || []);
     loadRepoKeys();
     setPlatFormStatus(j.note || "Enregistré (local, pas de SSH).", "ok");
@@ -1995,6 +2025,388 @@ async function deletePlatform(p) {
     setStatus(e.message, "err");
   }
 }
+
+/* ---------- Parcours guidé : une étape à la fois (le mode expert garde le tableau complet) ---------- */
+
+const PREP_IDS = ["security", "docker", "traefik", "mariadb", "deploy"];
+const PREP_LABELS = {
+  security: "Sécurité : pare-feu, anti-intrusion, connexion SSH par clé uniquement",
+  docker: "Docker : le moteur qui fait tourner tes applications",
+  traefik: "Traefik : HTTPS automatique et routage vers tes applications",
+  mariadb: "MariaDB : la base de données (utilisée si ton appli en a besoin)",
+  deploy: "Compte deploy : un utilisateur sans droits admin qui fait tourner les applis",
+};
+const JOURNEY_STEPS = [
+  { id: "analyse", label: "Serveur analysé" },
+  { id: "prepare", label: "Serveur préparé" },
+  { id: "platform", label: "Plateforme décrite" },
+  { id: "git", label: "Accès aux dépôts" },
+  { id: "data", label: "Données" },
+  { id: "online", label: "En ligne" },
+];
+
+const journey = {
+  snapshot: null,
+  plan: null,
+  platforms: [],
+  repos: [],
+  status: null,
+  statusFor: "",
+  statusPending: false,
+  viewing: "",
+};
+
+function guided() {
+  return document.body.classList.contains("guided");
+}
+
+function setGuided(on) {
+  document.body.classList.toggle("guided", on);
+  localStorage.setItem("vpsap.expert", on ? "0" : "1");
+  if ($("btnExpert")) $("btnExpert").textContent = on ? "Mode expert" : "Parcours guidé";
+  renderJourney();
+}
+
+function journeyPlatform() {
+  const saved = localStorage.getItem("vpsap.plat");
+  return journey.platforms.find((p) => p.id === saved) || journey.platforms[0] || null;
+}
+
+function journeyRepos(p) {
+  if (!p) return [];
+  return journey.repos.filter((r) => (r.usedBy || []).some((u) => u.startsWith(p.id + " / ")));
+}
+
+function gitVerified(repo) {
+  return localStorage.getItem("vpsap.git." + repo) === "1";
+}
+
+function dataKey(p) {
+  return "vpsap.data." + target().host + "." + (p ? p.id : "");
+}
+
+function platformHasData(p) {
+  return (p.services || []).some((s) => (s.needs || []).some((n) => n === "mariadb" || n.startsWith("volume:")));
+}
+
+function prepMissing() {
+  const actions = (journey.plan && journey.plan.actions) || [];
+  return PREP_IDS.filter((id) => {
+    const a = actions.find((x) => x.id === id);
+    return !a || a.status !== "SKIP";
+  });
+}
+
+function journeyDone() {
+  const p = journeyPlatform();
+  const repos = journeyRepos(p);
+  return {
+    analyse: !!journey.snapshot,
+    prepare: !!journey.plan && prepMissing().length === 0,
+    platform: !!p,
+    git: !!p && repos.every((r) => gitVerified(r.repo)),
+    data: !!p && (!platformHasData(p) || !!localStorage.getItem(dataKey(p))),
+    online: !!p && !!journey.status && journey.statusFor === p.id && journey.status.online,
+  };
+}
+
+function journeyCurrent(done) {
+  const s = JOURNEY_STEPS.find((x) => !done[x.id]);
+  return s ? s.id : "done";
+}
+
+function renderJourney() {
+  if (!$("journey") || !journey.snapshot) return;
+  const done = journeyDone();
+  const current = journeyCurrent(done);
+  const showing = journey.viewing || current;
+  const plat = journeyPlatform();
+  if (current === "online" && plat && journey.statusFor !== plat.id && !journey.statusPending) {
+    journey.statusPending = true;
+    refreshJourneyStatus(false).finally(() => { journey.statusPending = false; });
+  }
+  const snap = journey.snapshot;
+  $("journeyServer").textContent = [
+    snap.profileName, snap.host, snap.osPretty,
+    snap.cpu && snap.cpu.vcpus ? snap.cpu.vcpus + " vCPU" : "",
+    snap.memory && snap.memory.totalBytes ? humanBytes(snap.memory.totalBytes) + " RAM" : "",
+  ].filter(Boolean).join(" · ");
+
+  const ol = $("journeySteps");
+  ol.innerHTML = "";
+  JOURNEY_STEPS.forEach((s) => {
+    const li = document.createElement("li");
+    li.textContent = s.label;
+    if (done[s.id]) li.classList.add("done");
+    if (s.id === current) li.classList.add("current");
+    if (s.id === showing && journey.viewing) li.classList.add("viewing");
+    li.addEventListener("click", () => {
+      journey.viewing = s.id === current ? "" : s.id;
+      renderJourney();
+    });
+    ol.appendChild(li);
+  });
+
+  const workloads = document.querySelector(".band-workloads");
+  const sectionFor = { platform: "platform", git: "git", data: "data" }[showing] || "";
+  if (workloads) workloads.classList.toggle("journey-show", guided() && !!sectionFor);
+  if ($("platformsCard")) {
+    document.querySelectorAll("#platformsCard [data-jsec]").forEach((el) => {
+      el.classList.toggle("journey-off", el.dataset.jsec !== sectionFor);
+    });
+  }
+  renderJourneyCard(showing, current, done);
+}
+
+function journeyButton(label, onClick, kind) {
+  const b = document.createElement("button");
+  b.type = "button";
+  if (kind) b.className = kind;
+  b.textContent = label;
+  b.addEventListener("click", onClick);
+  $("journeyActions").appendChild(b);
+  return b;
+}
+
+function journeyListItems(items) {
+  const ul = $("journeyList");
+  ul.innerHTML = "";
+  ul.hidden = !items.length;
+  items.forEach((it) => {
+    const li = document.createElement("li");
+    if (it.cls) li.className = it.cls;
+    li.innerHTML = it.html;
+    ul.appendChild(li);
+  });
+}
+
+function renderJourneyCard(step, current, done) {
+  const p = journeyPlatform();
+  const idx = JOURNEY_STEPS.findIndex((s) => s.id === step);
+  $("journeyKicker").textContent = step === "done"
+    ? "Terminé"
+    : "Étape " + (idx + 1) + " sur " + JOURNEY_STEPS.length + (step !== current ? " · déjà faite, tu peux la revoir" : "");
+  $("journeyActions").innerHTML = "";
+  $("journeyHint").hidden = true;
+  journeyListItems([]);
+  const hint = (text) => { $("journeyHint").hidden = false; $("journeyHint").innerHTML = text; };
+
+  switch (step) {
+    case "analyse":
+      $("journeyTitle").textContent = "Analyser le serveur";
+      $("journeyText").textContent = "Renseigne l’IP et l’utilisateur à gauche, puis clique Analyser le VPS. Rien n’est modifié.";
+      break;
+    case "prepare": {
+      const missing = prepMissing();
+      $("journeyTitle").textContent = missing.length ? "Préparer le serveur" : "Serveur prêt";
+      $("journeyText").textContent = missing.length
+        ? "L’agent installe en une fois ce qu’il faut pour héberger des applications. Tu confirmes une seule fois, puis tu laisses la page ouverte (5 à 15 minutes)."
+        : "Tout est installé et sécurisé sur ce serveur.";
+      journeyListItems(PREP_IDS.map((id) => ({
+        html: esc(PREP_LABELS[id]),
+        cls: missing.includes(id) ? "" : "ok",
+      })));
+      if (missing.length) journeyButton("Préparer le serveur", prepareServer, "change");
+      break;
+    }
+    case "platform":
+      $("journeyTitle").textContent = p ? "Plateforme « " + p.id + " »" : "Décrire ta plateforme";
+      $("journeyText").textContent = p
+        ? "Tu peux la modifier ci-dessous, puis Enregistrer. Rien n’est encore installé sur le serveur."
+        : "Une plateforme = tes applications (site, back-office, API…), chacune avec son dépôt Git. Pars d’un modèle ou d’une fiche vide, puis Enregistrer.";
+      if (!p) {
+        journeyButton("Partir du modèle ARC", fillArcPreset, "ghost");
+        journeyButton("Fiche vide", clearPlatForm, "ghost");
+      }
+      hint("Pas encore de nom de domaine ? Laisse les noms d’hôte vides : l’agent utilise une adresse automatique <code>…sslip.io</code>. Tu mettras ton domaine plus tard, puis Enregistrer et Déployer.");
+      break;
+    case "git": {
+      const repos = journeyRepos(p);
+      $("journeyTitle").textContent = repos.length ? "Donner accès à tes dépôts privés" : "Aucun dépôt privé";
+      $("journeyText").textContent = repos.length
+        ? "Pour chaque dépôt ci-dessous : Générer, Copier, ouvrir le lien, coller la clé sur GitHub (case « Allow write access » décochée). Puis Vérifier."
+        : "Tes dépôts sont publics (HTTPS) : rien à faire ici.";
+      journeyListItems(repos.map((r) => ({
+        html: esc(r.repo) + (gitVerified(r.repo) ? " — accès confirmé" : r.present ? " — clé générée, à coller puis vérifier" : " — pas encore de clé"),
+        cls: gitVerified(r.repo) ? "ok" : "",
+      })));
+      if (repos.length) journeyButton("Tout vérifier", verifyAllRepos, "");
+      break;
+    }
+    case "data":
+      $("journeyTitle").textContent = "Restaurer les données (si besoin)";
+      $("journeyText").textContent = "Si ton application a besoin d’une base existante (c’est le cas d’ARC), envoie le dump SQL et l’archive des fichiers ci-dessous. Sinon, passe cette étape.";
+      journeyButton("Pas de données à restaurer", () => {
+        localStorage.setItem(dataKey(p), "skip");
+        journey.viewing = "";
+        renderJourney();
+      }, "ghost");
+      break;
+    case "online":
+      $("journeyTitle").textContent = "Mettre en ligne « " + (p ? p.id : "") + " »";
+      $("journeyText").textContent = "L’agent récupère le code, construit les images et ouvre l’accès HTTPS. Le premier déploiement peut prendre jusqu’à 20 minutes.";
+      renderStatusList();
+      if (p) {
+        journeyButton("Déployer", async () => {
+          await deployPlatform(p);
+          await refreshJourneyStatus(true);
+        }, "change");
+        journeyButton("Vérifier l’accès", () => refreshJourneyStatus(true), "ghost");
+      }
+      break;
+    case "done":
+      $("journeyTitle").textContent = "« " + p.id + " » est en ligne";
+      $("journeyText").textContent = "Tes applications répondent en HTTPS. Pour mettre à jour après un changement de code ou de domaine : modifie la fiche si besoin, puis Déployer.";
+      renderStatusList();
+      journeyButton("Vérifier à nouveau", () => refreshJourneyStatus(true), "ghost");
+      journeyButton("Redéployer", async () => {
+        await deployPlatform(p);
+        await refreshJourneyStatus(true);
+      }, "ghost");
+      break;
+    default:
+      throw new Error("Étape inconnue : " + step);
+  }
+  if (step !== current) {
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "linkish";
+    back.textContent = "Revenir à l’étape en cours";
+    back.addEventListener("click", () => { journey.viewing = ""; renderJourney(); });
+    $("journeyActions").appendChild(back);
+  }
+}
+
+function renderStatusList() {
+  const st = journey.status;
+  if (!st || !st.services) return;
+  journeyListItems(st.services.map((s) => ({
+    html: esc(s.service) + " — <a href=\"" + esc(s.url) + "\" target=\"_blank\" rel=\"noopener\">" + esc(s.url) + "</a>"
+      + (s.online ? " (répond, HTTP " + s.httpCode + ")" : s.httpCode > 0 ? " (erreur HTTP " + s.httpCode + ")" : " (pas encore joignable)"),
+    cls: s.online ? "ok" : "err",
+  })));
+}
+
+async function refreshJourneyStatus(force) {
+  const p = journeyPlatform();
+  if (!p) return;
+  if (!force && journey.statusFor === p.id) return;
+  try {
+    const r = await fetch("/api/v1/platforms/status?id=" + encodeURIComponent(p.id));
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    journey.status = j;
+    journey.statusFor = p.id;
+  } catch (e) {
+    journey.status = null;
+    journey.statusFor = p.id;
+    setStatus("Vérification de l’accès : " + e.message, "err");
+  }
+  renderJourney();
+}
+
+async function verifyRepo(repo) {
+  const r = await fetch("/api/v1/git-deploy-key/repos/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo }),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  if (j.ok) localStorage.setItem("vpsap.git." + repo, "1");
+  else localStorage.removeItem("vpsap.git." + repo);
+  return j;
+}
+
+async function verifyAllRepos() {
+  const repos = journeyRepos(journeyPlatform());
+  const failures = [];
+  for (const k of repos) {
+    setStatus("Vérification de " + k.repo + "…");
+    try {
+      const v = await verifyRepo(k.repo);
+      if (!v.ok) failures.push(k.repo + " : " + v.message);
+    } catch (e) {
+      failures.push(k.repo + " : " + e.message);
+    }
+  }
+  setStatus(failures.length ? failures.join(" · ") : "Tous les dépôts acceptent leur clé.", failures.length ? "err" : "ok");
+  renderJourney();
+}
+
+async function prepareServer() {
+  const t = target();
+  const missing = prepMissing();
+  const accepted = await showConfirmPlan({
+    kicker: "CHANGE · confirmation",
+    title: "Préparer le serveur " + t.host,
+    detail: "L’agent installe dans cet ordre, puis réanalyse le serveur. Chaque brique est un script versionné qui peut être relancé sans risque.",
+    actions: missing.map((id) => PREP_LABELS[id]),
+    warnings: missing.includes("security")
+      ? ["Après la sécurité, la connexion SSH par mot de passe et la connexion root seront fermées. Garde ta clé SSH personnelle : ton compte admin reste autorisé."]
+      : [],
+    canProceed: true,
+  });
+  if (!accepted) return;
+  const order = missing.slice();
+  showBusy({
+    risk: "CHANGE",
+    title: "Préparation du serveur",
+    detail: "Cible " + t.user + "@" + t.host + ". Ne ferme pas cette page.",
+    steps: order.map((id) => PREP_LABELS[id].split(" :")[0]),
+    currentStep: 0,
+  });
+  const startedAt = Date.now();
+  try {
+    for (let guard = 0; guard < 8; guard += 1) {
+      const pr = await fetch("/api/v1/plan");
+      journey.plan = await pr.json();
+      const next = PREP_IDS.map((id) => journey.plan.actions.find((a) => a.id === id))
+        .find((a) => a && a.status === "READY");
+      if (!next) break;
+      const i = order.indexOf(next.id);
+      updateBusy({ currentStep: i < 0 ? 0 : i, steps: order.map((id) => PREP_LABELS[id].split(" :")[0]),
+        detail: "En cours : " + PREP_LABELS[next.id].split(" :")[0] + ". Les images Docker peuvent prendre quelques minutes." });
+      const r = await fetch("/api/v1/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ component: next.id, host: t.host, port: t.port, user: t.user, confirm: true }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(PREP_LABELS[next.id].split(" :")[0] + " : " + (j.error || r.statusText));
+      paint(j.snapshot, j.report, "ssh");
+    }
+    const pr = await fetch("/api/v1/plan");
+    journey.plan = await pr.json();
+    renderPlan(journey.plan);
+    hideBusy();
+    const left = prepMissing();
+    showResult({
+      ok: left.length === 0,
+      kicker: left.length ? "CHANGE · incomplet" : "CHANGE · réussi",
+      title: left.length ? "Préparation incomplète" : "Serveur prêt",
+      detail: left.length
+        ? "Encore à faire : " + left.map((id) => PREP_LABELS[id].split(" :")[0]).join(", ") + ". Ouvre le mode expert pour voir pourquoi."
+        : "Tout est installé en " + formatElapsed(Date.now() - startedAt) + ".",
+      next: left.length ? "" : "Étape suivante : décrire ta plateforme.",
+    });
+  } catch (e) {
+    hideBusy();
+    showResult({ ok: false, kicker: "CHANGE · échec", title: "Préparation interrompue", detail: e.message,
+      next: "Ce qui est déjà installé reste en place. Corrige, puis relance « Préparer le serveur »." });
+  }
+  renderJourney();
+}
+
+if ($("btnExpert")) $("btnExpert").addEventListener("click", () => setGuided(!guided()));
+if ($("btnRailSetup")) {
+  $("btnRailSetup").addEventListener("click", () => {
+    const on = document.body.classList.toggle("show-setup");
+    $("btnRailSetup").textContent = on ? "Masquer les options de connexion" : "Options de connexion";
+  });
+}
+document.body.classList.toggle("guided", localStorage.getItem("vpsap.expert") !== "1");
+if ($("btnExpert")) $("btnExpert").textContent = guided() ? "Mode expert" : "Parcours guidé";
 
 showView(currentView());
 refreshPwsh();

@@ -104,6 +104,15 @@ public class GitDeployKeyController {
         return repos();
     }
 
+    /** READ : vérifie que le dépôt accepte la clé (après collage sur GitHub/GitLab). */
+    @PostMapping("/repos/verify")
+    public GitDeployKeyStore.Verification verify(@RequestBody(required = false) RepoRequest body) {
+        if (body == null || body.repo() == null || body.repo().isBlank()) {
+            throw new IllegalArgumentException("Indique le dépôt (git@github.com:org/repo.git).");
+        }
+        return store.verify(body.repo().trim());
+    }
+
     private static void track(Map<String, List<String>> usedBy, String gitUrl, String label) {
         if (GitDeployKeyStore.keyId(gitUrl).isEmpty()) {
             return;

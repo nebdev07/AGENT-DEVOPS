@@ -113,7 +113,8 @@ body {
 }
 .nav a:hover, .nav a.active { color: var(--text); }
 .nav a.active { background: rgba(255, 255, 255, 0.05); }
-.nav-cta {
+.nav-cta,
+.nav a.nav-cta.active {
   background: var(--accent);
   color: var(--accent-ink) !important;
   font-weight: 600;
@@ -709,6 +710,11 @@ button:hover:not(:disabled), .btn:hover { filter: brightness(1.08); }
   margin-bottom: 0.35rem;
 }
 .plat-svc-head strong { font-size: 0.92rem; }
+.plat-svc-head button { width: auto; margin: 0; padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+#platformsCard .row2.app-fields { grid-template-columns: 1fr 1fr; }
+#platformsCard .row2.app-fields.plat-idport { grid-template-columns: 1fr 110px; }
+.plat-needs input[type="checkbox"],
+.field.plat-keep input[type="checkbox"] { width: auto; margin: 0; }
 .plat-needs { display: flex; flex-wrap: wrap; gap: 0.75rem 1.1rem; margin-top: 0.55rem; font-size: 0.88rem; }
 .plat-needs label { display: flex; align-items: center; gap: 0.35rem; margin: 0; }
 .action-row {
@@ -886,4 +892,89 @@ body.is-busy { overflow: hidden; }
   .copyrow { grid-template-columns: 1fr; }
   .top { flex-wrap: wrap; }
   .nav { order: 3; width: 100%; }
+}
+
+/* Parcours guidé (par défaut) : une étape à la fois. Mode expert = tableau complet. */
+.journey { display: grid; gap: 0.9rem; }
+.journey-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.journey-head .mono { margin: 0; }
+.journey-head button { width: auto; margin: 0; }
+.journey-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.4rem;
+  counter-reset: jstep;
+}
+.journey-steps li {
+  counter-increment: jstep;
+  padding: 0.55rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--inset);
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  user-select: none;
+}
+.journey-steps li::before {
+  content: counter(jstep);
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin-right: 0.4rem;
+  border-radius: 99px;
+  border: 1px solid var(--line-hi);
+  font-size: 0.72rem;
+}
+.journey-steps li.done { color: var(--text); border-color: rgba(143, 205, 192, 0.28); }
+.journey-steps li.done::before { content: "✓"; background: var(--accent-dim); color: var(--ok); border-color: rgba(143, 205, 192, 0.4); }
+.journey-steps li.current { color: var(--text); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.journey-steps li.current::before { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.journey-steps li.viewing { outline: 1px dashed var(--line-hi); outline-offset: 2px; }
+.journey-card { border-color: rgba(143, 205, 192, 0.22); }
+.journey-card h2 { font-size: 1.5rem; }
+.journey-text { margin: 0.2rem 0 0.6rem; color: var(--text); line-height: 1.5; max-width: 62ch; }
+.journey-list { margin: 0 0 0.8rem; padding-left: 1.1rem; color: var(--muted); line-height: 1.6; }
+.journey-list li.ok { color: var(--ok); }
+.journey-list li.err { color: var(--danger); }
+.journey-list a { color: var(--accent); }
+.journey-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.journey-actions button { width: auto; margin: 0; }
+.journey-actions .linkish {
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  padding: 0.4rem;
+  cursor: pointer;
+}
+
+body.guided .band,
+body.guided #appsCard { display: none; }
+body.guided.connected:not(.show-setup) .rail-setup { display: none; }
+.rail-toggle { display: none; }
+body.guided.connected .rail-toggle {
+  display: block;
+  width: auto;
+  margin: 0.2rem 0 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  padding: 0.2rem 0;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+body.guided .band.band-workloads.journey-show { display: grid; }
+body.guided .band.band-workloads.journey-show > .band-label { display: none; }
+body.guided #platformsCard [data-jsec].journey-off { display: none; }
+body:not(.guided) .journey-card { display: none; }
+body:not(.guided) .journey-steps { display: none; }
+
+@media (max-width: 900px) {
+  .journey-steps { grid-template-columns: repeat(3, 1fr); }
 }

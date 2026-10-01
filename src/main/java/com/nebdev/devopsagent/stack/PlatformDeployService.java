@@ -11,8 +11,11 @@ import com.nebdev.devopsagent.state.StateStore;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class PlatformDeployService {
@@ -169,6 +172,22 @@ public class PlatformDeployService {
             PublicReachability.checkHttpsUrl(PlatformCompose.publicUrl(platform, s));
         }
         return discovery;
+    }
+
+    public record ServiceStatus(String service, String url, int httpCode, boolean online) {}
+
+    /** READ : interroge en HTTPS l’URL publique de chaque service (certificat valide exigé), en parallèle. */
+    public List<ServiceStatus> status(String platformId) throws IOException {
+        PlatformSpec platform = store.require(platformId);
+        List<CompletableFuture<ServiceStatus>> futures = new ArrayList<>();
+        for (PlatformServiceSpec s : platform.services()) {
+            String url = PlatformCompose.publicUrl(platform, s);
+            futures.add(CompletableFuture.supplyAsync(() -> {
+                int code = PublicReachability.probe(url);
+                return new ServiceStatus(s.id(), url, code, code >= 200 && code < 500);
+            }));
+        }
+        return futures.stream().map(CompletableFuture::join).toList();
     }
 
     private ServerSnapshot lastSnapshot() throws IOException {

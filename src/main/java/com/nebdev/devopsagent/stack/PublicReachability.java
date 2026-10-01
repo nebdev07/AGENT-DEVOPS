@@ -21,6 +21,26 @@ final class PublicReachability {
         checkHttpsUrl("https://" + hostname.trim().toLowerCase() + "/");
     }
 
+    /** Code HTTP de l’URL publique (certificat valide exigé), ou -1 si injoignable. Ne lève pas. */
+    static int probe(String url) {
+        try {
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(6))
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .build();
+            HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(12))
+                    .GET()
+                    .build();
+            return client.send(req, HttpResponse.BodyHandlers.discarding()).statusCode();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return -1;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
     static void checkHttpsUrl(String url) {
         if (url == null || url.isBlank()) {
             return;

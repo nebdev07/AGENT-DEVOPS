@@ -71,6 +71,15 @@ public record PlatformServiceSpec(
         return pathRouting && !keepPath && !pathPrefix.isBlank() && !"/".equals(pathPrefix);
     }
 
+    /**
+     * Copie pour le serveur : {@value #HOST_PLACEHOLDER} remplacé par le nom d’hôte. La fiche garde le marqueur,
+     * pour qu’un changement de domaine ne demande que Enregistrer + Déployer.
+     */
+    public PlatformServiceSpec resolved() {
+        return new PlatformServiceSpec(id, gitUrl, gitRef, hostname, port, context, needs,
+                withHost(buildArgs, hostname), pathPrefix, template, withHost(env, hostname), keepPath);
+    }
+
     /** Copie pour l’API : valeurs sensibles masquées. */
     public PlatformServiceSpec masked() {
         if (env.isEmpty()) {
@@ -173,10 +182,10 @@ public record PlatformServiceSpec(
                     "remplis le domaine de la plateforme, ou un DNS complet par service."));
         }
         List<String> needList = normalizeNeeds(slug, needs);
-        Map<String, String> args = withHost(normalizeBuildArgs(slug, buildArgs), host);
+        Map<String, String> args = normalizeBuildArgs(slug, buildArgs);
         String path = pathRouting ? normalizePath(slug, pathPrefix) : "";
         String tpl = normalizeTemplate(slug, template);
-        Map<String, String> envMap = withHost(normalizeEnv(slug, env), host);
+        Map<String, String> envMap = normalizeEnv(slug, env);
         boolean keep = pathRouting && keepPath && !"/".equals(path);
         return new PlatformServiceSpec(slug, git, ref, host, p, ctx, needList, args, path, tpl, envMap, keep);
     }

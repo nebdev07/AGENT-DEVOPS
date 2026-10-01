@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app22" />
+  <link rel="stylesheet" href="/console.css?v=app23" />
 </head>
 <body>
   <div class="bg"></div>
@@ -190,6 +190,26 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
         </li>
 
         <li class="step">
+          <h3>4b. Le parcours guidé (par défaut)</h3>
+          <p>
+            Après l’analyse, le cockpit n’affiche <strong>qu’une étape à la fois</strong> :
+            Analyser → Préparer le serveur → Plateforme → Accès Git → Données → En ligne.
+            La carte « Prochaine étape » dit quoi faire et propose un seul bouton.
+          </p>
+          <ul>
+            <li><strong>Préparer le serveur</strong> — un seul plan à confirmer, puis Sécurité, Docker, Traefik, MariaDB et compte deploy s’enchaînent (ce qui est déjà posé est sauté).</li>
+            <li><strong>Accès Git</strong> — une clé par dépôt ; colle-la sur GitHub, puis <strong>Vérifier</strong> (lecture seule, aucun clone).</li>
+            <li><strong>Données</strong> — restaurer un dump et des fichiers, ou passer l’étape.</li>
+            <li><strong>En ligne</strong> — l’agent teste chaque adresse HTTPS (certificat valide exigé).</li>
+          </ul>
+          <p class="hint">
+            Les étapes faites restent cliquables pour y revenir. <strong>Mode expert</strong> réaffiche tous les panneaux (choix fin des installations, apps simples).
+            <strong>Options de connexion</strong> (rail de gauche) réaffiche mot de passe, clé et empreinte une fois connecté.
+            Nom d’hôte avec <code>{{HOST}}</code> : remplacé au déploiement — après le mapping DNS, change le nom d’hôte, Enregistrer, Déployer.
+          </p>
+        </li>
+
+        <li class="step">
           <h3>5. Choisir quoi installer (après l’analyse)</h3>
           <p>
             La carte <strong>Installations</strong> (le bouton Installer) est juste sous le tableau. La liste <strong>« Que doit installer l’agent ? »</strong> est en dessous, dans un menu <strong>fermé</strong> : clique le titre pour déplier. Elle décrit ce que tu <em>veux</em> sur <em>ce VPS</em>, ce n’est pas le bouton.
@@ -293,7 +313,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
       <label class="field">Hôte / IP
         <input id="sshHost" type="text" autocomplete="off" placeholder="IP ou nom DNS" />
       </label>
-      <label class="field">Système
+      <label class="field rail-setup">Système
         <select id="vpsOs">
           <option value="auto" selected>Auto (détecté à l’analyse)</option>
           <option value="ubuntu">Ubuntu</option>
@@ -314,18 +334,19 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           <input id="sshPort" type="number" value="22" min="1" max="65535" />
         </label>
       </div>
-      <label class="field">Mot de passe SSH (mail OVH, jamais enregistré)
+      <label class="field rail-setup">Mot de passe SSH (mail OVH, jamais enregistré)
         <input id="sshPassword" type="password" autocomplete="off" placeholder="requis pour installer la clé" />
       </label>
-      <div class="key-mini">
+      <div class="key-mini rail-setup">
         <p class="hint" id="pubKeyHint">Clé publique : voir l’aide.</p>
         <button id="btnCopyRail" type="button" class="ghost slim hidden">Copier la clé</button>
       </div>
-      <button id="btnInstallKey" type="button" class="change">Installer la clé (CHANGE)</button>
-      <button id="btnTrust" type="button" class="ghost">Enregistrer l’empreinte SSH</button>
+      <button id="btnInstallKey" type="button" class="change rail-setup">Installer la clé (CHANGE)</button>
+      <button id="btnTrust" type="button" class="ghost rail-setup">Enregistrer l’empreinte SSH</button>
       <button id="btnDiscover" type="button">Analyser le VPS</button>
+      <button id="btnRailSetup" type="button" class="linkish rail-toggle">Options de connexion</button>
       <p id="statusLine" class="status">Prêt.</p>
-      <div class="legend">
+      <div class="legend rail-setup">
         <div><i class="dot read"></i> Vert — présent / sain</div>
         <div><i class="dot mute"></i> Gris — absent (pas encore installé)</div>
         <div><i class="dot change"></i> Ambre — inconnu</div>
@@ -340,6 +361,22 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
       </div>
 
       <div id="board" class="board hidden">
+        <div class="journey" id="journey">
+          <div class="journey-head">
+            <p class="mono" id="journeyServer">—</p>
+            <button id="btnExpert" type="button" class="ghost slim">Mode expert</button>
+          </div>
+          <ol class="journey-steps" id="journeySteps"></ol>
+          <article class="card journey-card" id="journeyCard">
+            <p class="kicker" id="journeyKicker">Étape</p>
+            <h2 id="journeyTitle">—</h2>
+            <p id="journeyText" class="journey-text"></p>
+            <ul id="journeyList" class="journey-list" hidden></ul>
+            <div class="journey-actions" id="journeyActions"></div>
+            <p class="hint" id="journeyHint" hidden></p>
+          </article>
+        </div>
+
         <div class="band band-observe">
           <p class="band-label">État du serveur</p>
           <div class="hero-row">
@@ -427,6 +464,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           </article>
 
           <article class="card hidden" id="platformsCard">
+            <div id="secPlatForm" data-jsec="platform">
             <p class="kicker">V7 · Git → images → Traefik</p>
             <h2>Déclarer une plateforme</h2>
             <p class="hint">Un produit = plusieurs services (site, API, admin…). Enregistre d’abord, puis <strong>Déployer</strong> (CHANGE confirmé). Compose généré, aucun port public.</p>
@@ -455,6 +493,8 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             </div>
             <p id="platFormStatus" class="app-form-status" hidden></p>
             <div id="platList" class="action-list"></div>
+            </div>
+            <div id="secRestore" data-jsec="data">
             <p class="kicker" style="margin-top:1.1rem">Restaurer les données (avant ou après Déployer)</p>
             <p class="hint">Pour une appli qui ne sait pas créer sa base seule (ex. ARC) : envoie un <strong>dump SQL</strong> (<code>.sql</code> ou <code>.sql.gz</code>, MySQL ou MariaDB) et/ou une <strong>archive des fichiers</strong> (<code>.tar.gz</code> ou <code>.zip</code>, contenu à la racine). La base actuelle est sauvegardée sur le VPS avant d’être remplacée. Utilise de préférence une base de démonstration, pas les données réelles des membres.</p>
             <div class="row2 app-fields">
@@ -477,9 +517,12 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
               <button id="btnPlatRestore" type="button" class="change">Restaurer sur le VPS</button>
             </div>
             <p id="restoreStatus" class="app-form-status" hidden></p>
+            </div>
+            <div id="secGitKeys" data-jsec="git">
             <p class="kicker" style="margin-top:1.1rem">Clés Git par dépôt privé</p>
             <p class="hint">GitHub refuse la même Deploy key sur deux dépôts : une clé par dépôt <code>git@…</code>. Pour chaque ligne : <strong>Générer</strong>, <strong>Copier</strong>, ouvre le lien, colle la clé (case <em>Allow write access</em> décochée), puis Déployer.</p>
             <div id="gitRepoKeys" class="action-list"></div>
+            </div>
           </article>
         </div>
 
@@ -556,6 +599,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app22"></script>
+  <script src="/console.js?v=app23"></script>
 </body>
 </html>
