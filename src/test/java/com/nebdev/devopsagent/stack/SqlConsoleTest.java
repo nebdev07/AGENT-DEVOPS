@@ -133,4 +133,18 @@ class SqlConsoleTest {
                 .containsExactly("ok", "error", "skipped");
         assertThat(r.statements().get(0).rows()).hasSize(1);
     }
+
+    @Test
+    void bitColumnsWrittenAsRawBytesDoNotDropTheRows() {
+        String xml = String.join("\n",
+                "<?xml version=\"1.0\"?>",
+                "<resultset statement=\"SELECT id, is_locked FROM users\">",
+                "  <row><field name=\"id\">2</field><field name=\"is_locked\">\u0001</field></row>",
+                "  <row><field name=\"id\">7</field><field name=\"is_locked\">\u0000</field></row>",
+                "</resultset>");
+        var sets = PlatformSqlService.parseXml(xml);
+        assertThat(sets).hasSize(1);
+        assertThat(sets.get(0).columns()).containsExactly("id", "is_locked");
+        assertThat(sets.get(0).rows()).containsExactly(List.of("2", "1"), List.of("7", "0"));
+    }
 }

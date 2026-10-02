@@ -179,7 +179,7 @@ public class PlatformSqlService {
         if (output == null || output.isBlank()) {
             return sets;
         }
-        for (String chunk : output.split("<\\?xml[^>]*\\?>")) {
+        for (String chunk : xmlSafe(output).split("<\\?xml[^>]*\\?>")) {
             if (chunk.isBlank()) {
                 continue;
             }
@@ -196,6 +196,32 @@ public class PlatformSqlService {
             sets.addAll(handler.sets);
         }
         return sets;
+    }
+
+    /**
+     * mariadb --xml écrit les colonnes BIT(1) (booléens JPA) en octet brut 0x00 / 0x01,
+     * interdit en XML 1.0 : sans ce remplacement le parseur s'arrête et perd les lignes.
+     */
+    static String xmlSafe(String output) {
+        StringBuilder sb = null;
+        for (int i = 0; i < output.length(); i++) {
+            char c = output.charAt(i);
+            if (c >= 0x20 || c == '\t' || c == '\n' || c == '\r') {
+                if (sb != null) {
+                    sb.append(c);
+                }
+                continue;
+            }
+            if (sb == null) {
+                sb = new StringBuilder(output.length()).append(output, 0, i);
+            }
+            sb.append(switch (c) {
+                case 0 -> '0';
+                case 1 -> '1';
+                default -> '\uFFFD';
+            });
+        }
+        return sb == null ? output : sb.toString();
     }
 
     private static final class ResultSetHandler extends DefaultHandler {

@@ -3,6 +3,10 @@
 > Ne jamais effacer une entrée.  
 > Dernière mise à jour : 2026-10-01
 
+## 2026-10-02
+
+- Correctif **Console SQL** : les colonnes `BIT(1)` (booléens JPA, ex. `users.is_locked`) étaient écrites par `mariadb --xml` en octet brut 0x00/0x01, interdit en XML ; le parseur s'arrêtait au champ fautif et le résultat revenait sans aucune ligne. Ces octets sont désormais lus comme `0`/`1` (autres caractères de contrôle → `�`). Constaté sur 213.156.134.92 (`SELECT … is_locked … FROM users` vide alors que `COUNT(*)` = 12). Tests : 114 → 115.
+
 ## 2026-10-01
 
 - **Parcours guidé** (cockpit, par défaut) : barre de 6 étapes (Analyser → Préparer le serveur → Plateforme → Accès Git → Données → En ligne) et une carte « Prochaine étape » avec un seul bouton. Les bandes Installer / Apps et les réglages SSH du rail sont masqués une fois connecté (**Mode expert** et **Options de connexion** pour les réafficher). **Préparer le serveur** : un seul plan confirmé, puis Sécurité, Docker, Traefik, MariaDB et compte deploy enchaînés (ce qui est déjà posé est sauté). Aide §4b. Cache `?v=app23`. Corrections de mise en page du formulaire de service et de l’onglet actif.
