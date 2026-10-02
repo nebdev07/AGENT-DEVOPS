@@ -56,7 +56,8 @@ public class PlatformRestoreService {
             boolean confirmed,
             RestoreFile sql,
             RestoreFile uploads,
-            String uploadsSubdir
+            String uploadsSubdir,
+            boolean foreignKeyChecks
     ) throws IOException {
         actionGuard.assertConfirmedChange("restore-platform", confirmed);
         forbiddenTargetGuard.assertAllowed(target.host());
@@ -92,7 +93,7 @@ public class PlatformRestoreService {
             files.put(uploadsName, uploads.path());
         }
         String remoteDir = "/tmp/autopilot-restore-" + platform.id() + "-" + HexFormat.of().formatHex(nextBytes());
-        String script = RoleScript.loadPlatformRestore(platform, remoteDir, sqlName, uploadsName, subdir);
+        String script = RoleScript.loadPlatformRestore(platform, remoteDir, sqlName, uploadsName, subdir, foreignKeyChecks);
         sshConnector.uploadFiles(target, remoteDir, files);
         String raw;
         try {
@@ -172,14 +173,15 @@ public class PlatformRestoreService {
             String t = line.strip();
             if (t.startsWith("DB_BACKUP=") || t.startsWith("SQL_RESTORED=") || t.startsWith("TABLES=")
                     || t.startsWith("UPLOADS_BACKUP=") || t.startsWith("UPLOADS_RESTORED=") || t.startsWith("FILES=")
-                    || t.startsWith("SERVICES_STOPPED=") || t.startsWith("SERVICES_STARTED=")) {
+                    || t.startsWith("SERVICES_STOPPED=") || t.startsWith("SERVICES_STARTED=")
+                    || t.startsWith("FK_CHECKS=") || t.startsWith("DB_ROLLED_BACK=")) {
                 out.add(t);
             }
         }
         return List.copyOf(out);
     }
 
-    private static void throwIfKnown(String raw) {
+    static void throwIfKnown(String raw) {
         if (raw.contains("NEED_PASSWORDLESS_SUDO")) {
             throw new IllegalStateException(OperatorMessage.of(
                     "l’utilisateur SSH n’a pas sudo sans mot de passe.",
@@ -192,11 +194,26 @@ public class PlatformRestoreService {
                     WHERE,
                     "installe MariaDB (Installations), puis Restaurer."));
         }
-        if (raw.contains("SQL_IMPORT_FAILED")) {
+        if (raw.contains("DB_BACKUP_FAILED")) {
             throw new IllegalStateException(OperatorMessage.of(
-                    "l’import SQL a échoué (base précédente sauvegardée sur le VPS si elle existait).",
+                    "la sauvegarde de la base actuelle a échoué : rien n’a été remplacé.",
                     WHERE,
-                    "vérifie le dump (MySQL/MariaDB, une seule base). Extrait : " + excerpt(raw)));
+                    "vérifie l’espace disque du VPS, puis Restaurer."));
+        }
+        if (raw.contains("SQL_IMPORT_FAILED")) {
+            String state = raw.contains("DB_ROLLED_BACK=")
+                    ? "la base a été remise dans son état d’avant (sauvegarde réimportée)"
+                    : raw.contains("DB_ROLLBACK_FAILED")
+                            ? "ATTENTION : le retour à la sauvegarde a aussi échoué, la base est incomplète (sauvegarde dans le dossier backups)"
+                            : "il n’y avait pas de base avant, elle est incomplète";
+            String todo = raw.contains("ERROR 1452") || raw.contains("ERROR 1215") || raw.contains("ERROR 1216")
+                    ? "le dump crée des lignes avant celles qu’elles référencent (ou contient des lignes orphelines) : "
+                            + "décoche « Vérifier les clés étrangères pendant l’import », puis Restaurer."
+                    : "vérifie le dump (MySQL/MariaDB, une seule base).";
+            throw new IllegalStateException(OperatorMessage.of(
+                    "l’import SQL a échoué ; " + state + ". Les services ont été relancés.",
+                    WHERE,
+                    todo + " Extrait : " + importError(raw)));
         }
         if (raw.contains("BAD_ARCHIVE_PATH")) {
             throw new IllegalStateException(OperatorMessage.of(
@@ -228,6 +245,16 @@ public class PlatformRestoreService {
         byte[] b = new byte[4];
         random.nextBytes(b);
         return b;
+    }
+
+    static String importError(String raw) {
+        for (String line : raw.split("\\R")) {
+            String t = line.strip();
+            if (t.startsWith("ERROR ")) {
+                return t.length() > 300 ? t.substring(0, 300) + "…" : t;
+            }
+        }
+        return excerpt(raw);
     }
 
     private static String excerpt(String raw) {

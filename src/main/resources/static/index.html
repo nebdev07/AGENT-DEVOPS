@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app27" />
+  <link rel="stylesheet" href="/console.css?v=app28" />
 </head>
 <body>
   <div class="bg"></div>
@@ -271,7 +271,8 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li><strong>Remplir le modèle ARC</strong> pré-remplit les 3 services ARC (site <code>/</code>, back-office <code>/arc-backoffice</code>, API <code>/arc-api</code>). Vérifie le domaine, puis Enregistrer.</li>
             <li><strong>Dépôts privés</strong> : GitHub refuse la même Deploy key sur deux dépôts. Sous la liste, une ligne par dépôt <code>git@…</code> : Générer, Copier, ouvrir le lien « Deploy keys », coller la clé avec <em>Allow write access</em> décoché.</li>
             <li><strong>Console SQL</strong> (sous les clés Git, et à la dernière étape du parcours) : SQL dans la base de la plateforme, avec l’utilisateur de la plateforme. Lecture (SELECT, SHOW, DESCRIBE, EXPLAIN) immédiate, 1000 lignes max. Écriture (INSERT, UPDATE, DELETE, ALTER, CREATE…) : plan à confirmer, puis <strong>sauvegarde de toute la base</strong> sur le VPS (<code>backups/…-before-sql-….sql.gz</code>, 20 gardées) avant exécution. Arrêt à la première erreur. Refusé : DROP, TRUNCATE, droits, autres bases, fichiers du serveur, commandes client. Fichier <code>.sql</code> de 5 Mo max ; au-delà, « Restaurer les données ».</li>
-            <li><strong>Restaurer les données</strong> : dump SQL (<code>.sql</code> / <code>.sql.gz</code>) et/ou archive des fichiers (<code>.tar.gz</code> / <code>.zip</code>, contenu à la racine). À faire <em>avant</em> le premier Déployer pour une app qui ne crée pas sa base seule (ARC). La base et les fichiers déjà présents sont sauvegardés sur le VPS (<code>/opt/vps-autopilot/platforms/&lt;id&gt;/backups</code>) avant d’être remplacés. Préfère une base de démonstration aux données réelles.</li>
+            <li><strong>Restaurer les données</strong> : dump SQL (<code>.sql</code> / <code>.sql.gz</code>) et/ou archive des fichiers (<code>.tar.gz</code> / <code>.zip</code>, contenu à la racine). À faire <em>avant</em> le premier Déployer pour une app qui ne crée pas sa base seule (ARC). La base et les fichiers déjà présents sont sauvegardés sur le VPS (<code>/opt/vps-autopilot/platforms/&lt;id&gt;/backups</code>) avant d’être remplacés. Préfère une base de démonstration aux données réelles. Si l’import échoue, la base revient automatiquement à cette sauvegarde et les services sont relancés. Erreur de clé étrangère (<code>ERROR 1452</code>) : décoche « Vérifier les clés étrangères pendant l’import » et relance.</li>
+            <li><strong>Garde en ligne</strong> : chaque Déployer installe sur le serveur un minuteur (<code>vps-autopilot-keepalive</code>) qui relance toutes les 2 minutes, et au démarrage, les services de plateforme arrêtés. Pour arrêter volontairement une plateforme plus de 2 minutes, crée <code>/opt/vps-autopilot/platforms/&lt;id&gt;/.maintenance</code> (pris en compte 2 h).</li>
             <li>Supprimer retire la fiche locale seulement (ne stoppe pas les conteneurs).</li>
           </ul>
         </li>
@@ -515,6 +516,11 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
                 <input id="restoreUploads" type="file" accept=".tar,.gz,.tgz,.zip" />
               </label>
             </div>
+            <label class="field plat-keep restore-fk">
+              <input id="restoreFkChecks" type="checkbox" checked />
+              Vérifier les clés étrangères pendant l’import (recommandé)
+            </label>
+            <p class="hint">Décoche seulement si l’import échoue sur une erreur de clé étrangère (<code>ERROR 1452</code>) : les lignes sont alors importées telles quelles, sans contrôle des références entre tables.</p>
             <div class="app-form-actions">
               <button id="btnPlatRestore" type="button" class="change">Restaurer sur le VPS</button>
             </div>
@@ -647,6 +653,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app27"></script>
+  <script src="/console.js?v=app28"></script>
 </body>
 </html>

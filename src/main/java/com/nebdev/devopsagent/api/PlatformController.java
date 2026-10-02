@@ -145,6 +145,7 @@ public class PlatformController {
             @RequestParam("user") String user,
             @RequestParam(value = "confirm", required = false) Boolean confirm,
             @RequestParam(value = "uploadsSubdir", required = false) String uploadsSubdir,
+            @RequestParam(value = "foreignKeyChecks", required = false) Boolean foreignKeyChecks,
             @RequestPart(value = "sql", required = false) MultipartFile sql,
             @RequestPart(value = "uploads", required = false) MultipartFile uploads
     ) throws IOException {
@@ -161,7 +162,8 @@ public class PlatformController {
                     Boolean.TRUE.equals(confirm),
                     sqlFile,
                     uploadsFile,
-                    uploadsSubdir
+                    uploadsSubdir,
+                    !Boolean.FALSE.equals(foreignKeyChecks)
             );
             return Map.of(
                     "status", "ok",

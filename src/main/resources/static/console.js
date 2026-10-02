@@ -1821,8 +1821,11 @@ async function restorePlatform() {
     return;
   }
   const what = [sql ? "la base (" + sql.name + ")" : "", up ? "les fichiers (" + up.name + ")" : ""].filter(Boolean).join(" et ");
+  const fkChecks = !$("restoreFkChecks") || $("restoreFkChecks").checked;
   if (!window.confirm("CHANGE sur " + t.user + "@" + t.host + " :\nremplacer " + what + " de « " + id + " ».\n\n"
-    + "L’existant est sauvegardé sur le VPS (dossier backups de la plateforme) avant remplacement. Continuer ?")) {
+    + "L’existant est sauvegardé sur le VPS (dossier backups de la plateforme) avant remplacement. Si l’import échoue, la base revient à cette sauvegarde et les services sont relancés."
+    + (sql && !fkChecks ? "\n\nClés étrangères NON vérifiées pendant l’import : les lignes orphelines seront acceptées." : "")
+    + "\n\nContinuer ?")) {
     return;
   }
   const fd = new FormData();
@@ -1832,6 +1835,7 @@ async function restorePlatform() {
   fd.append("user", t.user);
   fd.append("confirm", "true");
   fd.append("uploadsSubdir", $("restoreSubdir").value.trim());
+  fd.append("foreignKeyChecks", String(fkChecks));
   if (sql) fd.append("sql", sql);
   if (up) fd.append("uploads", up);
   say("");

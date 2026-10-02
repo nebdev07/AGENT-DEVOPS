@@ -65,4 +65,31 @@ class PlatformRestoreTest {
                 "noise\nDB_BACKUP=/opt/x.sql.gz\nSQL_RESTORED=app_arc\nTABLES=46\nFILES=120\nPLATFORM_RESTORED\n");
         assertThat(lines).containsExactly("DB_BACKUP=/opt/x.sql.gz", "SQL_RESTORED=app_arc", "TABLES=46", "FILES=120");
     }
+
+    @Test
+    void foreignKeyChecksAreOnByDefaultAndCanBeTurnedOff() {
+        String dir = "/tmp/autopilot-restore-arc-0a1b2c3d";
+        assertThat(RoleScript.loadPlatformRestore(platform(), dir, "dump.sql", null, null)).contains("RESTORE_FK_CHECKS=1\n");
+        String off = RoleScript.loadPlatformRestore(platform(), dir, "dump.sql", null, null, false);
+        assertThat(off).contains("RESTORE_FK_CHECKS=0\n");
+        assertThat(off).contains("SET FOREIGN_KEY_CHECKS=0;");
+    }
+
+    @Test
+    void failedImportServicesAlwaysRestartAndDatabaseRollsBack() {
+        String script = RoleScript.loadPlatformRestore(platform(), "/tmp/autopilot-restore-arc-0a1b2c3d", "dump.sql", null, null);
+        assertThat(script).contains("trap finish EXIT");
+        assertThat(script).contains("DB_ROLLED_BACK=");
+        assertThat(script).contains(".maintenance");
+    }
+
+    @Test
+    void foreignKeyErrorSuggestsTurningChecksOff() {
+        String raw = "SERVICES_STOPPED=api www\nDB_BACKUP=/opt/b.sql.gz\nSQL_IMPORT_FAILED\n--------------\n"
+                + "ERROR 1452 (23000) at line 5694: Cannot add or update a child row\nDB_ROLLED_BACK=/opt/b.sql.gz\n";
+        assertThat(PlatformRestoreService.importError(raw)).startsWith("ERROR 1452");
+        assertThatThrownBy(() -> PlatformRestoreService.throwIfKnown(raw))
+                .hasMessageContaining("remise dans son état d’avant")
+                .hasMessageContaining("Vérifier les clés étrangères");
+    }
 }

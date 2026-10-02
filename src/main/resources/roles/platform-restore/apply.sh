@@ -1,6 +1,7 @@
 set -eu
 # VPS Autopilot — restauration des données d’une plateforme (dump SQL + archive de fichiers).
 # Variables : PLATFORM_ID RESTORE_DIR RESTORE_SQL RESTORE_UPLOADS UPLOADS_VOLUME UPLOADS_SUBDIR PLATFORM_SERVICES
+#             RESTORE_FK_CHECKS (1 par défaut, 0 = clés étrangères non vérifiées pendant l’import)
 # Les fichiers ont été envoyés par SFTP dans RESTORE_DIR (supprimé en fin de script).
 # Avant d’écraser la base : sauvegarde de l’existant dans $ROOT/backups (jamais de perte silencieuse).
 PLATFORM_ID="${PLATFORM_ID:-}"
@@ -10,6 +11,7 @@ RESTORE_UPLOADS="${RESTORE_UPLOADS:-}"
 UPLOADS_VOLUME="${UPLOADS_VOLUME:-}"
 UPLOADS_SUBDIR="${UPLOADS_SUBDIR:-}"
 PLATFORM_SERVICES="${PLATFORM_SERVICES:-}"
+RESTORE_FK_CHECKS="${RESTORE_FK_CHECKS:-1}"
 umask 077
 if [ "$(id -u)" -eq 0 ]; then
   SUDO=""
@@ -52,8 +54,20 @@ compose() {
   fi
 }
 
-# Arrête les services applicatifs (pas le cache) pendant l’import, puis les relance.
+# Arrête les services applicatifs (pas le cache) pendant l’import. Ils sont relancés à la sortie, même en cas
+# d’échec. .maintenance suspend le garde en ligne (vps-autopilot-keepalive) pendant l’opération.
 STOPPED=""
+finish() {
+  if [ -n "$STOPPED" ]; then
+    # shellcheck disable=SC2086
+    compose start $PLATFORM_SERVICES
+    echo "SERVICES_STARTED=$PLATFORM_SERVICES"
+  fi
+  $SUDO rm -f "$ROOT/.maintenance"
+  cleanup
+}
+trap finish EXIT
+$SUDO touch "$ROOT/.maintenance"
 if [ -f "$ROOT/docker-compose.yml" ] && [ -n "$PLATFORM_SERVICES" ]; then
   # shellcheck disable=SC2086
   compose stop $PLATFORM_SERVICES
@@ -92,42 +106,73 @@ ENV
   ROOT_PW="$($SUDO cat /opt/vps-autopilot/mariadb/root.pw)"
   DB_PW="$($SUDO grep '^DB_PASSWORD=' "$DB_FILE" | cut -d= -f2-)"
 
+  recreate_db() {
+    printf '%s\n' \
+      "DROP DATABASE IF EXISTS \`${DB_NAME}\`;" \
+      "CREATE DATABASE \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" \
+      "CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PW}';" \
+      "ALTER USER '${DB_USER}'@'%' IDENTIFIED BY '${DB_PW}';" \
+      "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';" \
+      "FLUSH PRIVILEGES;" \
+      | $SUDO docker exec -i mariadb mariadb -uroot -p"$ROOT_PW"
+  }
+
+  BK=""
   if printf 'SHOW DATABASES LIKE "%s";' "$DB_NAME" \
       | $SUDO docker exec -i mariadb mariadb -uroot -p"$ROOT_PW" -N 2>/dev/null | grep -qx "$DB_NAME"; then
     BK="$ROOT/backups/${DB_NAME}-before-restore-${TS}.sql.gz"
-    $SUDO docker exec mariadb mariadb-dump -uroot -p"$ROOT_PW" --single-transaction --routines "$DB_NAME" \
-      | gzip | $SUDO tee "$BK" >/dev/null
+    set -o pipefail
+    if ! $SUDO docker exec mariadb mariadb-dump -uroot -p"$ROOT_PW" --single-transaction --routines --triggers "$DB_NAME" \
+        | gzip | $SUDO tee "$BK" >/dev/null; then
+      set +o pipefail
+      $SUDO rm -f "$BK"
+      unset ROOT_PW DB_PW
+      echo DB_BACKUP_FAILED
+      exit 1
+    fi
+    set +o pipefail
     $SUDO chmod 600 "$BK"
     echo "DB_BACKUP=$BK"
   fi
 
-  printf '%s\n' \
-    "DROP DATABASE IF EXISTS \`${DB_NAME}\`;" \
-    "CREATE DATABASE \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" \
-    "CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PW}';" \
-    "ALTER USER '${DB_USER}'@'%' IDENTIFIED BY '${DB_PW}';" \
-    "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';" \
-    "FLUSH PRIVILEGES;" \
-    | $SUDO docker exec -i mariadb mariadb -uroot -p"$ROOT_PW"
+  recreate_db
 
   # MySQL 8 → MariaDB : collations 0900, DEFINER, USE/CREATE DATABASE d’une autre base.
+  # RESTORE_FK_CHECKS=0 : clés étrangères non vérifiées pendant l’import (dump où les enfants précèdent les parents,
+  # ou données orphelines). Les contraintes sont créées, les lignes existantes ne sont pas contrôlées.
+  FK_RULE='s/^//'
+  if [ "$RESTORE_FK_CHECKS" = "0" ]; then
+    FK_RULE='s/FOREIGN_KEY_CHECKS *= *1/FOREIGN_KEY_CHECKS=0/g'
+    echo "FK_CHECKS=off"
+  fi
   IMPORT_LOG="$(mktemp)"
   case "$RESTORE_SQL" in
     *.gz) READ="gzip -dc" ;;
     *) READ="cat" ;;
   esac
-  if ! $READ "$SQL_FILE" \
+  if ! { if [ "$RESTORE_FK_CHECKS" = "0" ]; then echo 'SET FOREIGN_KEY_CHECKS=0;'; fi; $READ "$SQL_FILE"; } \
       | sed -E \
           -e 's/utf8mb4_0900_[a-z_]+/utf8mb4_unicode_ci/g' \
           -e 's/DEFINER=`[^`]+`@`[^`]+`//g' \
           -e 's/DEFINER=[^ ]+@[^ ]+ //g' \
           -e '/^(USE|CREATE DATABASE) /d' \
           -e '/^\/\*![0-9]+ (USE|CREATE DATABASE) /d' \
+          -e "$FK_RULE" \
       | $SUDO docker exec -i mariadb mariadb -uroot -p"$ROOT_PW" --default-character-set=utf8mb4 "$DB_NAME" \
       >"$IMPORT_LOG" 2>&1; then
     echo SQL_IMPORT_FAILED
     tail -n 20 "$IMPORT_LOG" | grep -v -i password || true
     rm -f "$IMPORT_LOG"
+    # Jamais de base à moitié importée : retour à la sauvegarde prise juste avant.
+    if [ -n "$BK" ] && $SUDO test -s "$BK"; then
+      recreate_db
+      if $SUDO gzip -dc "$BK" \
+          | $SUDO docker exec -i mariadb mariadb -uroot -p"$ROOT_PW" --default-character-set=utf8mb4 "$DB_NAME" >/dev/null 2>&1; then
+        echo "DB_ROLLED_BACK=$BK"
+      else
+        echo DB_ROLLBACK_FAILED
+      fi
+    fi
     unset ROOT_PW DB_PW
     exit 1
   fi
@@ -179,9 +224,4 @@ if [ -n "$RESTORE_UPLOADS" ]; then
   echo "FILES=$COUNT"
 fi
 
-if [ -n "$STOPPED" ]; then
-  # shellcheck disable=SC2086
-  compose start $PLATFORM_SERVICES
-  echo "SERVICES_STARTED=$PLATFORM_SERVICES"
-fi
 echo PLATFORM_RESTORED

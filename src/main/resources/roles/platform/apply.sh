@@ -289,4 +289,41 @@ else
   exit 1
 fi
 rm -f "$BUILD_LOG"
+
+# Garde en ligne : toutes les 2 min (et au démarrage), relance les conteneurs de plateforme arrêtés.
+# restart: unless-stopped ne relance pas un conteneur arrêté par « docker stop » ou un script interrompu.
+# Un fichier .maintenance de moins de 2 h dans le dossier d’une plateforme la met en pause (restauration…).
+if command -v systemctl >/dev/null 2>&1; then
+  $SUDO tee /usr/local/bin/vps-autopilot-keepalive >/dev/null <<'KEEP'
+#!/bin/sh
+# VPS Autopilot — garde en ligne des plateformes (installé par le rôle platform).
+for f in /opt/vps-autopilot/platforms/*/docker-compose.yml; do
+  [ -f "$f" ] || continue
+  d="$(dirname "$f")"
+  if [ -n "$(find "$d" -maxdepth 1 -name .maintenance -mmin -120 2>/dev/null)" ]; then
+    continue
+  fi
+  down="$(docker compose --project-directory "$d" -f "$f" ps -a --status exited --status created -q 2>/dev/null)"
+  [ -n "$down" ] || continue
+  if docker compose --project-directory "$d" -f "$f" up -d --no-build --no-recreate >/dev/null 2>&1; then
+    logger -t vps-autopilot-keepalive "services relancés : $d"
+  else
+    logger -t vps-autopilot-keepalive "échec de relance : $d"
+  fi
+done
+KEEP
+  $SUDO chmod 755 /usr/local/bin/vps-autopilot-keepalive
+  printf '%s\n' '[Unit]' 'Description=VPS Autopilot - relance les plateformes arretees' 'After=docker.service' \
+    '[Service]' 'Type=oneshot' 'ExecStart=/usr/local/bin/vps-autopilot-keepalive' \
+    | $SUDO tee /etc/systemd/system/vps-autopilot-keepalive.service >/dev/null
+  printf '%s\n' '[Unit]' 'Description=VPS Autopilot - garde en ligne toutes les 2 min' \
+    '[Timer]' 'OnBootSec=2min' 'OnUnitActiveSec=2min' '[Install]' 'WantedBy=timers.target' \
+    | $SUDO tee /etc/systemd/system/vps-autopilot-keepalive.timer >/dev/null
+  $SUDO systemctl daemon-reload
+  if $SUDO systemctl enable --now vps-autopilot-keepalive.timer >/dev/null 2>&1; then
+    echo KEEPALIVE=on
+  else
+    echo KEEPALIVE=failed
+  fi
+fi
 echo PLATFORM_DEPLOYED

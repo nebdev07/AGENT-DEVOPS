@@ -142,6 +142,17 @@ public final class RoleScript {
             String uploadsFile,
             String uploadsSubdir
     ) {
+        return loadPlatformRestore(platform, remoteDir, sqlFile, uploadsFile, uploadsSubdir, true);
+    }
+
+    public static String loadPlatformRestore(
+            PlatformSpec platform,
+            String remoteDir,
+            String sqlFile,
+            String uploadsFile,
+            String uploadsSubdir,
+            boolean foreignKeyChecks
+    ) {
         if (platform == null) {
             throw new IllegalArgumentException("Plateforme manquante.");
         }
@@ -165,6 +176,7 @@ public final class RoleScript {
         prefix.append("UPLOADS_VOLUME=").append(PlatformCompose.uploadsVolume(platform)).append('\n');
         prefix.append("UPLOADS_SUBDIR=").append(uploadsSubdir == null ? "" : uploadsSubdir).append('\n');
         prefix.append("PLATFORM_SERVICES='").append(String.join(" ", services)).append("'\n");
+        prefix.append("RESTORE_FK_CHECKS=").append(foreignKeyChecks ? "1" : "0").append('\n');
         return prefix + load("platform-restore");
     }
 
