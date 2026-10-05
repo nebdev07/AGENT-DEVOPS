@@ -18,7 +18,8 @@ import java.util.Set;
 public class StateStore {
 
     private static final Set<String> NOT_SNAPSHOTS = Set.of(
-            "stack-intent.json", "trusted-hosts.json", "apps-intent.json");
+            "stack-intent.json", "trusted-hosts.json", "apps-intent.json",
+            "platforms-intent.json", "public-domain.json", "fixture.json", KnownServerStore.FILE_NAME);
 
     private final Path dir;
     private final ObjectMapper mapper;
@@ -62,6 +63,17 @@ public class StateStore {
             return null;
         }
         return mapper.readValue(latest.toFile(), InfrastructureState.class);
+    }
+
+    public InfrastructureState load(String host) throws IOException {
+        if (host == null || host.isBlank()) {
+            return null;
+        }
+        Path file = dir.resolve(sanitize(host.trim()) + ".json");
+        if (!Files.isRegularFile(file) || NOT_SNAPSHOTS.contains(file.getFileName().toString())) {
+            return null;
+        }
+        return mapper.readValue(file.toFile(), InfrastructureState.class);
     }
 
     static String sanitize(String host) {

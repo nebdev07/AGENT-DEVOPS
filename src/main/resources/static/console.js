@@ -254,7 +254,7 @@ function adminSnippet() {
     return "Aucune clé publique sur ce PC : génère-la (commande plus haut), puis recharge la page.";
   }
   const user = sshTargetFields().user;
-  if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(user)) {
+  if (!validAgentUser(user)) {
     return "Nom d’utilisateur invalide : minuscules, chiffres, - ou _ (ex. " + AGENT_USER_DEFAULT + ").";
   }
   const marker = agentPublicKey.split(/\s+/)[1] || agentPublicKey;
@@ -268,8 +268,42 @@ function adminSnippet() {
     + "sshd -T 2>/dev/null | grep -qi '^allowusers' && ! sshd -T 2>/dev/null | grep -i '^allowusers' | grep -qw \"$U\" \\\n"
     + "  && echo \"ATTENTION : AllowUsers est actif dans sshd, ajoute $U à la liste puis recharge sshd.\"\n"
     + "tail -n 1 \"$H/.ssh/authorized_keys\"\n"
-    + "# Uniquement si l’agent doit installer ou déployer (pas sur un serveur en lecture seule) :\n"
+    + "# Droits root temporaires (sauvegarde, export) : Aide › 3b.\n"
+    + "# Permanent, seulement si l’agent administre durablement ce serveur (installer, déployer) :\n"
     + "# echo \"$U ALL=(ALL) NOPASSWD:ALL\" > /etc/sudoers.d/$U && chmod 440 /etc/sudoers.d/$U";
+}
+
+const SUDO_TEMP_FILE = "/etc/sudoers.d/90-vps-autopilot-temp";
+
+function validAgentUser(user) {
+  return /^[a-z_][a-z0-9_-]{0,31}$/.test(user);
+}
+
+function sudoGrantSnippet() {
+  const user = sshTargetFields().user;
+  if (!validAgentUser(user)) {
+    return "Nom d’utilisateur invalide : minuscules, chiffres, - ou _ (ex. " + AGENT_USER_DEFAULT + ").";
+  }
+  return "U=" + user + "; F=" + SUDO_TEMP_FILE + "\n"
+    + "if ! id \"$U\" >/dev/null 2>&1; then echo \"Compte $U absent : crée-le d’abord (Aide › 3, méthode D).\"\n"
+    + "else\n"
+    + "  echo \"$U ALL=(ALL) NOPASSWD:ALL\" > \"$F\"; chmod 440 \"$F\"\n"
+    + "  if visudo -cf \"$F\" >/dev/null; then\n"
+    + "    systemd-run --quiet --on-active=4h /bin/rm -f \"$F\" \\\n"
+    + "      && echo \"sudo actif pour $U, retiré automatiquement dans 4 h.\" \\\n"
+    + "      || echo \"sudo actif pour $U. Pas de retrait automatique ici : pense à l’étape 3.\"\n"
+    + "  else rm -f \"$F\"; echo \"Fichier refusé, rien n’a changé.\"; fi\n"
+    + "fi";
+}
+
+function sudoCheckSnippet() {
+  const t = sshTargetFields();
+  return "ssh -i $HOME\\.ssh\\vps-autopilot " + t.portFlag + t.user + "@" + t.host
+    + " \"sudo -n true && echo SUDO_OK\"";
+}
+
+function sudoRevokeSnippet() {
+  return "rm -f " + SUDO_TEMP_FILE + " && echo \"Droits root temporaires retirés.\"";
 }
 
 function refreshPwsh() {
@@ -278,6 +312,10 @@ function refreshPwsh() {
   $("adminCmd").textContent = adminSnippet();
   $("adminUserName").textContent = t.user;
   $("verifyCmd").textContent = "ssh -i $HOME\\.ssh\\vps-autopilot " + t.portFlag + t.user + "@" + t.host;
+  $("sudoUserName").textContent = t.user;
+  $("sudoGrantCmd").textContent = sudoGrantSnippet();
+  $("sudoCheckCmd").textContent = sudoCheckSnippet();
+  $("sudoRevokeCmd").textContent = sudoRevokeSnippet();
 }
 
 function renderLiveWarnings(warnings) {
@@ -509,6 +547,117 @@ async function loadRuntime() {
   return j;
 }
 
+let knownServers = [];
+
+function serverKey(host, port) {
+  return String(host || "").trim().toLowerCase() + ":" + (Number(port) || 22);
+}
+
+function sinceLabel(iso) {
+  const t = Date.parse(iso || "");
+  if (!t) return "jamais analysé";
+  const min = Math.round((Date.now() - t) / 60000);
+  if (min < 1) return "analysé à l’instant";
+  if (min < 60) return "analysé il y a " + min + " min";
+  if (min < 48 * 60) return "analysé il y a " + Math.round(min / 60) + " h";
+  return "analysé le " + new Date(t).toLocaleDateString("fr-FR");
+}
+
+function renderKnownServers() {
+  const box = $("knownServers");
+  const list = $("knownServerList");
+  if (!box || !list) return;
+  list.innerHTML = "";
+  if (!knownServers.length) {
+    box.classList.add("hidden");
+    return;
+  }
+  box.classList.remove("hidden");
+  const current = serverKey($("sshHost").value, $("sshPort").value);
+  knownServers.forEach((s) => {
+    const li = document.createElement("li");
+    if (serverKey(s.host, s.port) === current) li.classList.add("current");
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "known-open";
+    const title = document.createElement("strong");
+    title.textContent = s.name || s.host;
+    const meta = document.createElement("small");
+    meta.textContent = s.user + "@" + s.host + (s.port === 22 ? "" : ":" + s.port) + " · " + sinceLabel(s.lastAnalysedAt);
+    open.append(title, meta);
+    if (s.readOnly) {
+      const badge = document.createElement("span");
+      badge.className = "known-badge";
+      badge.textContent = "lecture seule";
+      open.append(badge);
+    }
+    open.addEventListener("click", () => openKnownServer(s));
+    const forget = document.createElement("button");
+    forget.type = "button";
+    forget.className = "linkish known-forget";
+    forget.textContent = "Oublier";
+    forget.title = "Retirer de la liste (l’analyse enregistrée sur ce PC est gardée)";
+    forget.addEventListener("click", () => forgetKnownServer(s));
+    li.append(open, forget);
+    list.append(li);
+  });
+}
+
+async function loadKnownServers() {
+  try {
+    const r = await fetch("/api/v1/servers");
+    knownServers = r.ok ? await r.json() : [];
+  } catch (e) {
+    knownServers = [];
+  }
+  renderKnownServers();
+  return knownServers;
+}
+
+async function openKnownServer(s) {
+  $("vpsName").value = s.name || "";
+  $("sshHost").value = s.host;
+  $("sshUser").value = s.user;
+  $("sshPort").value = s.port;
+  $("vpsOs").value = s.os || "auto";
+  refreshPwsh();
+  localStorage.setItem("vpsap.server", serverKey(s.host, s.port));
+  renderKnownServers();
+  const label = s.name || s.host;
+  try {
+    const r = await fetch("/api/v1/servers/last?host=" + encodeURIComponent(s.host));
+    if (r.status !== 200) {
+      setStatus("Paramètres de " + label + " chargés. Lance l’analyse.", "ok");
+      return;
+    }
+    const j = await r.json();
+    if (!paint(j.snapshot, j.report, j.mode)) {
+      setStatus("Paramètres de " + label + " chargés. Lance l’analyse.", "ok");
+      return;
+    }
+    setStatus("Session " + label + " rouverte : dernière analyse " + sinceLabel(j.snapshot.capturedAt).replace("analysé ", "")
+      + ". Relance l’analyse pour rafraîchir.", "ok");
+  } catch (e) {
+    setStatus(e.message, "err");
+  }
+}
+
+async function forgetKnownServer(s) {
+  if (!confirm("Retirer " + (s.name || s.host) + " de Mes serveurs ? L’analyse enregistrée sur ce PC est gardée.")) return;
+  await fetch("/api/v1/servers?host=" + encodeURIComponent(s.host) + "&port=" + s.port, { method: "DELETE" });
+  if (localStorage.getItem("vpsap.server") === serverKey(s.host, s.port)) localStorage.removeItem("vpsap.server");
+  await loadKnownServers();
+}
+
+async function restoreLastSession() {
+  const servers = await loadKnownServers();
+  if (!servers.length) return;
+  const typed = $("sshHost").value.trim();
+  const wanted = typed ? serverKey(typed, $("sshPort").value) : localStorage.getItem("vpsap.server");
+  const pick = servers.find((s) => serverKey(s.host, s.port) === wanted) || (typed ? null : servers[0]);
+  if (pick) await openKnownServer(pick);
+}
+
 async function acceptHost() {
   const t = target();
   if (!t.host) {
@@ -582,6 +731,8 @@ async function discover() {
       return;
     }
     setStatus("Discovery SSH terminée. Rien n’a été modifié sur le VPS.", "ok");
+    localStorage.setItem("vpsap.server", serverKey(t.host, t.port));
+    loadKnownServers();
   } catch (e) {
     setStatus(e.message, "err");
   } finally {
@@ -721,6 +872,9 @@ $("btnCopyGen").addEventListener("click", (e) => copyText($("genCmd").textConten
 $("btnCopyKvm").addEventListener("click", (e) => copyText($("kvmCmd").textContent, e.currentTarget));
 $("btnCopyPwsh").addEventListener("click", (e) => copyText($("pwshCmd").textContent, e.currentTarget));
 $("btnCopyAdmin").addEventListener("click", (e) => copyText($("adminCmd").textContent, e.currentTarget));
+$("btnCopySudoGrant").addEventListener("click", (e) => copyText($("sudoGrantCmd").textContent, e.currentTarget));
+$("btnCopySudoCheck").addEventListener("click", (e) => copyText($("sudoCheckCmd").textContent, e.currentTarget));
+$("btnCopySudoRevoke").addEventListener("click", (e) => copyText($("sudoRevokeCmd").textContent, e.currentTarget));
 $("sshPort").addEventListener("input", refreshPwsh);
 $("sshHost").addEventListener("input", refreshPwsh);
 $("sshUser").addEventListener("input", refreshPwsh);
@@ -2841,6 +2995,6 @@ if ($("platServices") && !$("platServices").children.length) {
   addPlatServiceRow({ id: "www", port: 3000, needs: [] });
   syncPlatRoutingHint();
 }
-loadRuntime().then(loadStack).catch(() => {
+loadRuntime().then(restoreLastSession).then(loadStack).catch(() => {
   setStatus("API injoignable.", "err");
 });

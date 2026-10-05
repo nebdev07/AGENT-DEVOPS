@@ -9,6 +9,7 @@ import com.nebdev.devopsagent.risk.UnsafeActionException;
 import com.nebdev.devopsagent.ssh.HostKeyService;
 import com.nebdev.devopsagent.ssh.SshBootstrapService;
 import com.nebdev.devopsagent.ssh.SshTarget;
+import com.nebdev.devopsagent.state.KnownServerStore;
 import com.nebdev.devopsagent.state.StateStore;
 import com.nebdev.devopsagent.state.StateStore.InfrastructureState;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,19 +38,22 @@ public class DiscoverController {
     private final StateStore stateStore;
     private final HostKeyService hostKeyService;
     private final SshBootstrapService sshBootstrapService;
+    private final KnownServerStore knownServerStore;
 
     public DiscoverController(
             DiscoveryService discoveryService,
             DevopsProperties properties,
             StateStore stateStore,
             HostKeyService hostKeyService,
-            SshBootstrapService sshBootstrapService
+            SshBootstrapService sshBootstrapService,
+            KnownServerStore knownServerStore
     ) {
         this.discoveryService = discoveryService;
         this.properties = properties;
         this.stateStore = stateStore;
         this.hostKeyService = hostKeyService;
         this.sshBootstrapService = sshBootstrapService;
+        this.knownServerStore = knownServerStore;
     }
 
     @GetMapping("/runtime")
@@ -132,6 +137,8 @@ public class DiscoverController {
             }
             result = discoveryService.discoverRemote(
                     new SshTarget(params.host(), params.port(), params.user()), params);
+            knownServerStore.remember(params.name(), params.host(), params.port(), params.user(), params.os(),
+                    Instant.now());
             mode = "ssh";
         } else if (properties.isSshConfigured()) {
             result = discoveryService.discoverRemote();

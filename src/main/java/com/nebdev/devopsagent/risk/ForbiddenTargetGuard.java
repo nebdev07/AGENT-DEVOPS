@@ -58,6 +58,11 @@ public class ForbiddenTargetGuard {
         }
     }
 
+    public boolean isReadOnly(String host) {
+        String key = normalize(host);
+        return key != null && readOnly.contains(key);
+    }
+
     private static Set<String> normalizeAll(Collection<String> hosts) {
         if (hosts == null) {
             return Set.of();

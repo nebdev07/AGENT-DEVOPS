@@ -11,6 +11,9 @@ Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `c
 | GET | `/api/v1/health` | Liveness (`role` = `operator` ou `cargo`) | oui |
 | GET | `/api/v1/runtime` | Mode `ssh` ou `lab-fixture`, host, fixture | oui |
 | GET | `/api/v1/state` | Dernier `InfrastructureState` (`204` si vide) | oui |
+| GET | `/api/v1/servers` | Mes serveurs : serveurs déjà analysés (nom, hôte, port, utilisateur, OS, date, `readOnly`), plus récent d'abord. Jamais de secret (`state/known-servers.json`) | oui |
+| GET | `/api/v1/servers/last?host=` | Dernière analyse enregistrée de ce serveur (`mode`, `snapshot`, `report`), sans connexion SSH ; `204` si aucune | oui |
+| DELETE | `/api/v1/servers?host=&port=` | Retire le serveur de la liste ; l'analyse enregistrée (`state/<hôte>.json`) est gardée | oui (local) |
 | POST | `/api/v1/discover` | Lance la discovery (fixture, `.env`, ou `{host,user,port}` depuis la console) | oui |
 | POST | `/api/v1/ssh/accept-host` | Lit la clé d’hôte via SSHJ, stocke l’empreinte (`state/trusted-hosts.json`) | oui |
 | POST | `/api/v1/ssh/install-key` | CHANGE : installe la clé publique de l’agent (`confirm: true` + mot de passe, jamais stocké) | oui |

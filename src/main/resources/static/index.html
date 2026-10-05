@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app32" />
+  <link rel="stylesheet" href="/console.css?v=app33" />
 </head>
 <body>
   <div class="bg"></div>
@@ -219,6 +219,49 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           </p>
         </li>
 
+        <li class="step" id="help-sudo">
+          <h3>3b. Donner temporairement les droits root au compte de l’agent</h3>
+          <p>
+            Le compte de l’agent n’a <strong>aucun droit sudo</strong> par défaut : assez pour analyser. Certaines opérations
+            demandent de lire ou d’écrire ce que seul root peut toucher. Exemples : sauvegarder toutes les applications d’un
+            serveur avant de les remettre en conteneurs (bases de données, fichiers protégés, configurations), ou préparer le serveur.
+            Dans ce cas, l’administrateur donne <strong>temporairement</strong> sudo au compte, puis le retire.
+          </p>
+          <div class="callout">
+            <strong>Snapshot du serveur entier</strong> : l’agent ne le fait pas. Une copie complète de la machine (disque, système,
+            tout compris) se prend depuis la <strong>console de ton hébergeur</strong> ou de l’hyperviseur de ton organisation
+            (bouton « Snapshot » ou « Sauvegarde »). Fais-la <strong>avant</strong> toute opération avec root : c’est le seul vrai
+            retour arrière. Les droits root temporaires servent à <em>l’agent</em>, pour sauvegarder les applications une par une.
+          </div>
+          <p><strong>1. L’admin donne les droits</strong>, dans sa session <code>root</code> (ou après <code>sudo -i</code>).
+            Le compte est celui du champ <strong>Utilisateur SSH</strong> du cockpit (<code id="sudoUserName">autopilot</code>).
+            Les droits se <strong>retirent tout seuls au bout de 4 heures</strong> (sur les systèmes avec systemd, c’est-à-dire
+            presque tous).</p>
+          <div class="copyrow">
+            <pre id="sudoGrantCmd">Chargement…</pre>
+            <button id="btnCopySudoGrant" type="button" class="ghost slim">Copier</button>
+          </div>
+          <p><strong>2. Vérifier depuis ton PC</strong> (PowerShell) : la réponse doit être <code>SUDO_OK</code>.</p>
+          <div class="copyrow">
+            <pre id="sudoCheckCmd">Chargement…</pre>
+            <button id="btnCopySudoCheck" type="button" class="ghost slim">Copier</button>
+          </div>
+          <p><strong>3. Retirer les droits</strong> dès que l’opération est finie, sans attendre les 4 heures (session
+            <code>root</code> de l’admin). La vérification de l’étape 2 doit alors échouer.</p>
+          <div class="copyrow">
+            <pre id="sudoRevokeCmd">Chargement…</pre>
+            <button id="btnCopySudoRevoke" type="button" class="ghost slim">Copier</button>
+          </div>
+          <ul>
+            <li>Personne ne communique le mot de passe root : l’admin garde la main et peut retirer les droits à tout moment.</li>
+            <li>Chaque commande passée avec sudo est tracée sur le serveur (<code>/var/log/auth.log</code> ou <code>/var/log/secure</code>).</li>
+            <li>Un serveur que tu as déclaré <strong>en lecture seule</strong> dans l’agent le reste, même avec sudo : la protection
+              est dans l’agent, pas sur le serveur.</li>
+            <li>Pour un serveur que l’agent administre durablement (installations, déploiements), la ligne sudo permanente de la
+              méthode D reste possible ; préfère la version temporaire tant que ce n’est pas décidé.</li>
+          </ul>
+        </li>
+
         <li class="step">
           <h3>4. Analyser</h3>
           <p>
@@ -226,6 +269,13 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             Si « Authentification refusée » : la clé n’est pas sur ce compte — étape 3.
           </p>
           <p>Ensuite seulement : OS, CPU, RAM, disque, logiciels <strong>de ce VPS</strong>.</p>
+          <p>
+            <strong>Mes serveurs</strong> (haut du panneau de gauche) : chaque serveur analysé avec succès y est gardé (nom, adresse,
+            utilisateur, port ; jamais de mot de passe). Un clic rouvre sa session : les champs sont remplis et la
+            <strong>dernière analyse</strong> s’affiche aussitôt, avec sa date, sans se reconnecter. Relance
+            <strong>Analyser le VPS</strong> pour la rafraîchir. Au démarrage, le cockpit rouvre le dernier serveur utilisé.
+            <strong>Oublier</strong> le retire de la liste (l’analyse enregistrée sur ce PC n’est pas effacée).
+          </p>
         </li>
 
         <li class="step">
@@ -348,6 +398,10 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
         L’OS n’est pas figé : auto-détection, ou tu le déclares.
         <a href="#help" data-view="help">Aide</a> si tu bloques (clé SSH, analyse, install).
       </p>
+      <div id="knownServers" class="known-servers hidden">
+        <p class="kicker">Mes serveurs</p>
+        <ul id="knownServerList"></ul>
+      </div>
       <label class="field">Nom
         <input id="vpsName" type="text" placeholder="ex. vps-perso" />
       </label>
@@ -691,6 +745,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app32"></script>
+  <script src="/console.js?v=app33"></script>
 </body>
 </html>

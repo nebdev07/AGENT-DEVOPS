@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -35,6 +36,8 @@ class ForbiddenTargetGuardTest {
         assertThatThrownBy(() -> guard.assertAllowed("192.0.2.44"))
                 .isInstanceOf(UnsafeActionException.class)
                 .hasMessageContaining("lecture seule");
+        assertThat(guard.isReadOnly(" 192.0.2.44 ")).isTrue();
+        assertThat(guard.isReadOnly("198.51.100.7")).isFalse();
     }
 
     @Test

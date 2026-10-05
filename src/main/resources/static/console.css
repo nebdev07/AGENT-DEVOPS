@@ -1052,3 +1052,24 @@ body:not(.guided) .journey-steps { display: none; }
 .sql-table th, .sql-table td { padding: 0.3rem 0.55rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sql-table th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 600; }
 .sql-table td.sql-null { color: var(--muted); font-style: italic; }
+/* Mes serveurs : sessions déjà analysées */
+.known-servers { margin: 0.25rem 0 0.9rem; }
+.known-servers ul { list-style: none; margin: 0.35rem 0 0; padding: 0; display: grid; gap: 0.35rem; }
+.known-servers li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.35rem; }
+.known-servers button.known-open {
+  width: 100%; margin: 0; display: grid; gap: 0.15rem; text-align: left;
+  padding: 0.5rem 0.65rem; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--inset); color: var(--text); font-weight: 400; font-size: 0.85rem; cursor: pointer;
+}
+.known-servers button.known-open:hover { border-color: var(--line-hi); filter: none; }
+.known-servers li.current button.known-open { border-color: var(--accent); background: var(--accent-dim); }
+.known-open strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.known-open small { color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.known-badge {
+  justify-self: start; font-size: 0.66rem; padding: 0.05rem 0.4rem; border-radius: 999px;
+  color: var(--warn); border: 1px solid rgba(212, 180, 138, 0.4);
+}
+.known-servers button.known-forget {
+  width: auto; margin: 0; padding: 0.2rem 0.1rem; background: none; border: none;
+  color: var(--muted); font-size: 0.72rem; font-weight: 400; text-decoration: underline; cursor: pointer;
+}
