@@ -5,6 +5,7 @@
 
 ## 2026-10-05
 
+- **ADR-038 suspendu pour le serveur DTSI : pas d'accès internet sortant.** Installation existante gardée, `154.0.30.233` remis en lecture seule (`state/agent-local.yml`, local). Déploiements GitHub Actions DISMAS réactivés (`push` sur `main`, commits `cda04c3` front, `0c7baca` API ; échoueront à `git fetch` tant que la sortie est fermée). Sécurisation sans internet : UFW (3306 et 8080 limités aux réseaux privés, 25 retiré), SSH (`X11Forwarding no`, `MaxAuthTries 3`, `LoginGraceTime 30`), Apache sans version affichée, `prism.service` désactivé, journal 200 Mo. fail2ban écarté (adresses sources traduites par la passerelle). DISMAS et PRISM vérifiés en 200 par l'adresse publique.
 - **ADR-038 : serveur DTSI en écriture, réinstallation en conteneurs préparée côté agent.**
   - Lecture seule de `154.0.30.233` levée dans `state/agent-local.yml` (local). ARC prod toujours interdit.
   - **Profil serveur** dans « Mes serveurs » (`ServerProfile`, `ServerProfiles`, `PUT /api/v1/servers/profile`, cases sous chaque serveur) : **HTTP seul** (Traefik sans 443/ACME/redirection, routeurs `web` seuls, URLs et vérification après déploiement en `http://`), **port web public** (ex. 91 derrière une NAT), **serveur partagé** (sécurité sans `ssh-harden`). Valeurs par défaut = comportement antérieur.
