@@ -98,7 +98,7 @@ class DiscoveryParserTest {
                 ###SERVICES###
                 ssh.service
                 """;
-        ServerSnapshot snap = parser.parse(raw, "ssh:57.128.186.38", "57.128.186.38");
+        ServerSnapshot snap = parser.parse(raw, "ssh:198.51.100.20", "198.51.100.20");
         assertThat(snap.firewall().fail2banStatus()).isEqualTo("active");
     }
 
@@ -109,7 +109,7 @@ class DiscoveryParserTest {
                 PHP_PRESENT
                 MINER_PROCESS
                 """;
-        ServerSnapshot snap = parser.parse(raw, "ssh:57.128.186.38", "57.128.186.38");
+        ServerSnapshot snap = parser.parse(raw, "ssh:198.51.100.20", "198.51.100.20");
         assertThat(snap.warnings()).anyMatch(w -> w.contains("miner"));
         assertThat(snap.warnings()).anyMatch(w -> w.contains("PHP"));
     }

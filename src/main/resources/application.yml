@@ -1,6 +1,8 @@
 server.port: 8088
 
 spring:
+  config:
+    import: optional:file:./state/agent-local.yml
   servlet:
     multipart:
       max-file-size: 4GB

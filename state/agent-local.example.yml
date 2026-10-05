@@ -1,0 +1,11 @@
+# Copier en state/agent-local.yml (non versionné) et adapter.
+# Serveurs que l'agent doit protéger sur CE poste :
+#   blocked-hosts   : aucune action (ni analyse, ni modification), ex. une production
+#   read-only-hosts : analyse seulement, toute modification refusée, ex. un serveur en cours de reprise
+devops:
+  guard:
+    blocked-hosts:
+      - 198.51.100.7
+      - prod.example.org
+    read-only-hosts:
+      - 192.0.2.44

@@ -25,7 +25,7 @@ final class AppRemoteFailure {
             throw new IllegalStateException(OperatorMessage.of(
                     "sudo sans mot de passe refusé pour l’utilisateur SSH.",
                     "Connexion SSH pendant Déployer",
-                    "utilise un user avec NOPASSWD sudo (souvent ubuntu), ou corrige sudoers."));
+                    "utilise un user avec NOPASSWD sudo (Aide › 3. Clé SSH › méthode D, dernière ligne), ou corrige sudoers."));
         }
         if (raw.contains("NEED_DEPLOY_USER")) {
             throw new IllegalStateException(OperatorMessage.of(
@@ -41,7 +41,7 @@ final class AppRemoteFailure {
         }
         if (raw.contains("NEED_DOCKERFILE")) {
             throw new IllegalStateException(OperatorMessage.of(
-                    "le dépôt Git n’a pas de Dockerfile à la racine (ex. BOURSE a un docker-compose.yml mais pas de Dockerfile).",
+                    "le dépôt Git n’a pas de Dockerfile à la racine (un docker-compose.yml seul ne suffit pas).",
                     "Étape Déployer — dépôt " + app.gitUrl(),
                     "ajoute un Dockerfile à la racine de la branche « " + app.gitRef()
                             + " », pousse sur GitHub, puis Déployer — ou confirme le rattrapage template."));

@@ -66,7 +66,7 @@ public class AppIntentStore {
                     throw new IllegalArgumentException(OperatorMessage.of(
                             "le nom d’hôte « " + n.hostname() + " » est déjà pris par une autre app de la liste.",
                             "Champ Nom d’hôte — bande Applications",
-                            "chaque app doit avoir son DNS. Ex. my-bourse.<IP>.sslip.io — pas le même hôte que vps-autopilot."));
+                            "chaque app doit avoir son DNS. Ex. mon-app.<IP>.sslip.io — pas le même hôte que vps-autopilot."));
                 }
                 byId.put(n.id(), n);
             }

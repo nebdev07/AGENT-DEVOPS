@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SshKeyInstallScriptTest {
 
     private static final String KEY =
-            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL8p88ZMRkkFRXsBmwLMlie6HN4X1tG3G7Jsu7cx9KjC vps-autopilot-personal";
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL8p88ZMRkkFRXsBmwLMlie6HN4X1tG3G7Jsu7cx9KjC vps-autopilot";
 
     @Test
     void buildsIdempotentAuthorizedKeysScript() {

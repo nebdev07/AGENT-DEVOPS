@@ -12,6 +12,7 @@ id_rsa
 id_ed25519
 id_ecdsa
 state/*.json
+state/agent-local.yml
 !state/.gitkeep
 state/*.report.txt
 state/backups/

@@ -20,7 +20,7 @@ import java.util.concurrent.CompletableFuture;
 @Service
 public class PlatformDeployService {
 
-    /** Premier build d’un produit type ARC (2 Next + Maven) : ~20 min sur 4 vCPU sans cache. */
+    /** Premier build d’une plateforme type site + back-office Next + API Maven : ~20 min sur 4 vCPU sans cache. */
     static final int DEPLOY_TIMEOUT_SECONDS = 2700;
 
     private final PlatformIntentStore store;

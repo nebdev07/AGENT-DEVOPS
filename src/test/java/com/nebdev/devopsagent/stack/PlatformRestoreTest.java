@@ -11,9 +11,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PlatformRestoreTest {
 
     private static PlatformSpec platform() {
-        return PlatformSpec.normalized("arc", "apps.exemple.com", "path", List.of(
+        return PlatformSpec.normalized("demo", "apps.exemple.com", "path", List.of(
                 new PlatformServiceSpec("api", "https://github.com/org/api.git", "main", "", 8080, "",
-                        List.of("mariadb", "volume:uploads"), Map.of(), "/arc-api"),
+                        List.of("mariadb", "volume:uploads"), Map.of(), "/demo-api"),
                 new PlatformServiceSpec("www", "https://github.com/org/www.git", "main", "", 3000, "",
                         List.of(), Map.of(), "/")
         ), null);
@@ -21,7 +21,7 @@ class PlatformRestoreTest {
 
     @Test
     void remoteNamesAreFixedByExtension() {
-        assertThat(PlatformRestoreService.sqlRemoteName("db-nwanyo-arc.SQL")).isEqualTo("dump.sql");
+        assertThat(PlatformRestoreService.sqlRemoteName("db-demo.SQL")).isEqualTo("dump.sql");
         assertThat(PlatformRestoreService.sqlRemoteName("prod.sql.gz")).isEqualTo("dump.sql.gz");
         assertThat(PlatformRestoreService.archiveRemoteName("uploads.tgz")).isEqualTo("uploads.tar.gz");
         assertThat(PlatformRestoreService.archiveRemoteName("files.zip")).isEqualTo("uploads.zip");
@@ -31,7 +31,7 @@ class PlatformRestoreTest {
 
     @Test
     void subdirIsSingleSafeSegment() {
-        assertThat(PlatformRestoreService.normalizeSubdir(" /nwanyo/ ")).isEqualTo("nwanyo");
+        assertThat(PlatformRestoreService.normalizeSubdir(" /medias/ ")).isEqualTo("medias");
         assertThat(PlatformRestoreService.normalizeSubdir("")).isEmpty();
         assertThatThrownBy(() -> PlatformRestoreService.normalizeSubdir("../etc")).hasMessageContaining("invalide");
         assertThatThrownBy(() -> PlatformRestoreService.normalizeSubdir("a/b")).hasMessageContaining("invalide");
@@ -39,15 +39,15 @@ class PlatformRestoreTest {
 
     @Test
     void scriptCarriesVolumeServicesAndRejectsUnsafeDir() {
-        String script = RoleScript.loadPlatformRestore(platform(), "/tmp/autopilot-restore-arc-0a1b2c3d",
-                "dump.sql", "uploads.tar.gz", "nwanyo");
-        assertThat(script).contains("UPLOADS_VOLUME=plat_arc_uploads");
+        String script = RoleScript.loadPlatformRestore(platform(), "/tmp/autopilot-restore-demo-0a1b2c3d",
+                "dump.sql", "uploads.tar.gz", "medias");
+        assertThat(script).contains("UPLOADS_VOLUME=plat_demo_uploads");
         assertThat(script).contains("PLATFORM_SERVICES='api www'");
         assertThat(script).contains("PLATFORM_RESTORED");
         assertThat(script).contains("utf8mb4_unicode_ci");
         assertThatThrownBy(() -> RoleScript.loadPlatformRestore(platform(), "/etc", "dump.sql", null, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> RoleScript.loadPlatformRestore(platform(), "/tmp/autopilot-restore-arc-1",
+        assertThatThrownBy(() -> RoleScript.loadPlatformRestore(platform(), "/tmp/autopilot-restore-demo-1",
                 "../x.sql", null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
@@ -55,8 +55,8 @@ class PlatformRestoreTest {
     @Test
     void composeVolumeHasFixedNameForRestoreBeforeDeploy() {
         String yaml = PlatformCompose.yaml(platform());
-        assertThat(yaml).contains("plat_arc_uploads:/app/data");
-        assertThat(yaml).contains("    name: plat_arc_uploads");
+        assertThat(yaml).contains("plat_demo_uploads:/app/data");
+        assertThat(yaml).contains("    name: plat_demo_uploads");
     }
 
     @Test
@@ -68,7 +68,7 @@ class PlatformRestoreTest {
 
     @Test
     void foreignKeyChecksAreOnByDefaultAndCanBeTurnedOff() {
-        String dir = "/tmp/autopilot-restore-arc-0a1b2c3d";
+        String dir = "/tmp/autopilot-restore-demo-0a1b2c3d";
         assertThat(RoleScript.loadPlatformRestore(platform(), dir, "dump.sql", null, null)).contains("RESTORE_FK_CHECKS=1\n");
         String off = RoleScript.loadPlatformRestore(platform(), dir, "dump.sql", null, null, false);
         assertThat(off).contains("RESTORE_FK_CHECKS=0\n");
@@ -77,7 +77,7 @@ class PlatformRestoreTest {
 
     @Test
     void failedImportServicesAlwaysRestartAndDatabaseRollsBack() {
-        String script = RoleScript.loadPlatformRestore(platform(), "/tmp/autopilot-restore-arc-0a1b2c3d", "dump.sql", null, null);
+        String script = RoleScript.loadPlatformRestore(platform(), "/tmp/autopilot-restore-demo-0a1b2c3d", "dump.sql", null, null);
         assertThat(script).contains("trap finish EXIT");
         assertThat(script).contains("DB_ROLLED_BACK=");
         assertThat(script).contains(".maintenance");

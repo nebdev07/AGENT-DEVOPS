@@ -9,6 +9,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -27,12 +28,12 @@ class SshBootstrapServiceTest {
         props.getSsh().setPrivateKeyPath(key.toString());
         SshBootstrapService svc = new SshBootstrapService(
                 new ActionGuard(),
-                new ForbiddenTargetGuard(),
+                new ForbiddenTargetGuard(List.of("198.51.100.7"), List.of()),
                 null,
                 props
         );
         assertThatThrownBy(() -> svc.installAgentPublicKey(
-                new SshTarget("54.37.156.11", 22, "ubuntu"),
+                new SshTarget("198.51.100.7", 22, "autopilot"),
                 "secret",
                 true
         )).isInstanceOf(UnsafeActionException.class)

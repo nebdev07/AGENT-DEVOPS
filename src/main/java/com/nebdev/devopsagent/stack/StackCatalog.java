@@ -68,7 +68,7 @@ public final class StackCatalog {
                         new StackDetail(
                                 "ssh-harden",
                                 "SSH durci (clés seulement)",
-                                "Le mot de passe du mail OVH et un root ouvert, c’est la porte d’entrée classique. "
+                                "Le mot de passe envoyé par l’hébergeur et un root ouvert, c’est la porte d’entrée classique. "
                                         + "Une fois dedans : miner, webshell, persistance.",
                                 "Drop-in sshd : PasswordAuthentication no, root fermé, MaxAuthTries 3, AllowUsers = ton compte actuel. "
                                         + "Exige une clé déjà dans authorized_keys (sinon lockout). Port 22 inchangé.",

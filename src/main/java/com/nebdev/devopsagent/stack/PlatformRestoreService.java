@@ -162,7 +162,7 @@ public class PlatformRestoreService {
             throw new IllegalArgumentException(OperatorMessage.of(
                     "sous-dossier « " + raw.trim() + " » invalide.",
                     WHERE,
-                    "un seul nom de dossier dans le volume, ex. nwanyo (ou vide = racine /app/data)."));
+                    "un seul nom de dossier dans le volume, ex. uploads (ou vide = racine /app/data)."));
         }
         return s;
     }

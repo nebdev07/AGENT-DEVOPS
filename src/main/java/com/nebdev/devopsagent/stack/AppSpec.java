@@ -23,7 +23,7 @@ public record AppSpec(String id, String gitUrl, String gitRef, String hostname, 
             throw new IllegalArgumentException(OperatorMessage.of(
                     "aucun identifiant saisi.",
                     WHERE_ID,
-                    "saisis un nom court avec tirets, ex. my-bourse (les underscores _ deviennent des tirets)."));
+                    "saisis un nom court avec tirets, ex. mon-app (les underscores _ deviennent des tirets)."));
         }
         // Underscores → tirets (souvent collés depuis un nom de repo).
         String original = id.trim();
@@ -32,7 +32,7 @@ public record AppSpec(String id, String gitUrl, String gitRef, String hostname, 
             throw new IllegalArgumentException(OperatorMessage.of(
                     slugCause(original, slug),
                     WHERE_ID,
-                    "utilise seulement a-z, 0-9 et tirets ; commence par une lettre ; max 32 car. Exemple : my-bourse."));
+                    "utilise seulement a-z, 0-9 et tirets ; commence par une lettre ; max 32 car. Exemple : mon-app."));
         }
         String git = GitUrls.normalize(gitUrl);
         String ref = (gitRef == null || gitRef.isBlank()) ? "main" : gitRef.trim();
@@ -46,20 +46,20 @@ public record AppSpec(String id, String gitUrl, String gitRef, String hostname, 
             throw new IllegalArgumentException(OperatorMessage.of(
                     "nom d’hôte public manquant.",
                     WHERE_HOST,
-                    "laisse le champ vide pour une proposition sslip, ou saisis un DNS du type my-bourse.<IP>.sslip.io — pas une URL GitHub."));
+                    "laisse le champ vide pour une proposition sslip, ou saisis un DNS du type mon-app.<IP>.sslip.io — pas une URL GitHub."));
         }
         String host = hostname.trim().toLowerCase(Locale.ROOT);
         if (host.startsWith("http://") || host.startsWith("https://") || host.contains("github.com") || host.contains("/")) {
             throw new IllegalArgumentException(OperatorMessage.of(
                     "tu as collé une URL (souvent GitHub) dans le nom d’hôte : « " + abbreviate(hostname.trim()) + " ».",
                     WHERE_HOST,
-                    "mets https://github.com/… dans le champ Git. Ici : seulement un DNS, ex. my-bourse.57.128.186.38.sslip.io"));
+                    "mets https://github.com/… dans le champ Git. Ici : seulement un DNS, ex. mon-app.203.0.113.10.sslip.io"));
         }
         if (!HOST.matcher(host).matches()) {
             throw new IllegalArgumentException(OperatorMessage.of(
                     "nom d’hôte « " + abbreviate(host) + " » invalide (caractères ou format DNS).",
                     WHERE_HOST,
-                    "pas d’URL, pas d’espace. Exemple : my-bourse.57.128.186.38.sslip.io"));
+                    "pas d’URL, pas d’espace. Exemple : mon-app.203.0.113.10.sslip.io"));
         }
         int p = port == null ? 8080 : port;
         if (p < 1 || p > 65535) {
@@ -77,8 +77,8 @@ public record AppSpec(String id, String gitUrl, String gitRef, String hostname, 
         }
         if (original.indexOf('.') >= 0) {
             return "« " + abbreviate(original) + " » ressemble à un nom d’hôte DNS (il contient des points)."
-                    + " L’identifiant est un slug court sans points (ex. my-bourse)."
-                    + " Le DNS complet va dans « Nom d’hôte » (ex. my-bourse.apps.nebdev.org).";
+                    + " L’identifiant est un slug court sans points (ex. mon-app)."
+                    + " Le DNS complet va dans « Nom d’hôte » (ex. mon-app.apps.mondomaine.com).";
         }
         if (!Character.isLetter(slug.charAt(0))) {
             return "« " + abbreviate(original) + " » (normalisé « " + slug

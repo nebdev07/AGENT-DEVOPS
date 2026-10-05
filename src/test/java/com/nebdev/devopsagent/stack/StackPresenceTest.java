@@ -20,8 +20,8 @@ class StackPresenceTest {
                 Docker Compose version v2.29.7
                 GROUPS=ubuntu adm docker
                 """,
-                "ssh:57.128.186.38",
-                "57.128.186.38",
+                "ssh:198.51.100.20",
+                "198.51.100.20",
                 null
         );
         var present = StackPresence.of(snap);
@@ -38,8 +38,8 @@ class StackPresenceTest {
                 COMPOSE_ABSENT
                 GROUPS=ubuntu adm
                 """,
-                "ssh:57.128.186.38",
-                "57.128.186.38",
+                "ssh:198.51.100.20",
+                "198.51.100.20",
                 null
         );
         var present = StackPresence.of(snap);

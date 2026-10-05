@@ -201,7 +201,7 @@ function fillKey(pub) {
   const hint = $("pubKeyHint");
   if (pub) {
     box.textContent = pub;
-    hint.textContent = "Clé de cet agent — à mettre sur le VPS, pas dans le catalogue OVH.";
+    hint.textContent = "Clé de cet agent — à mettre sur le VPS, pas dans la page « clés SSH » de ton hébergeur.";
     $("btnCopyRail").classList.remove("hidden");
     $("genStatus").classList.remove("hidden");
   } else {
@@ -605,7 +605,7 @@ async function installKey() {
   if (!password) {
     passwordInput.classList.add("need");
     passwordInput.focus();
-    setStatus("Colle le mot de passe du mail OVH, puis réessaie. Il n’est pas enregistré.", "err");
+    setStatus("Colle le mot de passe fourni par ton hébergeur, puis réessaie. Il n’est pas enregistré.", "err");
     return;
   }
   const plan =
@@ -620,7 +620,7 @@ async function installKey() {
     title: "Installation de la clé SSH",
     detail: "Écriture d’une ligne dans ~/.ssh/authorized_keys de "
       + t.user + "@" + t.host + ". Le mot de passe n’est pas enregistré.",
-    steps: ["Connexion avec le mot de passe OVH", "Ajouter la clé de l’agent si elle manque"],
+    steps: ["Connexion avec le mot de passe de l’hébergeur", "Ajouter la clé de l’agent si elle manque"],
     currentStep: 0,
   });
   setStatus("Installation de la clé…");
@@ -696,7 +696,7 @@ if ($("btnGitKeyCopy")) $("btnGitKeyCopy").addEventListener("click", copyGitDepl
 if ($("btnPlatAddSvc")) $("btnPlatAddSvc").addEventListener("click", () => addPlatServiceRow(null));
 if ($("btnPlatSave")) $("btnPlatSave").addEventListener("click", savePlatform);
 if ($("btnPlatClear")) $("btnPlatClear").addEventListener("click", clearPlatForm);
-if ($("btnPlatArc")) $("btnPlatArc").addEventListener("click", fillArcPreset);
+if ($("btnPlatPreset")) $("btnPlatPreset").addEventListener("click", fillPlatformPreset);
 if ($("btnPlatRestore")) $("btnPlatRestore").addEventListener("click", restorePlatform);
 if ($("platRouting")) $("platRouting").addEventListener("change", syncPlatRoutingHint);
 $("btnResultClose").addEventListener("click", hideResult);
@@ -1352,7 +1352,7 @@ async function saveApp() {
     setAppFormStatus(
       "Cause : aucun identifiant saisi.\n"
         + "Où : champ Identifiant — bande Applications (pas Analyser).\n"
-        + "À faire : ex. my-bourse (les _ deviennent des tirets). Pas de domaine ici.",
+        + "À faire : ex. mon-app (les _ deviennent des tirets). Pas de domaine ici.",
       "err"
     );
     pointAppFormError();
@@ -1650,61 +1650,51 @@ function fillPlatForm(p) {
   syncPlatRoutingHint();
 }
 
-const ARC_PRESET = {
-  id: "arc",
+const PLATFORM_PRESET = {
+  id: "mon-produit",
   routing: "path",
   services: [
     {
-      id: "www", port: 3000, gitUrl: "git@github.com:nebdev07/arc-client.git", gitRef: "main",
+      id: "www", port: 3000, gitUrl: "git@github.com:organisation/site.git", gitRef: "main",
       pathPrefix: "/", template: "next", needs: [],
-      buildArgs: { NEXT_PUBLIC_API_URL: "https://{{HOST}}/arc-api" },
+      buildArgs: { NEXT_PUBLIC_API_URL: "https://{{HOST}}/api" },
     },
     {
-      id: "backoffice", port: 3000, gitUrl: "git@github.com:nebdev07/arc-backoffice.git", gitRef: "main",
-      pathPrefix: "/arc-backoffice", template: "next", keepPath: true, needs: [],
+      id: "admin", port: 3000, gitUrl: "git@github.com:organisation/back-office.git", gitRef: "main",
+      pathPrefix: "/admin", template: "next", keepPath: true, needs: [],
       buildArgs: {
-        NEXT_PUBLIC_BASE_PATH: "/arc-backoffice",
-        NEXT_PUBLIC_API_URL: "https://{{HOST}}/arc-api",
-        NEXT_PUBLIC_APP_URL: "https://{{HOST}}/arc-backoffice",
-        NEXT_PUBLIC_CLIENT_URL: "https://{{HOST}}",
+        NEXT_PUBLIC_BASE_PATH: "/admin",
+        NEXT_PUBLIC_API_URL: "https://{{HOST}}/api",
       },
     },
     {
-      id: "api", port: 8080, gitUrl: "git@github.com:nebdev07/arc-backend.git", gitRef: "main", context: "src",
-      pathPrefix: "/arc-api", template: "spring-boot-11", keepPath: true,
+      id: "api", port: 8080, gitUrl: "git@github.com:organisation/api.git", gitRef: "main",
+      pathPrefix: "/api", template: "spring-boot-21", keepPath: true,
       needs: ["mariadb", "redis-private", "volume:uploads"],
       env: {
-        SPRING_PROFILES_ACTIVE: "staging",
-        SERVER_SERVLET_CONTEXT_PATH: "/arc-api",
-        APP_PUBLIC_BASE_URL: "https://{{HOST}}/arc-api",
-        APP_FILE_UPLOAD_BASE_PATH: "/app/data/nwanyo",
-        FILE_UPLOAD_DIRECTORY: "/app/data",
-        FILE_UPLOAD_DIR: "/app/data",
-        SPRING_WEB_RESOURCES_STATIC_LOCATIONS: "file:/app/data/nwanyo/",
-        APP_MEMBER_LOGIN_URL: "https://{{HOST}}/connexion",
-        APP_LOGIN_URL: "https://{{HOST}}/arc-backoffice",
-        LOGS_DIRECTORY: "/app/data/logs",
+        SPRING_PROFILES_ACTIVE: "prod",
+        SERVER_SERVLET_CONTEXT_PATH: "/api",
         REDIS_HOST: "platform-cache",
       },
     },
   ],
 };
 
-function fillArcPreset() {
+function fillPlatformPreset() {
   const box = $("platServices");
   if (box && box.querySelector(".plat-svc-git") && Array.from(box.querySelectorAll(".plat-svc-git")).some((i) => i.value.trim())
-    && !window.confirm("Remplacer la fiche en cours par le modèle ARC ?")) {
+    && !window.confirm("Remplacer la fiche en cours par le modèle site + back-office + API ?")) {
     return;
   }
   platEditingId = "";
-  $("platId").value = ARC_PRESET.id;
+  $("platId").value = PLATFORM_PRESET.id;
   if ($("platBase")) $("platBase").value = "";
-  if ($("platRouting")) $("platRouting").value = ARC_PRESET.routing;
+  if ($("platRouting")) $("platRouting").value = PLATFORM_PRESET.routing;
   if (box) box.innerHTML = "";
-  ARC_PRESET.services.forEach((s) => addPlatServiceRow(s));
+  PLATFORM_PRESET.services.forEach((s) => addPlatServiceRow(s));
   syncPlatRoutingHint();
-  setPlatFormStatus("Modèle ARC chargé : vérifie les dépôts et le domaine, puis Enregistrer. "
-    + "Ensuite une clé Git par dépôt (liste ci-dessous) et la restauration des données avant d’ouvrir le site.", "ok");
+  setPlatFormStatus("Modèle chargé : remplace l’identifiant et les trois dépôts Git par les tiens, ajuste les chemins "
+    + "et les variables, puis Enregistrer. Ensuite une clé Git par dépôt (liste ci-dessous).", "ok");
 }
 
 async function loadRepoKeys() {
@@ -1838,7 +1828,6 @@ function fillRestorePlatforms(platforms) {
     sel.appendChild(o);
   });
   if (prev && platforms.some((p) => p.id === prev)) sel.value = prev;
-  if (!$("restoreSubdir").value && sel.value === "arc") $("restoreSubdir").value = "nwanyo";
 }
 
 async function restorePlatform() {
@@ -2455,7 +2444,7 @@ function renderJourneyCard(step, current, done) {
         ? "Tu peux la modifier ci-dessous, puis Enregistrer. Rien n’est encore installé sur le serveur."
         : "Une plateforme = tes applications (site, back-office, API…), chacune avec son dépôt Git. Pars d’un modèle ou d’une fiche vide, puis Enregistrer.";
       if (!p) {
-        journeyButton("Partir du modèle ARC", fillArcPreset, "ghost");
+        journeyButton("Partir d’un modèle site + back-office + API", fillPlatformPreset, "ghost");
         journeyButton("Fiche vide", clearPlatForm, "ghost");
       }
       hint("Pas encore de nom de domaine ? Laisse les noms d’hôte vides : l’agent utilise une adresse automatique <code>…sslip.io</code>. Tu mettras ton domaine plus tard, puis Enregistrer et Déployer.");
@@ -2482,7 +2471,7 @@ function renderJourneyCard(step, current, done) {
     }
     case "data":
       $("journeyTitle").textContent = "Restaurer les données (si besoin)";
-      $("journeyText").textContent = "Si ton application a besoin d’une base existante (c’est le cas d’ARC), envoie le dump SQL et l’archive des fichiers ci-dessous. Sinon, passe cette étape.";
+      $("journeyText").textContent = "Si ton application a besoin d’une base existante (elle ne crée pas ses tables seule), envoie le dump SQL et l’archive des fichiers ci-dessous. Sinon, passe cette étape.";
       journeyButton("Pas de données à restaurer", () => {
         localStorage.setItem(dataKey(p), "skip");
         journey.viewing = "";

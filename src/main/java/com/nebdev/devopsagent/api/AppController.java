@@ -94,7 +94,7 @@ public class AppController {
             throw new IllegalArgumentException(OperatorMessage.of(
                     "aucun id fourni pour la suppression.",
                     "Liste Applications — bouton Supprimer",
-                    "indique l’identifiant de la ligne (ex. my-bourse)."));
+                    "indique l’identifiant de la ligne (ex. mon-app)."));
         }
         String slug = id.trim().toLowerCase().replace('_', '-');
         List<AppSpec> current = appIntentStore.load();

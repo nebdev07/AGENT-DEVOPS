@@ -11,10 +11,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class AppRemoteFailureTest {
 
     private static final AppSpec APP = AppSpec.normalized(
-            "my-bourse",
-            "https://github.com/nebdev07/BOURSE.git",
+            "mon-app",
+            "https://github.com/organisation/mon-app.git",
             "main",
-            "my-bourse.example.com",
+            "mon-app.example.com",
             8080
     );
 
@@ -40,7 +40,7 @@ class AppRemoteFailureTest {
 
     @Test
     void preflightDetectsMissingDockerfileOnRepoWithoutOne() {
-        // Dépôt figé sans Dockerfile (BOURSE en a un depuis : ne plus s’y fier).
+        // Dépôt public figé sans Dockerfile (ignoré si GitHub est injoignable).
         AppSpec noDockerfile = AppSpec.normalized(
                 "hello",
                 "https://github.com/octocat/Hello-World.git",

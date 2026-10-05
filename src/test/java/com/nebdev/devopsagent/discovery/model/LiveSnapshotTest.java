@@ -11,7 +11,7 @@ class LiveSnapshotTest {
         assertThat(LiveSnapshot.isLive(null)).isFalse();
         assertThat(LiveSnapshot.isLive(snap("fixture:x", "203.0.113.10"))).isFalse();
         assertThat(LiveSnapshot.isLive(snap("ssh:203.0.113.10", "203.0.113.10"))).isFalse();
-        assertThat(LiveSnapshot.isLive(snap("ssh:57.128.186.38", "57.128.186.38"))).isTrue();
+        assertThat(LiveSnapshot.isLive(snap("ssh:198.51.100.20", "198.51.100.20"))).isTrue();
     }
 
     private static ServerSnapshot snap(String source, String host) {

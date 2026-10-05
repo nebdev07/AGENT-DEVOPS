@@ -166,11 +166,11 @@ public class SshConnector {
             if (passwordAuth) {
                 throw new IllegalStateException(
                         "Mot de passe refusé (" + target.user() + "@" + target.host()
-                                + "). Vérifie le mail OVH, ou essaie l'autre utilisateur (ubuntu / root).");
+                                + "). Vérifie le mot de passe fourni par ton hébergeur, ou essaie un autre utilisateur.");
             }
             throw new IllegalStateException(
                     "Authentification refusée (" + target.user() + "@" + target.host()
-                            + "). Installe la clé avec le mot de passe OVH, ou change l'utilisateur (ubuntu / root).");
+                            + "). Pose la clé de l'agent sur ce compte (Aide › 3. Clé SSH), ou change l'utilisateur.");
         }
     }
 

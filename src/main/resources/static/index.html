@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app31" />
+  <link rel="stylesheet" href="/console.css?v=app32" />
 </head>
 <body>
   <div class="bg"></div>
@@ -106,13 +106,13 @@
             publique <strong>sur le VPS</strong> (fichier <code>~/.ssh/authorized_keys</code>).
           </p>
           <div class="callout">
-            <strong>Piège OVH :</strong> « Mes clés SSH publiques » dans le compte n’installe
-            rien sur un VPS déjà créé. Ça ne sert qu’à la création ou une réinstall.
+            <strong>Piège fréquent :</strong> la page « clés SSH » de ton compte chez l’hébergeur n’installe
+            rien sur un VPS déjà créé. Elle ne sert qu’à la création ou à une réinstallation.
             Ne réinstalle pas le serveur pour ça.
           </div>
           <p>Générer la clé une fois, sur <em>ce</em> PC (PowerShell) :</p>
           <div class="copyrow">
-            <pre id="genCmd">ssh-keygen -t ed25519 -f $HOME\.ssh\vps-autopilot -C "vps-autopilot-personal" -N ""</pre>
+            <pre id="genCmd">ssh-keygen -t ed25519 -f $HOME\.ssh\vps-autopilot -C "vps-autopilot" -N ""</pre>
             <button id="btnCopyGen" type="button" class="ghost slim">Copier</button>
           </div>
           <p class="hint">
@@ -123,7 +123,7 @@
           <div class="callout">
             <strong>Quelle clé mettre sur le VPS ?</strong> Uniquement la <strong>publique</strong> :
             le fichier <code>vps-autopilot.pub</code>, affiché juste en dessous. C’est <strong>une seule ligne</strong>
-            qui commence par <code>ssh-ed25519 AAAA…</code> et finit par <code>vps-autopilot-personal</code>.
+            qui commence par <code>ssh-ed25519 AAAA…</code>.
             Ne colle jamais <code>vps-autopilot</code> (sans <code>.pub</code>) : c’est la clé secrète, elle reste sur ce PC.
           </div>
           <p>Clé publique de cet agent (une seule ligne) — c’est <strong>celle-ci</strong> à copier :</p>
@@ -147,14 +147,14 @@
               <h4>A — Cockpit (le plus simple)</h4>
               <ol>
                 <li>IP + utilisateur (<code>ubuntu</code> ou <code>root</code>).</li>
-                <li>Mot de passe du <strong>mail de livraison OVH</strong>.</li>
+                <li>Mot de passe du <strong>mail de livraison de ton hébergeur</strong>.</li>
                 <li><strong>Installer la clé (CHANGE)</strong> → confirme.</li>
               </ol>
               <p class="hint">Le mot de passe n’est pas enregistré. Une ligne dans <code>authorized_keys</code>.</p>
             </section>
             <section class="method">
-              <h4>B — Console KVM OVH</h4>
-              <p>Fiche du VPS (pas « Mes clés SSH ») → Console KVM → connecte-toi <strong>avec l’utilisateur de l’agent</strong> (sinon méthode D), puis :</p>
+              <h4>B — Console web de l’hébergeur</h4>
+              <p>Fiche du VPS chez l’hébergeur (pas la page « clés SSH ») → console web (KVM / VNC) → connecte-toi <strong>avec l’utilisateur de l’agent</strong> (sinon méthode D), puis :</p>
               <div class="copyrow">
                 <pre id="kvmCmd">mkdir -p ~/.ssh
 chmod 700 ~/.ssh
@@ -164,7 +164,7 @@ nano ~/.ssh/authorized_keys</pre>
                 <button id="btnCopyKvm" type="button" class="ghost slim">Copier</button>
               </div>
               <p class="hint">
-                Dans <code>nano</code>, colle la ligne <code>ssh-ed25519 …</code> copiée plus haut (clic droit dans la console KVM),
+                Dans <code>nano</code>, colle la ligne <code>ssh-ed25519 …</code> copiée plus haut (clic droit dans la console web),
                 sur une seule ligne, sans espace avant. Enregistrer : Ctrl+O, Entrée, Ctrl+X.
               </p>
             </section>
@@ -179,7 +179,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <section class="method">
               <h4>D — L’admin du serveur crée le compte de l’agent (aucun accès partagé)</h4>
               <p>
-                Recommandé, et seul moyen pour un serveur que tu n’administres pas (ex. serveur DTSI) : envoie ce bloc à
+                Recommandé, et seul moyen pour un serveur que tu n’administres pas (ex. le serveur de ton organisation) : envoie ce bloc à
                 l’administrateur. Il le colle dans sa propre session <code>root</code> (ou après <code>sudo -i</code>).
                 Le bloc crée le compte de l’agent s’il n’existe pas (Ubuntu, Debian, RHEL, Rocky, Alma, Fedora…), puis y pose
                 la clé. Personne ne te donne de mot de passe, et le compte n’a <strong>aucun droit sudo</strong> par défaut :
@@ -194,7 +194,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
                     <a href="#cockpit" data-view="cockpit">Cockpit</a> (panneau de gauche). Le bloc ci-dessous se met à jour
                     tout seul.</li>
                   <li><strong>Après avoir copié</strong> : change la première ligne du bloc, <code>U=autopilot</code>, par
-                    exemple <code>U=agentdtsi</code>.</li>
+                    exemple <code>U=agentweb</code>.</li>
                 </ol>
                 Nom simple : minuscules, chiffres, <code>-</code> ou <code>_</code>, commence par une lettre.
                 Saisis ensuite <strong>le même nom</strong> dans le champ Utilisateur SSH pour analyser.
@@ -205,7 +205,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
               </div>
               <p class="hint">
                 Le bloc est rempli avec la clé publique de cet agent et l’<strong>Utilisateur</strong> saisi dans le cockpit.
-                Il n’ajoute pas la clé deux fois. La dernière ligne affichée doit finir par <code>vps-autopilot-personal</code>.
+                Il n’ajoute pas la clé deux fois. La dernière ligne affichée doit être la clé <code>ssh-ed25519 …</code> de cet agent.
                 Pour retirer l’accès plus tard : supprimer cette ligne du fichier.
               </p>
             </section>
@@ -285,10 +285,10 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           <h3>7. Déployer une app</h3>
           <ul>
             <li>Avant Déployer : un <strong>popup</strong> liste ce qui sera fait. Liens publics en <strong>https://</strong>. Traefik installe toujours HTTPS (Let’s Encrypt) + redirection HTTP→HTTPS.</li>
-            <li>Domaine de base optionnel (ex. <code>apps.mondomaine.com</code>) : les apps deviennent <code>https://my-bourse.apps.mondomaine.com</code>. DNS <code>*</code> → IP du VPS. Sans domaine : fallback lab <code>identifiant.&lt;IP&gt;.sslip.io</code> (aussi en HTTPS).</li>
-            <li>Identifiant = slug court (<code>my-bourse</code>), pas le domaine. Nom d’hôte = DNS complet. Git = <code>https://…</code> public, ou <code>git@github.com:org/repo.git</code> + clé lecture seule (Deploy key, pas d’écriture).</li>
+            <li>Domaine de base optionnel (ex. <code>apps.mondomaine.com</code>) : les apps deviennent <code>https://mon-app.apps.mondomaine.com</code>. DNS <code>*</code> → IP du VPS. Sans domaine : fallback lab <code>identifiant.&lt;IP&gt;.sslip.io</code> (aussi en HTTPS).</li>
+            <li>Identifiant = slug court (<code>mon-app</code>), pas le domaine. Nom d’hôte = DNS complet. Git = <code>https://…</code> public, ou <code>git@github.com:org/repo.git</code> + clé lecture seule (Deploy key, pas d’écriture).</li>
             <li>Sur chaque ligne de la liste : <strong>Modifier</strong> (remplit le formulaire), <strong>Supprimer</strong> (retire la ligne locale, sans arrêter le conteneur VPS), <strong>Déployer / Mettre à jour</strong>.</li>
-            <li>Premier test prévu : déployer <strong>ce produit</strong> (même dépôt, Dockerfile à la racine, port <code>8080</code>, identifiant <code>vps-autopilot</code>). Git HTTPS public, ou SSH + Deploy key. Nom d’hôte : DNS vers le VPS, ou <code>app.&lt;IP&gt;.sslip.io</code>.</li>
+            <li>Premier essai conseillé : une petite application avec un Dockerfile à la racine (port interne, ex. <code>8080</code>). Git HTTPS public, ou SSH + Deploy key. Nom d’hôte : DNS vers le VPS, ou <code>app.&lt;IP&gt;.sslip.io</code>.</li>
             <li>L’instance publique est <strong>cargo</strong> : page de preuve + <code>/api/v1/health</code>. <strong>Aucun CHANGE</strong> depuis Internet. Le cockpit reste sur <code>127.0.0.1:8088</code>. Plus tard (V9) : cockpit en ligne derrière login, une session et des paramètres par opérateur.</li>
             <li>Le DNS du nom d’hôte vers l’IP du VPS est à toi (sauf astuce sslip). Si MariaDB est déjà sur ce VPS : à chaque Déployer, une base + user SQL dédiés à l’app (<code>db.env</code> sur le serveur, hors git).</li>
           </ul>
@@ -306,10 +306,10 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li><strong>Garder le préfixe</strong> : à cocher quand l’app sait déjà qu’elle vit sous <code>/chemin</code> (Next <code>basePath</code>, Spring <code>context-path</code>). Sinon Traefik retire le préfixe.</li>
             <li><strong>Variables de build</strong> (une par ligne, <code>CLE=valeur</code>) : figées dans l’image, ex. <code>NEXT_PUBLIC_API_URL</code>. <strong>Variables d’exécution</strong> : lues au démarrage du conteneur, ex. <code>SPRING_PROFILES_ACTIVE</code>. <code>{{HOST}}</code> est remplacé par le nom d’hôte du service. Les secrets (mots de passe, tokens) s’affichent <code>********</code> : laisse-les ainsi pour garder la valeur enregistrée. Réglage manuel possible sur le VPS dans <code>svc-&lt;id&gt;.local.env</code>.</li>
             <li><strong>Redis privé</strong> : un Redis sans mot de passe réservé à la plateforme (réseau interne), pour une app qui ne sait pas envoyer de mot de passe Redis.</li>
-            <li><strong>Remplir le modèle ARC</strong> pré-remplit les 3 services ARC (site <code>/</code>, back-office <code>/arc-backoffice</code>, API <code>/arc-api</code>). Vérifie le domaine, puis Enregistrer.</li>
+            <li><strong>Modèle site + back-office + API</strong> pré-remplit 3 services d’exemple (site Next <code>/</code>, back-office Next <code>/admin</code>, API Spring Boot <code>/api</code> avec base, cache et fichiers). Remplace l’identifiant et les dépôts Git par les tiens, ajuste les chemins, puis Enregistrer.</li>
             <li><strong>Dépôts privés</strong> : GitHub refuse la même Deploy key sur deux dépôts. Sous la liste, une ligne par dépôt <code>git@…</code> : Générer, Copier, ouvrir le lien « Deploy keys », coller la clé avec <em>Allow write access</em> décoché.</li>
             <li><strong>Console SQL</strong> (sous les clés Git, et à la dernière étape du parcours) : SQL dans la base de la plateforme, avec l’utilisateur de la plateforme. Lecture (SELECT, SHOW, DESCRIBE, EXPLAIN) immédiate, 1000 lignes max. Écriture (INSERT, UPDATE, DELETE, ALTER, CREATE…) : plan à confirmer, puis <strong>sauvegarde de toute la base</strong> sur le VPS (<code>backups/…-before-sql-….sql.gz</code>, 20 gardées) avant exécution. Arrêt à la première erreur. Refusé : DROP, TRUNCATE, droits, autres bases, fichiers du serveur, commandes client. Fichier <code>.sql</code> de 5 Mo max ; au-delà, « Restaurer les données ».</li>
-            <li><strong>Restaurer les données</strong> : dump SQL (<code>.sql</code> / <code>.sql.gz</code>) et/ou archive des fichiers (<code>.tar.gz</code> / <code>.zip</code>, contenu à la racine). À faire <em>avant</em> le premier Déployer pour une app qui ne crée pas sa base seule (ARC). La base et les fichiers déjà présents sont sauvegardés sur le VPS (<code>/opt/vps-autopilot/platforms/&lt;id&gt;/backups</code>) avant d’être remplacés. Préfère une base de démonstration aux données réelles. Si l’import échoue, la base revient automatiquement à cette sauvegarde et les services sont relancés. Erreur de clé étrangère (<code>ERROR 1452</code>) : décoche « Vérifier les clés étrangères pendant l’import » et relance.</li>
+            <li><strong>Restaurer les données</strong> : dump SQL (<code>.sql</code> / <code>.sql.gz</code>) et/ou archive des fichiers (<code>.tar.gz</code> / <code>.zip</code>, contenu à la racine). À faire <em>avant</em> le premier Déployer pour une app qui ne crée pas sa base seule. La base et les fichiers déjà présents sont sauvegardés sur le VPS (<code>/opt/vps-autopilot/platforms/&lt;id&gt;/backups</code>) avant d’être remplacés. Préfère une base de démonstration aux données réelles. Si l’import échoue, la base revient automatiquement à cette sauvegarde et les services sont relancés. Erreur de clé étrangère (<code>ERROR 1452</code>) : décoche « Vérifier les clés étrangères pendant l’import » et relance.</li>
             <li><strong>Garde en ligne</strong> : chaque Déployer installe sur le serveur un minuteur (<code>vps-autopilot-keepalive</code>) qui relance toutes les 2 minutes, et au démarrage, les services de plateforme arrêtés. Pour arrêter volontairement une plateforme plus de 2 minutes, crée <code>/opt/vps-autopilot/platforms/&lt;id&gt;/.maintenance</code> (pris en compte 2 h).</li>
             <li>Supprimer retire la fiche locale seulement (ne stoppe pas les conteneurs).</li>
           </ul>
@@ -375,7 +375,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           <input id="sshPort" type="number" value="22" min="1" max="65535" />
         </label>
       </div>
-      <label class="field rail-setup">Mot de passe SSH (mail OVH, jamais enregistré)
+      <label class="field rail-setup">Mot de passe SSH (fourni par l’hébergeur, jamais enregistré)
         <input id="sshPassword" type="password" autocomplete="off" placeholder="requis pour installer la clé" />
       </label>
       <div class="key-mini rail-setup">
@@ -479,21 +479,21 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             </div>
             <div class="row2 app-fields">
               <label class="field">Identifiant court (slug) — PAS le domaine
-                <input id="appId" type="text" value="" placeholder="my-bourse" autocomplete="off" />
+                <input id="appId" type="text" value="" placeholder="mon-app" autocomplete="off" />
               </label>
               <label class="field">Port interne
                 <input id="appPort" type="number" value="8080" min="1" max="65535" />
               </label>
             </div>
             <label class="field">1 · Git — HTTPS public ou git@github.com:org/repo.git
-              <input id="appGit" type="text" value="" placeholder="https://github.com/nebdev07/BOURSE.git" autocomplete="off" />
+              <input id="appGit" type="text" value="" placeholder="https://github.com/organisation/mon-app.git" autocomplete="off" />
             </label>
             <div class="row2 app-fields">
               <label class="field">Branche
                 <input id="appRef" type="text" value="main" autocomplete="off" />
               </label>
               <label class="field">2 · Nom d’hôte DNS complet (vide = auto)
-                <input id="appHostName" type="text" value="" placeholder="my-bourse.apps.nebdev.org" autocomplete="off" />
+                <input id="appHostName" type="text" value="" placeholder="mon-app.apps.mondomaine.com" autocomplete="off" />
               </label>
             </div>
             <div class="app-form-actions">
@@ -530,20 +530,20 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
               <button id="btnPlatAddSvc" type="button" class="ghost">Ajouter un service</button>
               <button id="btnPlatSave" type="button" class="ghost">Enregistrer la plateforme</button>
               <button id="btnPlatClear" type="button" class="ghost">Nouvelle fiche</button>
-              <button id="btnPlatArc" type="button" class="ghost">Remplir le modèle ARC</button>
+              <button id="btnPlatPreset" type="button" class="ghost">Modèle site + back-office + API</button>
             </div>
             <p id="platFormStatus" class="app-form-status" hidden></p>
             <div id="platList" class="action-list"></div>
             </div>
             <div id="secRestore" data-jsec="data">
             <p class="kicker" style="margin-top:1.1rem">Restaurer les données (avant ou après Déployer)</p>
-            <p class="hint">Pour une appli qui ne sait pas créer sa base seule (ex. ARC) : envoie un <strong>dump SQL</strong> (<code>.sql</code> ou <code>.sql.gz</code>, MySQL ou MariaDB) et/ou une <strong>archive des fichiers</strong> (<code>.tar.gz</code> ou <code>.zip</code>, contenu à la racine). La base actuelle est sauvegardée sur le VPS avant d’être remplacée. Utilise de préférence une base de démonstration, pas les données réelles des membres.</p>
+            <p class="hint">Pour une appli qui ne sait pas créer sa base seule : envoie un <strong>dump SQL</strong> (<code>.sql</code> ou <code>.sql.gz</code>, MySQL ou MariaDB) et/ou une <strong>archive des fichiers</strong> (<code>.tar.gz</code> ou <code>.zip</code>, contenu à la racine). La base actuelle est sauvegardée sur le VPS avant d’être remplacée. Utilise de préférence une base de démonstration, pas les données réelles de tes utilisateurs.</p>
             <div class="row2 app-fields">
               <label class="field">Plateforme
                 <select id="restorePlat"></select>
               </label>
               <label class="field">Sous-dossier des fichiers dans le volume (optionnel)
-                <input id="restoreSubdir" type="text" value="" placeholder="nwanyo" autocomplete="off" />
+                <input id="restoreSubdir" type="text" value="" placeholder="uploads" autocomplete="off" />
               </label>
             </div>
             <div class="row2 app-fields">
@@ -691,6 +691,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app31"></script>
+  <script src="/console.js?v=app32"></script>
 </body>
 </html>

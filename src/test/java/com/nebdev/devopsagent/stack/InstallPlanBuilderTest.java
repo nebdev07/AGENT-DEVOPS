@@ -36,8 +36,8 @@ class InstallPlanBuilderTest {
                 ###SERVICES###
                 fail2ban.service
                 """,
-                "ssh:57.128.186.38",
-                "57.128.186.38",
+                "ssh:198.51.100.20",
+                "198.51.100.20",
                 null
         );
         var plan = InstallPlanBuilder.build(snap, Set.of("security"));
@@ -53,8 +53,8 @@ class InstallPlanBuilderTest {
         var snap = mapper.readValue(
                 """
                 {
-                  "source": "ssh:57.128.186.38",
-                  "host": "57.128.186.38",
+                  "source": "ssh:198.51.100.20",
+                  "host": "198.51.100.20",
                   "runningServices": ["fail2ban.service", "ssh.service"],
                   "firewall": { "engine": "ufw", "ufwStatus": "unknown", "listeningTcpPorts": [22] }
                 }
@@ -83,8 +83,8 @@ class InstallPlanBuilderTest {
                 fail2ban.service
                 ssh.service
                 """,
-                "ssh:57.128.186.38",
-                "57.128.186.38",
+                "ssh:198.51.100.20",
+                "198.51.100.20",
                 null
         );
         var plan = InstallPlanBuilder.build(snap, Set.of("security"));
@@ -233,8 +233,8 @@ class InstallPlanBuilderTest {
                 PRESENT
                 Docker version 29.0.0
                 """,
-                "ssh:57.128.186.38",
-                "57.128.186.38",
+                "ssh:198.51.100.20",
+                "198.51.100.20",
                 null
         );
         var plan = InstallPlanBuilder.build(

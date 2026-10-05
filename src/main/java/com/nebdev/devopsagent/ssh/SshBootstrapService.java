@@ -33,11 +33,11 @@ public class SshBootstrapService {
         actionGuard.assertConfirmedChange("install-agent-pubkey", confirmed);
         forbiddenTargetGuard.assertAllowed(target.host());
         if (target.user() == null || target.user().isBlank()) {
-            throw new IllegalArgumentException("Indiquez l'utilisateur SSH (ubuntu, root, …).");
+            throw new IllegalArgumentException("Indiquez l'utilisateur SSH (ex. autopilot).");
         }
         if (password == null || password.isBlank()) {
             throw new IllegalArgumentException(
-                    "Mot de passe SSH requis (mail OVH). Il n'est pas enregistré.");
+                    "Mot de passe SSH requis (fourni par ton hébergeur). Il n'est pas enregistré.");
         }
         String pub = readPublicKey();
         String raw = sshConnector.runStdinScriptWithPassword(

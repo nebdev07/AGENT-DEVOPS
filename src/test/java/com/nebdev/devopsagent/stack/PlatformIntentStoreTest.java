@@ -24,8 +24,8 @@ class PlatformIntentStoreTest {
         ObjectMapper mapper = new ObjectMapper();
         AppIntentStore apps = new AppIntentStore(props, mapper);
         apps.save(List.of(AppSpec.normalized(
-                "my-bourse",
-                "https://github.com/org/bourse.git",
+                "mon-app",
+                "https://github.com/org/mon-app.git",
                 "main",
                 "www.clash.apps.exemple.com",
                 3000

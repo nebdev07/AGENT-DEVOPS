@@ -9,14 +9,14 @@ class PublicDomainStoreTest {
 
     @Test
     void suggestPrefersBaseDomain() {
-        assertThat(PublicDomainStore.suggestHost("my-bourse", "apps.neb.dev", "57.128.186.38"))
-                .isEqualTo("my-bourse.apps.neb.dev");
+        assertThat(PublicDomainStore.suggestHost("mon-app", "apps.mondomaine.com", "198.51.100.20"))
+                .isEqualTo("mon-app.apps.mondomaine.com");
     }
 
     @Test
     void suggestFallsBackToSslip() {
-        assertThat(PublicDomainStore.suggestHost("my-bourse", "", "57.128.186.38"))
-                .isEqualTo("my-bourse.57.128.186.38.sslip.io");
+        assertThat(PublicDomainStore.suggestHost("mon-app", "", "198.51.100.20"))
+                .isEqualTo("mon-app.198.51.100.20.sslip.io");
     }
 
     @Test

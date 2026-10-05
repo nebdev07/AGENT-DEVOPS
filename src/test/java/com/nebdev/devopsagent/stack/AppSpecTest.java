@@ -24,22 +24,22 @@ class AppSpecTest {
     @Test
     void underscoreInIdBecomesHyphen() {
         AppSpec spec = AppSpec.normalized(
-                "my_bourse",
-                "https://github.com/nebdev07/BOURSE.git",
+                "mon_app",
+                "https://github.com/organisation/mon-app.git",
                 "main",
-                "my-bourse.57.128.186.38.sslip.io",
+                "mon-app.198.51.100.20.sslip.io",
                 8080
         );
-        assertThat(spec.id()).isEqualTo("my-bourse");
+        assertThat(spec.id()).isEqualTo("mon-app");
     }
 
     @Test
     void rejectsGitUrlAsHostname() {
         assertThatThrownBy(() -> AppSpec.normalized(
                 "vps-autopilot",
-                "https://github.com/nebdev07/AGENT-DEVOPS.git",
+                "https://github.com/organisation/mon-agent.git",
                 "main",
-                "https://github.com/nebdev07/AGENT-DEVOPS",
+                "https://github.com/organisation/mon-agent",
                 8080
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -67,10 +67,10 @@ class AppSpecTest {
     @Test
     void fqdnAsIdExplainsHostnameConfusion() {
         assertThatThrownBy(() -> AppSpec.normalized(
-                "bourse.apps.nebdev.org",
+                "mon-app.apps.mondomaine.com",
                 "https://github.com/org/app.git",
                 "main",
-                "bourse.apps.nebdev.org",
+                "mon-app.apps.mondomaine.com",
                 3000
         ))
                 .isInstanceOf(IllegalArgumentException.class)

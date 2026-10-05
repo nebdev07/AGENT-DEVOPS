@@ -9,18 +9,14 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class CargoScaffoldTest {
 
+    /** Test réseau : AUTOPILOT_SAMPLE_NEXT_REPO = dépôt GitHub public Next.js sans Dockerfile racine. */
     @Test
-    void detectsNextOnBourseRepo() {
-        AppSpec app = AppSpec.normalized(
-                "my-bourse",
-                "https://github.com/nebdev07/BOURSE.git",
-                "main",
-                "my-bourse.example.com",
-                8080
-        );
-        // BOURSE a maintenant un Dockerfile racine : le rattrapage ne s’applique plus, on ne teste la détection que si absent.
+    void detectsNextOnSampleRepo() {
+        String repo = System.getenv("AUTOPILOT_SAMPLE_NEXT_REPO");
+        assumeTrue(repo != null && !repo.isBlank(), "AUTOPILOT_SAMPLE_NEXT_REPO non défini — test réseau ignoré");
+        AppSpec app = AppSpec.normalized("mon-app", repo, "main", "mon-app.example.com", 8080);
         assumeTrue(CargoScaffold.dockerfileExists(app).equals(Optional.of(false)),
-                "BOURSE a un Dockerfile (ou GitHub injoignable) — rattrapage non applicable");
+                "le dépôt a un Dockerfile (ou GitHub injoignable) — rattrapage non applicable");
         assertThat(CargoScaffold.propose(app)).isPresent();
         assertThat(CargoScaffold.propose(app).orElseThrow().kind()).isEqualTo("next");
         assertThat(CargoScaffold.propose(app).orElseThrow().port()).isEqualTo(3000);
@@ -29,10 +25,10 @@ class CargoScaffoldTest {
     @Test
     void roleScriptIncludesScaffoldB64() {
         AppSpec app = AppSpec.normalized(
-                "my-bourse",
-                "https://github.com/nebdev07/BOURSE.git",
+                "mon-app",
+                "https://github.com/organisation/mon-app.git",
                 "main",
-                "my-bourse.example.com",
+                "mon-app.example.com",
                 3000
         );
         String script = RoleScript.loadApp(app, "YWJj");

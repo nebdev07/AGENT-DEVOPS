@@ -82,7 +82,7 @@ class SqlConsoleTest {
         var p = SqlConsolePolicy.prepare(a);
         String raw = String.join("\n",
                 "SQL_DB=app_arc",
-                "SQL_BACKUP=/opt/vps-autopilot/platforms/arc/backups/app_arc-before-sql-1.sql.gz",
+                "SQL_BACKUP=/opt/vps-autopilot/platforms/demo/backups/app_demo-before-sql-1.sql.gz",
                 "SQL_OUTPUT_BYTES=400",
                 "###SQL_BEGIN###",
                 "<?xml version=\"1.0\"?>",
@@ -96,7 +96,7 @@ class SqlConsoleTest {
                 "</resultset>",
                 "###SQL_END###",
                 "SQL_DONE");
-        var r = PlatformSqlService.interpret("arc", a, p, raw);
+        var r = PlatformSqlService.interpret("demo", a, p, raw);
         assertThat(r.risk()).isEqualTo("CHANGE");
         assertThat(r.database()).isEqualTo("app_arc");
         assertThat(r.backup()).endsWith(".sql.gz");
@@ -127,7 +127,7 @@ class SqlConsoleTest {
                 "SQL_ERROR=--------------",
                 "SQL_ERROR=ERROR 1146 (42S02) at line 3: Table 'app_arc.absente' doesn't exist",
                 "SQL_DONE");
-        var r = PlatformSqlService.interpret("arc", a, p, raw);
+        var r = PlatformSqlService.interpret("demo", a, p, raw);
         assertThat(r.error()).startsWith("ERROR 1146").doesNotContain("---");
         assertThat(r.statements()).extracting(PlatformSqlService.StatementResult::status)
                 .containsExactly("ok", "error", "skipped");

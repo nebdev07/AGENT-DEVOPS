@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 
 /**
  * Domaine de base public pour des liens mémorisables (ADR-033).
- * Ex. base = apps.exemple.com → my-bourse.apps.exemple.com
+ * Ex. base = apps.exemple.com → mon-app.apps.exemple.com
  */
 @Component
 public class PublicDomainStore {

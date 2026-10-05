@@ -99,7 +99,7 @@ if [ "$APPLY_SSH" = "1" ]; then
     ALLOW_USERS="$REMOTE_USER"
   fi
   DROPIN=/etc/ssh/sshd_config.d/00-vps-autopilot.conf
-  # Ne jamais enfermer dehors un admin humain (ex. nebdev) : on garde les AllowUsers déjà posés
+  # Ne jamais enfermer dehors un admin humain (compte admin personnel) : on garde les AllowUsers déjà posés
   # et chaque membre du groupe sudo qui a une clé dans son authorized_keys.
   if [ "$(id -u)" -ne 0 ]; then
     PREV="$($SUDO awk '/^AllowUsers /{for (i=2; i<=NF; i++) print $i}' "$DROPIN" 2>/dev/null || true)"

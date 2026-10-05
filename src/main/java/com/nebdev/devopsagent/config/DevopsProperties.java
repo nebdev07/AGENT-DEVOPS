@@ -2,10 +2,14 @@ package com.nebdev.devopsagent.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @ConfigurationProperties(prefix = "devops")
 public class DevopsProperties {
 
     private Ssh ssh = new Ssh();
+    private Guard guard = new Guard();
     private String stateDir = "./state";
     private String labFixture = "classpath:fixtures/ubuntu-vps2-blank.txt";
 
@@ -15,6 +19,14 @@ public class DevopsProperties {
 
     public void setSsh(Ssh ssh) {
         this.ssh = ssh;
+    }
+
+    public Guard getGuard() {
+        return guard;
+    }
+
+    public void setGuard(Guard guard) {
+        this.guard = guard;
     }
 
     public String getStateDir() {
@@ -42,6 +54,28 @@ public class DevopsProperties {
 
     public boolean hasPrivateKey() {
         return ssh.getPrivateKeyPath() != null && !ssh.getPrivateKeyPath().isBlank();
+    }
+
+    /** Serveurs protégés propres à chaque opérateur : jamais versionnés (state/agent-local.yml). */
+    public static class Guard {
+        private List<String> blockedHosts = new ArrayList<>();
+        private List<String> readOnlyHosts = new ArrayList<>();
+
+        public List<String> getBlockedHosts() {
+            return blockedHosts;
+        }
+
+        public void setBlockedHosts(List<String> blockedHosts) {
+            this.blockedHosts = blockedHosts == null ? new ArrayList<>() : blockedHosts;
+        }
+
+        public List<String> getReadOnlyHosts() {
+            return readOnlyHosts;
+        }
+
+        public void setReadOnlyHosts(List<String> readOnlyHosts) {
+            this.readOnlyHosts = readOnlyHosts == null ? new ArrayList<>() : readOnlyHosts;
+        }
     }
 
     public static class Ssh {
