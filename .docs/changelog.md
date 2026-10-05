@@ -3,6 +3,10 @@
 > Ne jamais effacer une entrée.  
 > Dernière mise à jour : 2026-10-01
 
+## 2026-10-05
+
+- **ADR-037 — reprise du serveur DTSI `154.0.30.233`** (DISMAS + PRISM derrière Apache :91, SSH :90). `ForbiddenTargetGuard` a désormais deux niveaux : `assertReadAllowed` (analyse, empreinte SSH) et `assertAllowed` (toute modification). `154.0.30.233` est en **lecture seule** ; ARC prod reste interdit dans les deux cas. Stratégie : migration progressive vers Docker + Traefik (inventaire, répétition sur VPS de test, bascule application par application, retrait d'Apache/Tomcat/PM2). Tests : 115 → 116.
+
 ## 2026-10-02
 
 - Correctif **Console SQL** : les colonnes `BIT(1)` (booléens JPA, ex. `users.is_locked`) étaient écrites par `mariadb --xml` en octet brut 0x00/0x01, interdit en XML ; le parseur s'arrêtait au champ fautif et le résultat revenait sans aucune ligne. Ces octets sont désormais lus comme `0`/`1` (autres caractères de contrôle → `�`). Constaté sur 213.156.134.92 (`SELECT … is_locked … FROM users` vide alors que `COUNT(*)` = 12). Tests : 114 → 115.

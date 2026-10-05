@@ -58,7 +58,7 @@ public class DiscoveryService {
 
     public DiscoveryResult discoverRemote(SshTarget target, VpsParameters params) throws IOException {
         actionGuard.assertAllowed(RiskLevel.READ, "discover");
-        forbiddenTargetGuard.assertAllowed(target.host());
+        forbiddenTargetGuard.assertReadAllowed(target.host());
         String raw = sshConnector.runStdinScript(DiscoveryScript.load(), target);
         return persist(parser.parse(raw, "ssh:" + target.host(), target.host(), params));
     }

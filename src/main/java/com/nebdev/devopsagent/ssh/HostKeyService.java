@@ -35,7 +35,7 @@ public class HostKeyService {
 
     public AcceptResult accept(String host, int port) throws IOException {
         actionGuard.assertAllowed(RiskLevel.READ, "accept-host-key");
-        forbiddenTargetGuard.assertAllowed(host);
+        forbiddenTargetGuard.assertReadAllowed(host);
         int p = port <= 0 ? 22 : port;
         AtomicReference<PublicKey> seen = new AtomicReference<>();
         try (SSHClient client = new SSHClient()) {

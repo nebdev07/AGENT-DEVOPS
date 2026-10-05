@@ -83,6 +83,7 @@
 - **Statut** : Accepted
 - **Décision** : Premier serveur = VPS-2 personnel. Interdit comme cible par défaut : ARC `54.37.156.11`, staging DTSI `154.0.30.233`.
 - **Conséquence** : Aucun host SSH par défaut dans `application.yml`.
+- **Amendement 2026-10-05 (ADR-037)** : `154.0.30.233` passe en **lecture seule** (analyse permise, aucune modification). ARC prod reste interdit.
 
 ---
 
@@ -384,3 +385,18 @@
 
 ---
 
+
+## ADR-037 - Reprise du serveur DTSI 154.0.30.233 (lecture seule d'abord, puis migration)
+
+- **Date** : 2026-10-05
+- **Statut** : Accepted
+- **Contexte** : `154.0.30.233` héberge plusieurs applications DTSI derrière un seul Apache (port 91, SSH port 90) : **DISMAS** (Next.js 15 sous PM2 :3002 `/dismas` + WAR Spring Boot 2.4 / Java 11 dans Tomcat `/dismas-api`, MySQL `db_dismas`, Redis) et **PRISM / SIM-AENF** (Angular 17 statique `/var/www/dcspa` servi sous `/dcspa` + WAR Spring Boot 4 / Java 21 dans Tomcat `:8081/prism`, MySQL `prism_bd`). `/` redirige vers `/dismas/`. D'autres applications sont prévues. Déploiement actuel manuel (scp, rsync, redémarrage Tomcat, PM2).
+- **Décision** :
+  1. **Amende ADR-009** (sans l'annuler) : `154.0.30.233` passe d'« interdit » à **lecture seule**. `ForbiddenTargetGuard.assertReadAllowed` autorise l'analyse et la lecture de l'empreinte SSH ; `assertAllowed` (installation, déploiement, restauration, SQL, pose de clé SSH) refuse toujours. ARC prod `54.37.156.11` / `arc-nwanyo.org` reste interdit en lecture comme en écriture.
+  2. **Stratégie retenue : migration progressive** vers le modèle de l'agent (Docker + Traefik, une plateforme par application), pas de pilotage durable d'Apache / Tomcat / PM2 hôte.
+     - Phase 0 : inventaire lecture seule (vhosts Apache, instances Tomcat, PM2, bases MySQL, ports, disque).
+     - Phase 1 : répétition sur un VPS de test (PRISM puis DISMAS en plateformes, données de démo).
+     - Phase 2 : sur le serveur, Docker + Traefik **à côté** d'Apache, bascule application par application, Apache gardé en repli.
+     - Phase 3 : retrait d'Apache, Tomcat et PM2 hôte une fois toutes les applications migrées.
+  3. Le passage en écriture (phase 2) exige un **nouvel ADR** qui retire `154.0.30.233` de `READ_ONLY`.
+- **Conséquence** : la pose de la clé de l'agent sur ce serveur se fait à la main (le bootstrap SSH écrit `authorized_keys`, donc refusé). Manques à combler avant la phase 2 : modèle Dockerfile Angular statique, Traefik coexistant avec un Apache qui tient déjà des ports, inventaire des services hôtes, redirection `/` vers une application, base MySQL hôte existante (import via « Restaurer les données »).

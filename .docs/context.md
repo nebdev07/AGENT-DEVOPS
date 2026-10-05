@@ -24,7 +24,7 @@ Dépôt : `d:\PROJECTS\ME\AGENTS\devops-agent` (premier agent du dossier `AGENTS
 
 OVH **VPS-2** personnel (4 vCPU, 8 Go RAM, 75 Go NVMe, Ubuntu LTS, Europe).  
 **Pas** le VPS de production ARC (`54.37.156.11` / `arc-nwanyo.org`).  
-**Pas** le staging DTSI (`154.0.30.233`).
+**Pas** le staging DTSI (`154.0.30.233`). *(Amendé 2026-10-05, ADR-037 : lecture seule permise pour l'inventaire avant migration ; aucune modification.)*
 
 ## Utilisateur
 
