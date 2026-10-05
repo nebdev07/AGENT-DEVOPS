@@ -28,7 +28,8 @@ public class ForbiddenTargetGuard {
             throw new UnsafeActionException("Cette cible n’est pas autorisée : " + host);
         }
         if (READ_ONLY.contains(key)) {
-            throw new UnsafeActionException("Cette cible est en lecture seule (analyse uniquement) : " + host);
+            throw new UnsafeActionException("Cette cible est en lecture seule (analyse uniquement) : " + host
+                    + ". Pour y poser la clé de l’agent sans partager d’accès : Aide › 3. Clé SSH › méthode D.");
         }
     }
 

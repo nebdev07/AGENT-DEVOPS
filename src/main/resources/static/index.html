@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app28" />
+  <link rel="stylesheet" href="/console.css?v=app29" />
 </head>
 <body>
   <div class="bg"></div>
@@ -136,7 +136,12 @@
             Elle va sur le VPS dans <code>~/.ssh/authorized_keys</code> de l’utilisateur avec lequel l’agent se connecte
             (<code>ubuntu</code> ou <code>root</code>, le même que dans le champ Utilisateur).
           </p>
-          <p>Trois façons de la poser <em>sur le VPS</em> :</p>
+          <div class="callout">
+            <strong>Connecté en <code>root</code> ?</strong> Sur le serveur, <code>~</code> désigne alors <code>/root</code>, pas
+            le compte de l’agent. Pour l’utilisateur <code>vps</code>, le fichier est <code>/home/vps/.ssh/authorized_keys</code>.
+            La méthode D ci-dessous écrit le bon chemin pour toi.
+          </div>
+          <p>Quatre façons de la poser <em>sur le VPS</em> :</p>
           <div class="methods">
             <section class="method">
               <h4>A — Cockpit (le plus simple)</h4>
@@ -149,7 +154,7 @@
             </section>
             <section class="method">
               <h4>B — Console KVM OVH</h4>
-              <p>Fiche du VPS (pas « Mes clés SSH ») → Console KVM → login mail, puis :</p>
+              <p>Fiche du VPS (pas « Mes clés SSH ») → Console KVM → connecte-toi <strong>avec l’utilisateur de l’agent</strong> (sinon méthode D), puis :</p>
               <div class="copyrow">
                 <pre id="kvmCmd">mkdir -p ~/.ssh
 chmod 700 ~/.ssh
@@ -171,11 +176,28 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
                 <button id="btnCopyPwsh" type="button" class="ghost slim">Copier</button>
               </div>
             </section>
+            <section class="method">
+              <h4>D — L’admin du serveur la pose (aucun accès partagé)</h4>
+              <p>
+                Pour un serveur que tu n’administres pas (ex. serveur DTSI) : envoie ce bloc à l’administrateur.
+                Il le colle dans sa propre session <code>root</code> (ou avec <code>sudo -i</code>). Personne ne te donne
+                de mot de passe, et l’agent ne reçoit que le droit de se connecter avec <em>ce</em> compte.
+              </p>
+              <div class="copyrow">
+                <pre id="adminCmd">Chargement…</pre>
+                <button id="btnCopyAdmin" type="button" class="ghost slim">Copier</button>
+              </div>
+              <p class="hint">
+                Le bloc est rempli avec la clé publique de cet agent et l’<strong>Utilisateur</strong> saisi dans le cockpit.
+                Il n’ajoute pas la clé deux fois. La dernière ligne affichée doit finir par <code>vps-autopilot-personal</code>.
+                Pour retirer l’accès plus tard : supprimer cette ligne du fichier.
+              </p>
+            </section>
           </div>
           <p><strong>Vérifier</strong> (PowerShell) : cette commande doit ouvrir une session <em>sans demander de mot de passe</em>.</p>
-          <pre>ssh -i $HOME\.ssh\vps-autopilot ubuntu@IP</pre>
+          <pre id="verifyCmd">ssh -i $HOME\.ssh\vps-autopilot ubuntu@IP</pre>
           <p class="hint">
-            Remplace <code>ubuntu</code> et <code>IP</code>. Si elle demande un mot de passe : la clé n’est pas dans le bon
+            Utilisateur, IP et port sont repris du cockpit. Si elle demande un mot de passe : la clé n’est pas dans le bon
             <code>authorized_keys</code> (mauvais utilisateur, ou ligne coupée). Tape <code>exit</code>, puis
             <strong>Analyser le VPS</strong> dans la console.
           </p>
@@ -653,6 +675,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app28"></script>
+  <script src="/console.js?v=app29"></script>
 </body>
 </html>

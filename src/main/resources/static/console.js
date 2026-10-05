@@ -190,7 +190,10 @@ function showView(name) {
   }
 }
 
+let agentPublicKey = "";
+
 function fillKey(pub) {
+  agentPublicKey = (pub || "").trim();
   const box = $("guidePubKey");
   const hint = $("pubKeyHint");
   if (pub) {
@@ -226,16 +229,44 @@ async function copyText(text, btn) {
   }
 }
 
+function sshTargetFields() {
+  const port = Number($("sshPort").value) || 22;
+  return {
+    host: $("sshHost").value.trim() || "IP",
+    user: $("sshUser").value.trim() || "ubuntu",
+    portFlag: port === 22 ? "" : "-p " + port + " ",
+  };
+}
+
 function pwshSnippet() {
-  const host = $("sshHost").value.trim() || "IP";
-  const user = $("sshUser").value.trim() || "ubuntu";
-  return "ssh " + user + "@" + host
+  const t = sshTargetFields();
+  const dest = t.portFlag + t.user + "@" + t.host;
+  return "ssh " + dest
     + " \"mkdir -p ~/.ssh; chmod 700 ~/.ssh; touch ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys\"\n"
-    + "type $HOME\\.ssh\\vps-autopilot.pub | ssh " + user + "@" + host + " \"cat >> ~/.ssh/authorized_keys\"";
+    + "type $HOME\\.ssh\\vps-autopilot.pub | ssh " + dest + " \"cat >> ~/.ssh/authorized_keys\"";
+}
+
+function adminSnippet() {
+  if (!agentPublicKey) {
+    return "Aucune clé publique sur ce PC : génère-la (commande plus haut), puis recharge la page.";
+  }
+  const user = sshTargetFields().user;
+  const home = user === "root" ? "/root" : "/home/" + user;
+  const marker = agentPublicKey.split(/\s+/)[1] || agentPublicKey;
+  return "mkdir -p " + home + "/.ssh\n"
+    + "grep -qF \"" + marker + "\" " + home + "/.ssh/authorized_keys 2>/dev/null || \\\n"
+    + "  echo \"" + agentPublicKey + "\" >> " + home + "/.ssh/authorized_keys\n"
+    + "chown -R " + user + ":" + user + " " + home + "/.ssh\n"
+    + "chmod 700 " + home + "/.ssh\n"
+    + "chmod 600 " + home + "/.ssh/authorized_keys\n"
+    + "tail -n 1 " + home + "/.ssh/authorized_keys";
 }
 
 function refreshPwsh() {
+  const t = sshTargetFields();
   $("pwshCmd").textContent = pwshSnippet();
+  $("adminCmd").textContent = adminSnippet();
+  $("verifyCmd").textContent = "ssh -i $HOME\\.ssh\\vps-autopilot " + t.portFlag + t.user + "@" + t.host;
 }
 
 function renderLiveWarnings(warnings) {
@@ -678,6 +709,8 @@ $("btnCopyRail").addEventListener("click", (e) => copyText($("guidePubKey").text
 $("btnCopyGen").addEventListener("click", (e) => copyText($("genCmd").textContent, e.currentTarget));
 $("btnCopyKvm").addEventListener("click", (e) => copyText($("kvmCmd").textContent, e.currentTarget));
 $("btnCopyPwsh").addEventListener("click", (e) => copyText($("pwshCmd").textContent, e.currentTarget));
+$("btnCopyAdmin").addEventListener("click", (e) => copyText($("adminCmd").textContent, e.currentTarget));
+$("sshPort").addEventListener("input", refreshPwsh);
 $("sshHost").addEventListener("input", refreshPwsh);
 $("sshUser").addEventListener("input", refreshPwsh);
 $("sshPassword").addEventListener("input", () => $("sshPassword").classList.remove("need"));
