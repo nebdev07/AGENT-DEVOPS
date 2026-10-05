@@ -6,6 +6,7 @@
 ## 2026-10-05
 
 - **ADR-037 — reprise du serveur DTSI `154.0.30.233`** (DISMAS + PRISM derrière Apache :91, SSH :90). `ForbiddenTargetGuard` a désormais deux niveaux : `assertReadAllowed` (analyse, empreinte SSH) et `assertAllowed` (toute modification). `154.0.30.233` est en **lecture seule** ; ARC prod reste interdit dans les deux cas. Stratégie : migration progressive vers Docker + Traefik (inventaire, répétition sur VPS de test, bascule application par application, retrait d'Apache/Tomcat/PM2). Tests : 115 → 116.
+- ADR-037 amendé : sur ce serveur de développement DTSI, la racine `/` sera un **portail de présentation DTSI** listant les applications hébergées (et non plus une redirection vers DISMAS). Spécifié, pas encore implémenté.
 
 ## 2026-10-02
 
