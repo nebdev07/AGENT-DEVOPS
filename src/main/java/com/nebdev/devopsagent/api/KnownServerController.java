@@ -12,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -61,6 +63,21 @@ public class KnownServerController {
         return ResponseEntity.ok(body);
     }
 
+    /** Réglage local de l’agent (aucune commande sur le serveur) : pris en compte aux prochaines installations. */
+    @PutMapping("/profile")
+    public Map<String, Object> profile(@RequestBody ProfileRequest body) throws IOException {
+        if (body == null || body.host() == null || body.host().isBlank()) {
+            throw new IllegalArgumentException("Indiquez l’hôte du serveur.");
+        }
+        KnownServer s = store.updateProfile(body.host(), body.port() == null ? 22 : body.port(),
+                Boolean.TRUE.equals(body.httpOnly()), body.publicPort() == null ? 0 : body.publicPort(),
+                Boolean.TRUE.equals(body.sharedServer()));
+        return describe(s);
+    }
+
+    public record ProfileRequest(String host, Integer port, Boolean httpOnly, Integer publicPort,
+                                 Boolean sharedServer) {}
+
     @DeleteMapping
     public Map<String, Object> forget(@RequestParam String host, @RequestParam(defaultValue = "22") int port)
             throws IOException {
@@ -76,6 +93,9 @@ public class KnownServerController {
         m.put("os", s.os());
         m.put("lastAnalysedAt", s.lastAnalysedAt() == null ? "" : s.lastAnalysedAt().toString());
         m.put("readOnly", guard.isReadOnly(s.host()));
+        m.put("httpOnly", s.httpOnly());
+        m.put("publicPort", s.publicPort());
+        m.put("sharedServer", s.sharedServer());
         return m;
     }
 

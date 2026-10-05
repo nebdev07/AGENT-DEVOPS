@@ -80,4 +80,28 @@ class PlatformComposeTest {
         assertThat(PlatformCompose.publicUrl(p, p.services().get(1)))
                 .isEqualTo("https://ma-asso.apps.exemple.com/");
     }
+
+    @Test
+    void httpOnlyServerGetsPlainRoutersNestedPathAndTranslatedPort() {
+        PlatformSpec p = PlatformSpec.normalized(
+                "app",
+                "",
+                "path",
+                List.of(
+                        new PlatformServiceSpec("web", "https://github.com/org/web.git", "main", "203.0.113.9",
+                                80, "", List.of(), Map.of(), "/app"),
+                        new PlatformServiceSpec("api", "https://github.com/org/api.git", "main", "203.0.113.9",
+                                8080, "", List.of(), Map.of(), "/app/api")
+                ),
+                null
+        );
+        ServerProfile natHttp = new ServerProfile(true, 91, true);
+        String yaml = PlatformCompose.yaml(p, natHttp);
+        assertThat(yaml).contains("rule=PathPrefix(`/app/api`)\"").doesNotContain("Host(");
+        assertThat(yaml).contains(".entrypoints=web");
+        assertThat(yaml).doesNotContain("websecure").doesNotContain("certresolver").doesNotContain("-secure");
+        assertThat(PlatformCompose.publicUrl(p, p.services().get(1), natHttp))
+                .isEqualTo("http://203.0.113.9:91/app/api/");
+        assertThat(PlatformCompose.yaml(p)).contains("websecure");
+    }
 }

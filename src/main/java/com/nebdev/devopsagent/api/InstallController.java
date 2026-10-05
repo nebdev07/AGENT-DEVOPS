@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
@@ -28,8 +29,8 @@ public class InstallController {
     }
 
     @GetMapping("/plan")
-    public InstallPlan plan() throws IOException {
-        return installService.plan();
+    public InstallPlan plan(@RequestParam(name = "host", required = false) String host) throws IOException {
+        return installService.plan(host);
     }
 
     @PostMapping("/install")

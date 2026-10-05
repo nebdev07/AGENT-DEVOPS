@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app33" />
+  <link rel="stylesheet" href="/console.css?v=app34" />
 </head>
 <body>
   <div class="bg"></div>
@@ -275,6 +275,23 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <strong>dernière analyse</strong> s’affiche aussitôt, avec sa date, sans se reconnecter. Relance
             <strong>Analyser le VPS</strong> pour la rafraîchir. Au démarrage, le cockpit rouvre le dernier serveur utilisé.
             <strong>Oublier</strong> le retire de la liste (l’analyse enregistrée sur ce PC n’est pas effacée).
+          </p>
+          <p>
+            <strong>Réglages</strong> (sous chaque serveur), à fixer <em>avant</em> les installations :
+          </p>
+          <ul>
+            <li><strong>HTTP seul</strong> : le serveur n’est pas joignable en HTTPS depuis l’extérieur (réseau interne,
+              passerelle qui n’ouvre pas le 443). Traefik est installé sans certificat ni redirection, les sites
+              répondent en <code>http://</code>.</li>
+            <li><strong>Port web public</strong> : quand la passerelle traduit un port (ex. <code>8080</code> vers 80),
+              les liens et la vérification après déploiement utilisent ce port. Vide = port standard.</li>
+            <li><strong>Serveur partagé</strong> : d’autres personnes s’y connectent en SSH avec un mot de passe. La
+              sécurité pose pare-feu, fail2ban et mises à jour automatiques, mais ne coupe pas ces connexions.</li>
+          </ul>
+          <p>
+            Sur un serveur désigné par son adresse IP (pas de nom de domaine), les plateformes sont routées par
+            <strong>chemin seul</strong> (<code>/app</code>, <code>/app/api</code>) : la même URL marche par
+            l’adresse publique et par l’adresse interne.
           </p>
         </li>
 
@@ -745,6 +762,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app33"></script>
+  <script src="/console.js?v=app34"></script>
 </body>
 </html>

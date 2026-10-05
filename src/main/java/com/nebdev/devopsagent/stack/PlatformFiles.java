@@ -15,6 +15,7 @@ import java.util.TreeMap;
 final class PlatformFiles {
 
     static final String ENTRYPOINT = "autopilot-entrypoint.sh";
+    static final String NGINX_CONF = "autopilot-nginx.conf";
     static final String ENV_MARKER = "@env";
 
     private PlatformFiles() {
@@ -27,10 +28,50 @@ final class PlatformFiles {
             case "spring-boot-11" -> resource("spring-boot.Dockerfile").replace("#JDK#", "11");
             case "spring-boot-17" -> resource("spring-boot.Dockerfile").replace("#JDK#", "17");
             case "spring-boot-21" -> resource("spring-boot.Dockerfile").replace("#JDK#", "21");
+            case "static" -> resource("static.Dockerfile").replace("#WEBROOT#", staticWebRoot(s));
             default -> throw new IllegalArgumentException("Modèle Dockerfile inconnu : " + s.template());
         };
         return body.replace("#PORT#", Integer.toString(s.port()))
                 .replace("#BUILD_ARGS#", buildArgLines(s));
+    }
+
+    /** Sous le chemin public quand le préfixe est gardé (base href du site), sinon à la racine. */
+    static String staticWebRoot(PlatformServiceSpec s) {
+        return s.keepPath() ? s.pathPrefix() : "";
+    }
+
+    static String nginxConf(PlatformServiceSpec s) {
+        String root = staticWebRoot(s);
+        StringBuilder sb = new StringBuilder();
+        sb.append("server {\n")
+                .append("    listen ").append(s.port()).append(";\n")
+                .append("    root /usr/share/nginx/html;\n")
+                .append("    absolute_redirect off;\n")
+                .append("    server_tokens off;\n")
+                .append("    gzip on;\n")
+                .append("    gzip_types text/css application/javascript application/json image/svg+xml;\n");
+        if (root.isEmpty()) {
+            sb.append("    location / {\n")
+                    .append("        try_files $uri $uri/ /index.html;\n")
+                    .append("    }\n");
+        } else {
+            sb.append("    location = ").append(root).append(" {\n")
+                    .append("        return 301 ").append(root).append("/;\n")
+                    .append("    }\n")
+                    .append("    location ").append(root).append("/ {\n")
+                    .append("        try_files $uri $uri/ ").append(root).append("/index.html;\n")
+                    .append("    }\n")
+                    .append("    location / {\n")
+                    .append("        return 404;\n")
+                    .append("    }\n");
+        }
+        sb.append("    location ~* \\.(js|css|woff2?|png|jpg|jpeg|gif|svg|ico)$ {\n")
+                .append("        try_files $uri =404;\n")
+                .append("        expires 7d;\n")
+                .append("        add_header Cache-Control \"public\";\n")
+                .append("    }\n")
+                .append("}\n");
+        return sb.toString();
     }
 
     /** Fichiers à écrire dans le dossier de build (context) du service. */
@@ -42,6 +83,9 @@ final class PlatformFiles {
         out.put(PlatformCompose.TEMPLATE_DOCKERFILE, dockerfile(s));
         if (s.template().startsWith("spring-boot-")) {
             out.put(ENTRYPOINT, resource("spring-entrypoint.sh"));
+        }
+        if ("static".equals(s.template())) {
+            out.put(NGINX_CONF, nginxConf(s));
         }
         return out;
     }

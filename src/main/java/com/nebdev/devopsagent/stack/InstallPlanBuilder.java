@@ -25,21 +25,38 @@ public final class InstallPlanBuilder {
             Set<String> wanted,
             Map<String, List<String>> details
     ) {
+        return build(snapshot, wanted, details, ServerProfile.DEFAULT);
+    }
+
+    public static InstallPlan build(
+            ServerSnapshot snapshot,
+            Set<String> wanted,
+            Map<String, List<String>> details,
+            ServerProfile profile
+    ) {
         List<InstallPlan.InstallAction> actions = new ArrayList<>();
         Set<String> enabled = wanted == null ? Set.of() : wanted;
         Map<String, List<String>> chosen = details == null ? Map.of() : details;
+        ServerProfile p = profile == null ? ServerProfile.DEFAULT : profile;
+        List<String> securityDetails = chosen.getOrDefault("security", List.of());
         for (StackComponent c : StackCatalog.all()) {
             if (!enabled.contains(c.id())) {
                 continue;
             }
-            actions.add(actionFor(c, snapshot, chosen.getOrDefault(c.id(), List.of())));
+            actions.add(actionFor(c, snapshot, chosen.getOrDefault(c.id(), List.of()), securityDetails, p));
         }
         String host = snapshot == null ? "" : snapshot.host();
         String source = snapshot == null ? "" : snapshot.source();
         return new InstallPlan(host, source, List.copyOf(actions));
     }
 
-    private static InstallPlan.InstallAction actionFor(StackComponent c, ServerSnapshot snap, List<String> selectedDetails) {
+    private static InstallPlan.InstallAction actionFor(
+            StackComponent c,
+            ServerSnapshot snap,
+            List<String> selectedDetails,
+            List<String> securityDetails,
+            ServerProfile profile
+    ) {
         if ("nginx".equals(c.id())) {
             return new InstallPlan.InstallAction(
                     c.id(), c.label(), c.phase(), InstallPlan.Status.REFUSED, "CHANGE",
@@ -47,10 +64,15 @@ public final class InstallPlanBuilder {
                     List.of()
             );
         }
-        if (present(c.id(), snap, selectedDetails)) {
-            String skipReason = "security".equals(c.id())
-                    ? "Baseline complet : UFW actif, fail2ban, SSH clés seulement (pas de mot de passe, root fermé)."
-                    : "Déjà présent. Rien à installer.";
+        boolean isPresent = "security".equals(c.id())
+                ? securityPresent(snap, selectedDetails, profile)
+                : present(c.id(), snap, selectedDetails);
+        if (isPresent) {
+            String skipReason = !"security".equals(c.id())
+                    ? "Déjà présent. Rien à installer."
+                    : profile.sharedServer()
+                    ? "Baseline complet pour un serveur partagé : UFW actif, fail2ban ; connexions SSH par mot de passe gardées (profil du serveur)."
+                    : "Baseline complet : UFW actif, fail2ban, SSH clés seulement (pas de mot de passe, root fermé).";
             return new InstallPlan.InstallAction(
                     c.id(), c.label(), c.phase(), InstallPlan.Status.SKIP, "READ",
                     skipReason,
@@ -80,7 +102,7 @@ public final class InstallPlanBuilder {
         }
         if (("traefik".equals(c.id()) || "mariadb".equals(c.id()) || "deploy".equals(c.id())
                 || "redis".equals(c.id()) || "backups".equals(c.id()))
-                && !securityPresent(snap, List.of())) {
+                && !securityPresent(snap, securityDetails, profile)) {
             return new InstallPlan.InstallAction(
                     c.id(), c.label(), c.phase(), InstallPlan.Status.PLANNED, "CHANGE",
                     "Baseline sécurité incomplet. Pas de pile applicative tant que Sécurité n’est pas SKIP.",
@@ -95,8 +117,10 @@ public final class InstallPlanBuilder {
             );
         }
         String readyReason = switch (c.id()) {
-            case "security" -> securityReadyReason(snap, selectedDetails);
-            case "traefik" -> "Traefik dans Docker, réseau proxy. UFW 80/443. Image ≥ v3.5 + DOCKER_API_VERSION (Docker Ubuntu récent). Aucune app exposée tant qu’un routeur n’est pas déclaré.";
+            case "security" -> securityReadyReason(snap, selectedDetails, profile);
+            case "traefik" -> profile.httpOnly()
+                    ? "Traefik dans Docker, réseau proxy, HTTP seul (profil du serveur : pas de HTTPS public). UFW 80. Aucune app exposée tant qu’un routeur n’est pas déclaré."
+                    : "Traefik dans Docker, réseau proxy. UFW 80/443. Image ≥ v3.5 + DOCKER_API_VERSION (Docker Ubuntu récent). Aucune app exposée tant qu’un routeur n’est pas déclaré.";
             case "mariadb" -> "Conteneur MariaDB, réseau interne data, pas de port public. Mot de passe root hors git sur le VPS.";
             case "deploy" -> "Compte deploy : docker, pas sudo, clé de l’agent, SSH autorisé. Aucune app lancée.";
             case "redis" -> "Conteneur Redis, réseau data interne, requirepass, aucun port publié.";
@@ -176,6 +200,17 @@ public final class InstallPlanBuilder {
 
     static List<String> securityGaps(ServerSnapshot snap) {
         return securityGaps(snap, List.of());
+    }
+
+    public static boolean securityPresent(ServerSnapshot snap, List<String> selectedDetails, ServerProfile profile) {
+        ServerProfile p = profile == null ? ServerProfile.DEFAULT : profile;
+        Set<String> wanted = p.securityWanted(selectedDetails);
+        return snap != null && (wanted.isEmpty() || securityGaps(snap, List.copyOf(wanted)).isEmpty());
+    }
+
+    static String securityReadyReason(ServerSnapshot snap, List<String> selectedDetails, ServerProfile profile) {
+        ServerProfile p = profile == null ? ServerProfile.DEFAULT : profile;
+        return securityReadyReason(snap, List.copyOf(p.securityWanted(selectedDetails)));
     }
 
     static List<String> securityGaps(ServerSnapshot snap, List<String> selectedDetails) {

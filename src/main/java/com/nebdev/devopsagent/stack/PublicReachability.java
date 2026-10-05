@@ -85,7 +85,7 @@ final class PublicReachability {
                 return;
             }
             throw new IllegalStateException(OperatorMessage.of(
-                    "après déploiement, HTTPS « " + url + " » a répondu HTTP " + code + ".",
+                    "après déploiement, « " + url + " » a répondu HTTP " + code + ".",
                     "Vérification post-deploy (V6)",
                     "Traefik / DNS / conteneur. L’app peut être UP localement mais pas joignable publiquement."));
         } catch (IllegalStateException e) {
@@ -98,7 +98,7 @@ final class PublicReachability {
                     "Let’s Encrypt n’a pas encore émis le certificat : le nom d’hôte doit pointer vers ce serveur, ports 80/443 ouverts. Relance « Vérifier l’accès » dans quelques minutes."), e);
         } catch (Exception e) {
             throw new IllegalStateException(OperatorMessage.of(
-                    "après déploiement, HTTPS « " + url + " » injoignable : " + e.getMessage(),
+                    "après déploiement, « " + url + " » injoignable : " + e.getMessage(),
                     "Vérification post-deploy (V6)",
                     "vérifie Traefik, le nom d’hôte, Let’s Encrypt, et que le conteneur tourne."), e);
         }

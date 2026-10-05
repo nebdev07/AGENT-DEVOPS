@@ -31,6 +31,7 @@ public class PlatformDeployService {
     private final SshConnector sshConnector;
     private final DiscoveryService discoveryService;
     private final GitDeployKeyStore gitDeployKeyStore;
+    private final ServerProfiles serverProfiles;
 
     public PlatformDeployService(
             PlatformIntentStore store,
@@ -40,8 +41,10 @@ public class PlatformDeployService {
             ForbiddenTargetGuard forbiddenTargetGuard,
             SshConnector sshConnector,
             DiscoveryService discoveryService,
-            GitDeployKeyStore gitDeployKeyStore
+            GitDeployKeyStore gitDeployKeyStore,
+            ServerProfiles serverProfiles
     ) {
+        this.serverProfiles = serverProfiles;
         this.store = store;
         this.planService = planService;
         this.stateStore = stateStore;
@@ -60,14 +63,15 @@ public class PlatformDeployService {
             throws IOException {
         actionGuard.assertConfirmedChange("deploy-platform", confirmed);
         forbiddenTargetGuard.assertAllowed(target.host());
-        ServerSnapshot snap = lastSnapshot();
+        ServerSnapshot snap = snapshotFor(target.host());
+        ServerProfile profile = serverProfiles.of(target.host());
         if (snap == null || !LiveSnapshot.isLive(snap)) {
             throw new IllegalStateException(OperatorMessage.of(
                     "pas d’analyse SSH réelle en mémoire.",
                     "Étape Déployer plateforme — prérequis",
                     "Analyser le VPS avec IP + user, puis Déployer."));
         }
-        if (!InstallPlanBuilder.securityPresent(snap)) {
+        if (!InstallPlanBuilder.securityPresent(snap, List.of(), profile)) {
             throw new IllegalStateException(OperatorMessage.of(
                     "baseline sécurité incomplet.",
                     "Déployer plateforme — Sécurité",
@@ -117,7 +121,7 @@ public class PlatformDeployService {
                 gitKeys.put(GitDeployKeyStore.keyId(s.gitUrl()), gitDeployKeyStore.privateKeyBase64(s.gitUrl()));
             }
         }
-        String script = RoleScript.loadPlatform(platform, gitKeys);
+        String script = RoleScript.loadPlatform(platform, gitKeys, profile);
         String raw;
         try {
             raw = sshConnector.runStdinScript(script, target, DEPLOY_TIMEOUT_SECONDS);
@@ -169,19 +173,19 @@ public class PlatformDeployService {
         }
         DiscoveryService.DiscoveryResult discovery = discoveryService.discoverRemote(target);
         for (PlatformServiceSpec s : platform.services()) {
-            PublicReachability.checkHttpsUrl(PlatformCompose.publicUrl(platform, s));
+            PublicReachability.checkHttpsUrl(PlatformCompose.publicUrl(platform, s, profile));
         }
         return discovery;
     }
 
     public record ServiceStatus(String service, String url, int httpCode, boolean online) {}
 
-    /** READ : interroge en HTTPS l’URL publique de chaque service (certificat valide exigé), en parallèle. */
+    /** READ : interroge l’URL publique de chaque service (HTTPS à certificat valide, sauf serveur « HTTP seul »), en parallèle. */
     public List<ServiceStatus> status(String platformId) throws IOException {
         PlatformSpec platform = store.require(platformId);
         List<CompletableFuture<ServiceStatus>> futures = new ArrayList<>();
         for (PlatformServiceSpec s : platform.services()) {
-            String url = PlatformCompose.publicUrl(platform, s);
+            String url = PlatformCompose.publicUrl(platform, s, serverProfiles.of(s.hostname()));
             futures.add(CompletableFuture.supplyAsync(() -> {
                 int code = PublicReachability.probe(url);
                 return new ServiceStatus(s.id(), url, code, code >= 200 && code < 500);
@@ -190,8 +194,8 @@ public class PlatformDeployService {
         return futures.stream().map(CompletableFuture::join).toList();
     }
 
-    private ServerSnapshot lastSnapshot() throws IOException {
-        StateStore.InfrastructureState state = stateStore.loadLatest();
+    private ServerSnapshot snapshotFor(String host) throws IOException {
+        StateStore.InfrastructureState state = stateStore.load(host);
         return state == null ? null : state.lastDiscovery();
     }
 }

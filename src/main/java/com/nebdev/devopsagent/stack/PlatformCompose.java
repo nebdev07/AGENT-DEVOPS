@@ -1,5 +1,7 @@
 package com.nebdev.devopsagent.stack;
 
+import java.util.regex.Pattern;
+
 /**
  * Compose déterministe pour une plateforme (ADR-036). Aucun port publié.
  */
@@ -53,6 +55,10 @@ final class PlatformCompose {
     }
 
     static String yaml(PlatformSpec platform) {
+        return yaml(platform, ServerProfile.DEFAULT);
+    }
+
+    static String yaml(PlatformSpec platform, ServerProfile profile) {
         boolean data = needsData(platform);
         boolean uploads = platform.services().stream().anyMatch(PlatformCompose::needsUploads);
         StringBuilder sb = new StringBuilder();
@@ -104,7 +110,7 @@ final class PlatformCompose {
             sb.append("      - vps.autopilot.platform=").append(platform.id()).append("\n");
             sb.append("      - vps.autopilot.service=").append(s.id()).append("\n");
             appendRouterLabels(sb, router, s.hostname(), s.pathPrefix(), platform.pathRouting(),
-                    s.stripPath(platform.pathRouting()));
+                    s.stripPath(platform.pathRouting()), !profile.httpOnly());
             sb.append("      - traefik.http.services.").append(router)
                     .append(".loadbalancer.server.port=").append(s.port()).append("\n");
         }
@@ -138,11 +144,16 @@ final class PlatformCompose {
     }
 
     static String publicUrl(PlatformSpec platform, PlatformServiceSpec s) {
+        return publicUrl(platform, s, ServerProfile.DEFAULT);
+    }
+
+    static String publicUrl(PlatformSpec platform, PlatformServiceSpec s, ServerProfile profile) {
+        String base = profile.scheme() + "://" + profile.authority(s.hostname());
         if (platform.pathRouting() && s.pathPrefix() != null && !s.pathPrefix().isBlank()
                 && !"/".equals(s.pathPrefix())) {
-            return "https://" + s.hostname() + s.pathPrefix() + "/";
+            return base + s.pathPrefix() + "/";
         }
-        return "https://" + s.hostname() + "/";
+        return base + "/";
     }
 
     static String manifest(PlatformSpec platform) {
@@ -172,27 +183,45 @@ final class PlatformCompose {
             String hostname,
             String pathPrefix,
             boolean pathRouting,
-            boolean strip
+            boolean strip,
+            boolean tls
     ) {
-        String rule = "Host(`" + hostname + "`)";
         boolean prefixed = pathRouting && pathPrefix != null && !pathPrefix.isBlank() && !"/".equals(pathPrefix);
-        if (prefixed) {
-            rule = rule + " && PathPrefix(`" + pathPrefix + "`)";
-        }
+        String rule = routerRule(hostname, prefixed ? pathPrefix : null);
         sb.append("      - \"traefik.http.routers.").append(router).append(".rule=").append(rule).append("\"\n");
         sb.append("      - traefik.http.routers.").append(router).append(".entrypoints=web\n");
-        sb.append("      - \"traefik.http.routers.").append(router).append("-secure.rule=").append(rule).append("\"\n");
-        sb.append("      - traefik.http.routers.").append(router).append("-secure.entrypoints=websecure\n");
-        sb.append("      - traefik.http.routers.").append(router).append("-secure.tls=true\n");
-        sb.append("      - traefik.http.routers.").append(router).append("-secure.tls.certresolver=le\n");
+        if (tls) {
+            sb.append("      - \"traefik.http.routers.").append(router).append("-secure.rule=").append(rule).append("\"\n");
+            sb.append("      - traefik.http.routers.").append(router).append("-secure.entrypoints=websecure\n");
+            sb.append("      - traefik.http.routers.").append(router).append("-secure.tls=true\n");
+            sb.append("      - traefik.http.routers.").append(router).append("-secure.tls.certresolver=le\n");
+        }
         if (strip) {
             String mw = router + "-strip";
             sb.append("      - traefik.http.middlewares.").append(mw)
                     .append(".stripprefix.prefixes=").append(pathPrefix).append("\n");
             sb.append("      - traefik.http.routers.").append(router).append(".middlewares=").append(mw).append("\n");
-            sb.append("      - traefik.http.routers.").append(router)
-                    .append("-secure.middlewares=").append(mw).append("\n");
+            if (tls) {
+                sb.append("      - traefik.http.routers.").append(router)
+                        .append("-secure.middlewares=").append(mw).append("\n");
+            }
         }
+    }
+
+    private static final Pattern IPV4 = Pattern.compile("^\\d{1,3}(\\.\\d{1,3}){3}$");
+
+    /**
+     * Une IP n'est pas un nom de site : derrière une NAT, le même serveur est joint par l'adresse publique
+     * et l'adresse interne. On ne filtre alors que sur le chemin.
+     */
+    static String routerRule(String hostname, String pathPrefix) {
+        boolean ip = hostname != null && IPV4.matcher(hostname).matches();
+        String path = pathPrefix == null ? null : "PathPrefix(`" + pathPrefix + "`)";
+        if (ip) {
+            return path == null ? "PathPrefix(`/`)" : path;
+        }
+        String host = "Host(`" + hostname + "`)";
+        return path == null ? host : host + " && " + path;
     }
 
     private static String yamlQuote(String raw) {

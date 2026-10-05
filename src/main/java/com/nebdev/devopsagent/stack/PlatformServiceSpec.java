@@ -55,7 +55,8 @@ public record PlatformServiceSpec(
     /** ASCII : survit aux clients qui décodent mal l’UTF-8 (PowerShell 5). */
     public static final String SECRET_MASK = "********";
     public static final String HOST_PLACEHOLDER = "{{HOST}}";
-    static final Set<String> TEMPLATES = Set.of("next", "node", "spring-boot-11", "spring-boot-17", "spring-boot-21");
+    static final Set<String> TEMPLATES = Set.of(
+            "next", "node", "spring-boot-11", "spring-boot-17", "spring-boot-21", "static");
     private static final Pattern ENV_KEY = Pattern.compile("^[A-Z][A-Z0-9_]{0,63}$");
     private static final Pattern SECRET_KEY = Pattern.compile("(?i).*(PASSWORD|SECRET|TOKEN|PRIVATE|API_KEY|_PWD).*");
 
@@ -98,7 +99,8 @@ public record PlatformServiceSpec(
     private static final Pattern CONTEXT = Pattern.compile("^[A-Za-z0-9._/-]{0,120}$");
     private static final Pattern BUILD_KEY = Pattern.compile("^[A-Z][A-Z0-9_]{0,47}$");
     private static final Pattern VOLUME = Pattern.compile("^volume:[a-z][a-z0-9-]{0,31}$");
-    private static final Pattern PATH = Pattern.compile("^/([a-z][a-z0-9-]{0,47})?$");
+    /** Jusqu’à 3 segments : une app peut servir son API sous son propre chemin (ex. /app/api). Traefik préfère la règle la plus longue. */
+    private static final Pattern PATH = Pattern.compile("^/([a-z][a-z0-9-]{0,47}(/[a-z][a-z0-9-]{0,47}){0,2})?$");
 
     public static PlatformServiceSpec normalized(
             String platformId,
@@ -208,7 +210,7 @@ public record PlatformServiceSpec(
             throw new IllegalArgumentException(OperatorMessage.of(
                     "modèle Dockerfile « " + abbreviate(template) + " » inconnu (service " + slug + ").",
                     "Bande Plateformes — Dockerfile",
-                    "vide (Dockerfile du dépôt), next, node, spring-boot-11, spring-boot-17 ou spring-boot-21."));
+                    "vide (Dockerfile du dépôt), next, node, spring-boot-11, spring-boot-17, spring-boot-21 ou static."));
         }
         return t;
     }
@@ -283,13 +285,13 @@ public record PlatformServiceSpec(
             throw new IllegalArgumentException(OperatorMessage.of(
                     "chemin « " + abbreviate(pathPrefix) + " » invalide (service " + slug + ").",
                     "Bande Plateformes — Chemin URL",
-                    "un seul segment, ex. /api ou / (site). Pas de /api/v1."));
+                    "ex. /api, /app/api ou / (site) ; pas de .. ni de //."));
         }
         if (!PATH.matcher(raw).matches()) {
             throw new IllegalArgumentException(OperatorMessage.of(
                     "chemin « " + abbreviate(raw) + " » invalide (service " + slug + ").",
                     "Bande Plateformes — Chemin URL",
-                    "ex. / , /api , /admin — a-z, chiffres, tirets."));
+                    "ex. / , /api , /app/api — a-z, chiffres, tirets, 3 segments max."));
         }
         return raw;
     }

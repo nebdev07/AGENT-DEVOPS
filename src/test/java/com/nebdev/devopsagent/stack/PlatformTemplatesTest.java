@@ -72,6 +72,22 @@ class PlatformTemplatesTest {
     }
 
     @Test
+    void staticTemplateServesSpaUnderKeptPrefix() {
+        PlatformSpec p = PlatformSpec.normalized("app", "", "path", List.of(
+                new PlatformServiceSpec("web", "https://github.com/org/web.git", "main", "203.0.113.9", 80, "",
+                        List.of(), Map.of("STATIC_BUILD", "npx ng build"), "/app", "static", Map.of(), true)), null);
+        PlatformServiceSpec web = p.services().get(0);
+        Map<String, String> files = PlatformFiles.contextFiles(web);
+        assertThat(files).containsKeys(PlatformCompose.TEMPLATE_DOCKERFILE, PlatformFiles.NGINX_CONF);
+        assertThat(files.get(PlatformCompose.TEMPLATE_DOCKERFILE))
+                .contains("ARG STATIC_BUILD\n").contains("/usr/share/nginx/html/app").contains("EXPOSE 80")
+                .doesNotContain("#WEBROOT#");
+        assertThat(files.get(PlatformFiles.NGINX_CONF))
+                .contains("location = /app {").contains("try_files $uri $uri/ /app/index.html;")
+                .contains("listen 80;");
+    }
+
+    @Test
     void envFileQuotesValuesSoComposeDoesNotInterpolate() {
         String env = PlatformFiles.envFile(arcLike().services().get(1));
         assertThat(env).contains("NODE_ENV=production");

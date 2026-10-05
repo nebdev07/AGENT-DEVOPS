@@ -62,7 +62,7 @@ public final class RoleScript {
         }
         if (selected == null || selected.isEmpty()) {
             if ("traefik".equals(id)) {
-                // HTTPS toujours actif à l’install Traefik (ADR-033).
+                // HTTPS actif par défaut (ADR-033) ; seul le profil serveur « HTTP seul » l’enlève (ADR-038).
                 return "APPLY_PROXY=1\nAPPLY_HTTPS=1\n" + body;
             }
             return body;
@@ -70,7 +70,9 @@ public final class RoleScript {
         Set<String> on = new LinkedHashSet<>(selected);
         if ("traefik".equals(id)) {
             on.add("proxy");
-            on.add("https");
+            if (!on.contains(ServerProfile.TRAEFIK_HTTP_ONLY)) {
+                on.add("https");
+            }
         }
         StringBuilder prefix = new StringBuilder();
         for (Map.Entry<String, String> e : FLAGS.entrySet()) {
@@ -113,6 +115,10 @@ public final class RoleScript {
      * @param gitKeysById clé privée (base64) par {@link GitDeployKeyStore#keyId(String)} des dépôts SSH
      */
     public static String loadPlatform(PlatformSpec declared, Map<String, String> gitKeysById) {
+        return loadPlatform(declared, gitKeysById, ServerProfile.DEFAULT);
+    }
+
+    public static String loadPlatform(PlatformSpec declared, Map<String, String> gitKeysById, ServerProfile profile) {
         if (declared == null) {
             throw new IllegalArgumentException("Plateforme manquante.");
         }
@@ -121,7 +127,7 @@ public final class RoleScript {
         prefix.append("PLATFORM_ID=").append(platform.id()).append('\n');
         prefix.append("PLATFORM_NEED_DB=").append(PlatformCompose.needsDb(platform) ? "1" : "0").append('\n');
         prefix.append("PLATFORM_NEED_REDIS=").append(PlatformCompose.needsRedis(platform) ? "1" : "0").append('\n');
-        prefix.append("PLATFORM_COMPOSE_B64=").append(b64(PlatformCompose.yaml(platform))).append('\n');
+        prefix.append("PLATFORM_COMPOSE_B64=").append(b64(PlatformCompose.yaml(platform, profile))).append('\n');
         prefix.append("PLATFORM_MANIFEST_B64=").append(b64(PlatformCompose.manifest(platform))).append('\n');
         prefix.append("PLATFORM_FILES_B64=").append(b64(PlatformFiles.bundle(platform))).append('\n');
         if (gitKeysById != null && !gitKeysById.isEmpty()) {

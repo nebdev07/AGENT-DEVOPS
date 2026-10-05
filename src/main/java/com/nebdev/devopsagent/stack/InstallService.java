@@ -54,6 +54,7 @@ public class InstallService {
     private final SshConnector sshConnector;
     private final DiscoveryService discoveryService;
     private final DevopsProperties properties;
+    private final ServerProfiles serverProfiles;
 
     public InstallService(
             StackIntentStore stackIntentStore,
@@ -62,8 +63,10 @@ public class InstallService {
             ForbiddenTargetGuard forbiddenTargetGuard,
             SshConnector sshConnector,
             DiscoveryService discoveryService,
-            DevopsProperties properties
+            DevopsProperties properties,
+            ServerProfiles serverProfiles
     ) {
+        this.serverProfiles = serverProfiles;
         this.stackIntentStore = stackIntentStore;
         this.stateStore = stateStore;
         this.actionGuard = actionGuard;
@@ -74,20 +77,26 @@ public class InstallService {
     }
 
     public InstallPlan plan() throws IOException {
-        ServerSnapshot snap = lastSnapshot();
+        return plan(null);
+    }
+
+    /** @param host serveur ouvert dans le cockpit ; vide = dernière analyse, tous serveurs confondus */
+    public InstallPlan plan(String host) throws IOException {
+        ServerSnapshot snap = snapshotFor(host);
         if (!LiveSnapshot.isLive(snap)) {
             return new InstallPlan("", "", java.util.List.of());
         }
         StackIntentStore.Intent intent = stackIntentStore.loadIntent();
         Map<String, List<String>> details = StackPresence.subtract(intent.details(), StackPresence.of(snap));
-        return InstallPlanBuilder.build(snap, new LinkedHashSet<>(intent.enabled()), details);
+        return InstallPlanBuilder.build(snap, new LinkedHashSet<>(intent.enabled()), details,
+                serverProfiles.of(snap.host()));
     }
 
     public ApplyResult apply(String componentId, SshTarget target, boolean confirmed)
             throws IOException {
         actionGuard.assertConfirmedChange(actionName(componentId), confirmed);
         forbiddenTargetGuard.assertAllowed(target.host());
-        ServerSnapshot snap = lastSnapshot();
+        ServerSnapshot snap = snapshotFor(target.host());
         if (snap == null) {
             throw new IllegalStateException("Analyse d’abord le VPS. Sans snapshot, pas d’install.");
         }
@@ -96,7 +105,8 @@ public class InstallService {
         }
         StackIntentStore.Intent intent = stackIntentStore.loadIntent();
         Map<String, List<String>> details = StackPresence.subtract(intent.details(), StackPresence.of(snap));
-        InstallPlan plan = InstallPlanBuilder.build(snap, new LinkedHashSet<>(intent.enabled()), details);
+        ServerProfile profile = serverProfiles.of(target.host());
+        InstallPlan plan = InstallPlanBuilder.build(snap, new LinkedHashSet<>(intent.enabled()), details, profile);
         InstallPlan.InstallAction action = plan.actions().stream()
                 .filter(a -> a.id().equals(componentId))
                 .findFirst()
@@ -111,7 +121,7 @@ public class InstallService {
         if (action.status() != InstallPlan.Status.READY) {
             throw new IllegalStateException(action.reason());
         }
-        List<String> selected = details.getOrDefault(componentId, List.of());
+        List<String> selected = profile.roleDetails(componentId, details.getOrDefault(componentId, List.of()));
         int timeoutSec = ("traefik".equals(componentId) || "mariadb".equals(componentId)
                 || "redis".equals(componentId) || "backups".equals(componentId))
                 ? 300 : 180;
@@ -332,8 +342,10 @@ public class InstallService {
         }
     }
 
-    private ServerSnapshot lastSnapshot() throws IOException {
-        StateStore.InfrastructureState state = stateStore.loadLatest();
+    private ServerSnapshot snapshotFor(String host) throws IOException {
+        StateStore.InfrastructureState state = host == null || host.isBlank()
+                ? stateStore.loadLatest()
+                : stateStore.load(host);
         return state == null ? null : state.lastDiscovery();
     }
 

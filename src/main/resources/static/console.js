@@ -598,9 +598,86 @@ function renderKnownServers() {
     forget.textContent = "Oublier";
     forget.title = "Retirer de la liste (l’analyse enregistrée sur ce PC est gardée)";
     forget.addEventListener("click", () => forgetKnownServer(s));
-    li.append(open, forget);
+    li.append(open, forget, knownProfileEditor(s));
     list.append(li);
   });
+}
+
+function profileSummary(s) {
+  const bits = [];
+  if (s.httpOnly) bits.push("HTTP seul");
+  if (s.publicPort) bits.push("port web " + s.publicPort);
+  if (s.sharedServer) bits.push("serveur partagé");
+  return bits.length ? bits.join(" · ") : "réglages par défaut";
+}
+
+function knownProfileEditor(s) {
+  const box = document.createElement("details");
+  box.className = "known-profile";
+  const sum = document.createElement("summary");
+  sum.textContent = "Réglages : " + profileSummary(s);
+  const check = (label, help, on) => {
+    const row = document.createElement("label");
+    row.className = "known-check";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!on;
+    const text = document.createElement("span");
+    text.textContent = label;
+    row.title = help;
+    row.append(input, text);
+    return { row, input };
+  };
+  const http = check("HTTP seul (pas de HTTPS public)",
+    "Le serveur n’est pas joignable en HTTPS (réseau interne, passerelle sans 443) : pas de certificat ni de redirection.",
+    s.httpOnly);
+  const shared = check("Serveur partagé : garder les connexions SSH par mot de passe",
+    "D’autres personnes s’y connectent avec un mot de passe : la sécurité installe pare-feu, fail2ban et mises à jour, sans couper ces connexions.",
+    s.sharedServer);
+  const portRow = document.createElement("label");
+  portRow.className = "known-port";
+  portRow.textContent = "Port web public ";
+  const port = document.createElement("input");
+  port.type = "number";
+  port.min = "1";
+  port.max = "65535";
+  port.placeholder = "standard";
+  port.value = s.publicPort ? String(s.publicPort) : "";
+  port.title = "Port tapé dans le navigateur quand la passerelle le traduit (ex. 8080 vers 80). Vide = 80 ou 443.";
+  portRow.append(port);
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "linkish";
+  save.textContent = "Enregistrer";
+  save.addEventListener("click", () => saveKnownProfile(s, {
+    httpOnly: http.input.checked,
+    sharedServer: shared.input.checked,
+    publicPort: port.value ? Number(port.value) : 0,
+  }));
+  box.append(sum, http.row, shared.row, portRow, save);
+  return box;
+}
+
+async function saveKnownProfile(s, profile) {
+  try {
+    const r = await fetch("/api/v1/servers/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ host: s.host, port: s.port, ...profile }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Réglages refusés");
+    setStatus("Réglages de " + (s.name || s.host) + " enregistrés : " + profileSummary(j)
+      + ". Pris en compte aux prochaines installations et déploiements.", "ok");
+    await loadKnownServers();
+  } catch (e) {
+    setStatus(e.message, "err");
+  }
+}
+
+function planUrl() {
+  const host = $("sshHost").value.trim();
+  return "/api/v1/plan" + (host ? "?host=" + encodeURIComponent(host) : "");
 }
 
 async function loadKnownServers() {
@@ -1128,7 +1205,7 @@ function renderPlan(plan) {
 }
 
 async function loadPlan() {
-  const r = await fetch("/api/v1/plan");
+  const r = await fetch(planUrl());
   if (!r.ok) return;
   renderPlan(await r.json());
 }
@@ -1709,6 +1786,7 @@ function addPlatServiceRow(svc) {
     + tplOpt("spring-boot-11", "Modèle Spring Boot (Java 11)")
     + tplOpt("spring-boot-17", "Modèle Spring Boot (Java 17)")
     + tplOpt("spring-boot-21", "Modèle Spring Boot (Java 21)")
+    + tplOpt("static", "Modèle site statique (Angular, Vue, Vite…)")
     + "</select></label>"
     + '<label class="field plat-keep">&nbsp;<span><input type="checkbox" class="plat-svc-keep"' + (s.keepPath ? " checked" : "") + " /> Garder le préfixe (basePath Next, context-path Spring)</span></label>"
     + "</div>"
@@ -2749,7 +2827,7 @@ async function prepareServer() {
   const startedAt = Date.now();
   try {
     for (let guard = 0; guard < 8; guard += 1) {
-      const pr = await fetch("/api/v1/plan");
+      const pr = await fetch(planUrl());
       journey.plan = await pr.json();
       const next = PREP_IDS.map((id) => journey.plan.actions.find((a) => a.id === id))
         .find((a) => a && a.status === "READY");
@@ -2766,7 +2844,7 @@ async function prepareServer() {
       if (!r.ok) throw new Error(PREP_LABELS[next.id].split(" :")[0] + " : " + (j.error || r.statusText));
       paint(j.snapshot, j.report, "ssh");
     }
-    const pr = await fetch("/api/v1/plan");
+    const pr = await fetch(planUrl());
     journey.plan = await pr.json();
     renderPlan(journey.plan);
     hideBusy();

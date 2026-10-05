@@ -54,14 +54,47 @@ public class KnownServerStore {
         if (h.isEmpty() || user == null || user.isBlank()) {
             throw new IllegalArgumentException("Serveur incomplet : adresse et utilisateur SSH requis.");
         }
-        KnownServer entry = new KnownServer(
-                name == null ? "" : name.trim(), h, port <= 0 ? 22 : port, user.trim(),
-                os == null || os.isBlank() ? "auto" : os.trim(), at);
+        int p = port <= 0 ? 22 : port;
         List<KnownServer> all = new ArrayList<>(list());
-        all.removeIf(s -> s.host().equals(entry.host()) && s.port() == entry.port());
+        KnownServer previous = find(all, h, p);
+        KnownServer entry = new KnownServer(
+                name == null ? "" : name.trim(), h, p, user.trim(),
+                os == null || os.isBlank() ? "auto" : os.trim(), at,
+                previous != null && previous.httpOnly(),
+                previous == null ? 0 : previous.publicPort(),
+                previous != null && previous.sharedServer());
+        all.remove(previous);
         all.add(0, entry);
         write(all);
         return entry;
+    }
+
+    /** Profil d'un serveur déjà analysé ; refuse un serveur inconnu (l'analyse l'ajoute). */
+    public synchronized KnownServer updateProfile(String host, int port, boolean httpOnly, int publicPort,
+                                                  boolean sharedServer) throws IOException {
+        if (publicPort < 0 || publicPort > 65535) {
+            throw new IllegalArgumentException("Port public hors plage (1–65535, ou vide).");
+        }
+        List<KnownServer> all = new ArrayList<>(list());
+        KnownServer s = find(all, normalizeHost(host), port);
+        if (s == null) {
+            throw new IllegalArgumentException("Serveur inconnu : analyse-le d'abord.");
+        }
+        KnownServer updated = new KnownServer(s.name(), s.host(), s.port(), s.user(), s.os(), s.lastAnalysedAt(),
+                httpOnly, publicPort, sharedServer);
+        all.set(all.indexOf(s), updated);
+        write(all);
+        return updated;
+    }
+
+    /** Premier serveur connu pour cet hôte (tous ports confondus), ou null. */
+    public synchronized KnownServer byHost(String host) throws IOException {
+        String h = normalizeHost(host);
+        return list().stream().filter(s -> s.host().equals(h)).findFirst().orElse(null);
+    }
+
+    private static KnownServer find(List<KnownServer> all, String host, int port) {
+        return all.stream().filter(s -> s.host().equals(host) && s.port() == port).findFirst().orElse(null);
     }
 
     public synchronized boolean forget(String host, int port) throws IOException {
@@ -90,6 +123,9 @@ public class KnownServerStore {
             int port,
             String user,
             String os,
-            Instant lastAnalysedAt
+            Instant lastAnalysedAt,
+            boolean httpOnly,
+            int publicPort,
+            boolean sharedServer
     ) {}
 }

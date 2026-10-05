@@ -14,11 +14,12 @@ Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `c
 | GET | `/api/v1/servers` | Mes serveurs : serveurs déjà analysés (nom, hôte, port, utilisateur, OS, date, `readOnly`), plus récent d'abord. Jamais de secret (`state/known-servers.json`) | oui |
 | GET | `/api/v1/servers/last?host=` | Dernière analyse enregistrée de ce serveur (`mode`, `snapshot`, `report`), sans connexion SSH ; `204` si aucune | oui |
 | DELETE | `/api/v1/servers?host=&port=` | Retire le serveur de la liste ; l'analyse enregistrée (`state/<hôte>.json`) est gardée | oui (local) |
+| PUT | `/api/v1/servers/profile` | Profil du serveur (ADR-038) : `{host, port, httpOnly, publicPort, sharedServer}`. Réglage local, aucune commande sur le serveur ; pris en compte aux prochaines installations et déploiements. `400` si serveur inconnu ou port hors plage | oui (local) |
 | POST | `/api/v1/discover` | Lance la discovery (fixture, `.env`, ou `{host,user,port}` depuis la console) | oui |
 | POST | `/api/v1/ssh/accept-host` | Lit la clé d’hôte via SSHJ, stocke l’empreinte (`state/trusted-hosts.json`) | oui |
 | POST | `/api/v1/ssh/install-key` | CHANGE : installe la clé publique de l’agent (`confirm: true` + mot de passe, jamais stocké) | oui |
 | GET / PUT | `/api/v1/stack` | Intention de pile (composants cochés). `409` si écart politique sans `acknowledgeWarnings` | oui |
-| GET | `/api/v1/plan` | Écart pile voulue vs dernier snapshot (READY / SKIP / PLANNED / REFUSED) | oui |
+| GET | `/api/v1/plan` | Écart pile voulue vs dernier snapshot (READY / SKIP / PLANNED / REFUSED). `?host=` (2026-10-05) : dernière analyse de ce serveur et son profil ; sans `host`, dernière analyse tous serveurs confondus | oui |
 | POST | `/api/v1/install` | CHANGE : installe un composant READY (`confirm: true`) puis re-discovery | oui |
 | GET / PUT | `/api/v1/apps` | Intention d’apps cargo (slug, Git HTTPS ou SSH, hôte, port) | oui |
 | DELETE | `/api/v1/apps?id=` | Retire une app de la liste locale (pas d’arrêt conteneur VPS) | oui |

@@ -1,10 +1,19 @@
 # Changelog — VPS Autopilot
 
 > Ne jamais effacer une entrée.  
-> Dernière mise à jour : 2026-10-01
+> Dernière mise à jour : 2026-10-05
 
 ## 2026-10-05
 
+- **ADR-038 : serveur DTSI en écriture, réinstallation en conteneurs préparée côté agent.**
+  - Lecture seule de `154.0.30.233` levée dans `state/agent-local.yml` (local). ARC prod toujours interdit.
+  - **Profil serveur** dans « Mes serveurs » (`ServerProfile`, `ServerProfiles`, `PUT /api/v1/servers/profile`, cases sous chaque serveur) : **HTTP seul** (Traefik sans 443/ACME/redirection, routeurs `web` seuls, URLs et vérification après déploiement en `http://`), **port web public** (ex. 91 derrière une NAT), **serveur partagé** (sécurité sans `ssh-harden`). Valeurs par défaut = comportement antérieur.
+  - Plan, installation et déploiement de plateforme lisent l'analyse **du serveur visé** (`StateStore.load(host)`) ; `GET /api/v1/plan?host=`.
+  - Hôte = adresse IP : règle Traefik `PathPrefix` seule (adresse publique et interne). Chemins jusqu'à 3 segments (`/app/api`).
+  - Modèle Dockerfile **`static`** (Angular, Vue, Vite…) : build Node (`STATIC_BUILD`, `STATIC_DIST`), nginx en conteneur, repli SPA, base href gardée. Proposé dans la liste Dockerfile.
+  - Messages de vérification après déploiement neutres (HTTP ou HTTPS).
+  - Dépôts DISMAS (front, API) et PRISM (front, API) : travaux en cours commités et poussés ; déclencheur `push` des workflows GitHub Actions DISMAS retiré (lancement manuel seulement). Deux scripts de test contenant des mots de passe de comptes de test laissés hors commit.
+  - Aide § 4 : réglages du serveur. Tests : 121 → 126. Cache `?v=app34`.
 - **ADR-037 phase 1 : export applicatif du serveur DTSI fait** (à la main en SSH, sudo temporaire posé par l'admin, lecture seule, rien écrit sur le serveur). Dans `state/exports/dtsi-devvps/20261005/` (désormais ignoré par git) : dumps `db_dismas`, `prism_bd`, `db_arc` (complets), liste des comptes MySQL, DISMAS (code, `.env`, `.git`, sans `node_modules`/`.next`), front PRISM, WAR en service (`dismas-api`, `prism` Tomcat, `prism` jar), configurations (Apache, Tomcat, `prism.env`, unités systemd, MySQL, Redis). Empreinte SHA-256 calculée côté serveur et comparée pour chaque fichier (`verification.txt`). Snapshot VM : à demander à l'infra DTSI (hyperviseur KVM/QEMU, pas d'agent invité). Export depuis l'interface : pas encore.
 - **Mes serveurs : sessions gardées.** Chaque analyse SSH réussie enregistre le serveur (nom, hôte, port, utilisateur, OS, date ; jamais de mot de passe) dans `state/known-servers.json` (non versionné, `KnownServerStore`). Rail du cockpit : liste « Mes serveurs », un clic remplit les champs et réaffiche la **dernière analyse** sans reconnexion (`GET /api/v1/servers/last`), badge « lecture seule » (`ForbiddenTargetGuard.isReadOnly`), **Oublier** (l'analyse enregistrée est gardée). Au démarrage, le cockpit rouvre le dernier serveur utilisé (`localStorage` `vpsap.server`). `StateStore.load(host)` ; les fichiers d'intention (`platforms-intent.json`, `public-domain.json`, `fixture.json`, `known-servers.json`) ne sont plus pris pour une analyse par `loadLatest`. Tests : 117 → 121.
 - **Aide § 3b — droits root temporaires pour le compte de l'agent** (sauvegarde ou export des applications, préparation). Trois blocs générés avec l'utilisateur, l'hôte et le port du cockpit : donner (fichier `/etc/sudoers.d/90-vps-autopilot-temp`, validé par `visudo`, **retrait automatique au bout de 4 h** via `systemd-run`, sans `exit` qui fermerait la session de l'admin), vérifier depuis le PC (`sudo -n true` → `SUDO_OK`), retirer. Encadré : le snapshot du serveur entier se fait dans la console de l'hébergeur ou de l'hyperviseur, pas par l'agent, et avant toute opération root. Un serveur en lecture seule dans l'agent le reste avec sudo. La ligne sudo permanente de la méthode D renvoie vers § 3b. Cache `?v=app33`.

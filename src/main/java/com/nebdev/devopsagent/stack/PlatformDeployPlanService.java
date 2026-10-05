@@ -12,10 +12,13 @@ public class PlatformDeployPlanService {
 
     private final PlatformIntentStore store;
     private final GitDeployKeyStore gitDeployKeyStore;
+    private final ServerProfiles serverProfiles;
 
-    public PlatformDeployPlanService(PlatformIntentStore store, GitDeployKeyStore gitDeployKeyStore) {
+    public PlatformDeployPlanService(PlatformIntentStore store, GitDeployKeyStore gitDeployKeyStore,
+                                     ServerProfiles serverProfiles) {
         this.store = store;
         this.gitDeployKeyStore = gitDeployKeyStore;
+        this.serverProfiles = serverProfiles;
     }
 
     public AppDeployPlan plan(String platformId) throws IOException {
@@ -42,7 +45,7 @@ public class PlatformDeployPlanService {
             actions.add("Cloner « " + s.id() + " » : " + s.gitUrl() + " @" + s.gitRef() + " — " + where + ".");
             if (s.templated() || GitUrls.ssh(s.gitUrl())) {
                 actions.add("Construire l’image « " + s.id() + " » (port " + s.port() + ") → "
-                        + PlatformCompose.publicUrl(p, s));
+                        + PlatformCompose.publicUrl(p, s, serverProfiles.of(s.hostname())));
                 continue;
             }
             AppSpec probe = AppSpec.normalized(
@@ -66,7 +69,7 @@ public class PlatformDeployPlanService {
                 warnings.add("Préflight GitHub indisponible pour « " + s.id() + " » — le VPS vérifiera le Dockerfile.");
             }
             actions.add("Construire l’image « " + s.id() + " » (port " + s.port() + ") → "
-                    + PlatformCompose.publicUrl(p, s));
+                    + PlatformCompose.publicUrl(p, s, serverProfiles.of(s.hostname())));
         }
         if (PlatformCompose.needsDb(p)) {
             actions.add("Si MariaDB est là : base/user app_" + p.id().replace('-', '_') + " + db.env.");
@@ -84,7 +87,8 @@ public class PlatformDeployPlanService {
         }
         actions.add("Générer le compose Traefik ("
                 + (p.pathRouting() ? "PathPrefix, un DNS (préfixe retiré ou conservé par service)" : "sous-domaines Host()")
-                + ", aucun port publié) + HTTPS.");
+                + ", aucun port publié)"
+                + (serverProfiles.of(p.services().get(0).hostname()).httpOnly() ? ", HTTP seul (profil serveur)." : " + HTTPS."));
         actions.add("docker compose up --build sous /opt/vps-autopilot/platforms/" + p.id() + "/");
         return AppDeployPlan.ready(p.id(), actions, warnings, null);
     }
