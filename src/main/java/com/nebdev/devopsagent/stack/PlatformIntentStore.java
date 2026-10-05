@@ -57,6 +57,8 @@ public class PlatformIntentStore {
         for (AppSpec app : appIntentStore.load()) {
             hosts.add(app.hostname());
         }
+        // Routage par chemins : plusieurs plateformes peuvent partager un hôte (serveur sans DNS), jamais un chemin.
+        Map<String, Map<String, String>> pathOwners = new HashMap<>();
         Map<String, PlatformSpec> previous = new HashMap<>();
         for (PlatformSpec p : load()) {
             previous.put(p.id(), p);
@@ -67,15 +69,24 @@ public class PlatformIntentStore {
                 PlatformSpec n = PlatformSpec.normalized(p.id(), p.baseDomain(), p.routing(), services, vpsIp);
                 for (PlatformServiceSpec s : n.services()) {
                     if (n.pathRouting()) {
-                        if (!hosts.add(s.hostname())) {
+                        if (hosts.contains(s.hostname())) {
                             throw new IllegalArgumentException(OperatorMessage.of(
-                                    "l’hôte « " + s.hostname() + " » est déjà pris (app 1:1 ou autre plateforme).",
+                                    "l’hôte « " + s.hostname() + " » est déjà pris (app 1:1 ou plateforme en sous-domaines).",
                                     "Bande Plateformes — Nom d’hôte",
-                                    "en chemins, un DNS pour tout le produit ; il ne doit pas coller une app 1:1."));
+                                    "en chemins, un hôte partagé seulement entre plateformes en chemins ; il ne doit pas coller une app 1:1."));
                         }
-                        break;
+                        String owner = pathOwners.computeIfAbsent(s.hostname(), k -> new HashMap<>())
+                                .putIfAbsent(s.pathPrefix(), n.id());
+                        if (owner != null && !owner.equals(n.id())) {
+                            throw new IllegalArgumentException(OperatorMessage.of(
+                                    "le chemin « " + s.pathPrefix() + " » de " + s.hostname()
+                                            + " est déjà pris par la plateforme « " + owner + " ».",
+                                    "Bande Plateformes — Chemin URL",
+                                    "chaque plateforme du même hôte a ses propres chemins (ex. /app1, /app2)."));
+                        }
+                        continue;
                     }
-                    if (!hosts.add(s.hostname())) {
+                    if (pathOwners.containsKey(s.hostname()) || !hosts.add(s.hostname())) {
                         throw new IllegalArgumentException(OperatorMessage.of(
                                 "l’hôte « " + s.hostname() + " » est déjà pris (app 1:1 ou autre plateforme).",
                                 "Bande Plateformes — Nom d’hôte",

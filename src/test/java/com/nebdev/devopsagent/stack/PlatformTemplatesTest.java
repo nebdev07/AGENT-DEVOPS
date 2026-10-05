@@ -125,6 +125,22 @@ class PlatformTemplatesTest {
     }
 
     @Test
+    void pathPlatformsShareAnIpHostButNeverAPath() throws Exception {
+        DevopsProperties props = new DevopsProperties();
+        props.setStateDir(tmp.toString());
+        ObjectMapper mapper = new ObjectMapper();
+        PlatformIntentStore store = new PlatformIntentStore(props, mapper, new AppIntentStore(props, mapper));
+        PlatformSpec one = new PlatformSpec("one", "", "path", List.of(new PlatformServiceSpec(
+                "web", "https://github.com/org/one.git", "main", "203.0.113.9", 80, "", List.of(), Map.of(), "/one")));
+        PlatformSpec two = new PlatformSpec("two", "", "path", List.of(new PlatformServiceSpec(
+                "web", "https://github.com/org/two.git", "main", "203.0.113.9", 80, "", List.of(), Map.of(), "/two")));
+        assertThat(store.save(List.of(one, two), null)).hasSize(2);
+        PlatformSpec clash = new PlatformSpec("three", "", "path", List.of(new PlatformServiceSpec(
+                "web", "https://github.com/org/three.git", "main", "203.0.113.9", 80, "", List.of(), Map.of(), "/one")));
+        assertThatThrownBy(() -> store.save(List.of(one, clash), null)).hasMessageContaining("déjà pris par la plateforme");
+    }
+
+    @Test
     void deployKeyIdsAndPagesArePerRepo() {
         assertThat(GitDeployKeyStore.keyId("git@github.com:organisation/demo-api.git"))
                 .isEqualTo("github.com-organisation-demo-api");
