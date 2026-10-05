@@ -5,6 +5,7 @@
 
 ## 2026-10-05
 
+- **ADR-037 phase 0 faite : inventaire lecture seule du serveur DTSI** (rapport local non versionné). Constats : entrée web publique = port 91 seulement (HTTP, pas de certificat ni DNS), copies ARC mortes, DISMAS déployé par GitHub Actions, `prism.service` en boucle de plantage (doublon de Tomcat), MySQL exposé. Décisions : HTTP sur :91 par chemins, ARC abandonné, GitHub Actions remplacé par l'agent à la bascule, export par sudo temporaire en lecture seule, snapshot VM par l'infra. ADR-037 point 5. Aucun changement de code.
 - **Produit grand public : aucune donnée propre à l'opérateur dans le produit livré** (prolonge ADR-022).
   - Serveurs protégés **sortis du code** : `devops.guard.blocked-hosts` / `read-only-hosts`, lus dans `state/agent-local.yml` (non versionné, importé par `spring.config.import`). Modèle versionné `state/agent-local.example.yml` (adresses de documentation). Sans fichier : aucune cible protégée.
   - Interface et aide : le modèle de plateforme propre à un projet est remplacé par un **modèle générique « site + back-office + API »** (`/`, `/admin`, `/api`, dépôts `organisation/…` à remplacer). Exemples neutres (`mon-app`, `organisation/mon-app`, `mondomaine.com`, `uploads`). Plus de nom d'hébergeur (« mail de livraison de ton hébergeur », « console web »), plus de nom de serveur ni de projet. Commentaire de clé généré : `vps-autopilot`.
