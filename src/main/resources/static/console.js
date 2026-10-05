@@ -1,5 +1,8 @@
 const $ = (id) => document.getElementById(id);
 
+const AGENT_USER_DEFAULT = "autopilot";
+
+/** Comptes livrés par l’hébergeur à la création du VPS (méthode A, mot de passe du mail de livraison). */
 const OS_USER = {
   auto: "",
   ubuntu: "ubuntu",
@@ -233,7 +236,7 @@ function sshTargetFields() {
   const port = Number($("sshPort").value) || 22;
   return {
     host: $("sshHost").value.trim() || "IP",
-    user: $("sshUser").value.trim() || "ubuntu",
+    user: $("sshUser").value.trim() || AGENT_USER_DEFAULT,
     portFlag: port === 22 ? "" : "-p " + port + " ",
   };
 }
@@ -251,15 +254,22 @@ function adminSnippet() {
     return "Aucune clé publique sur ce PC : génère-la (commande plus haut), puis recharge la page.";
   }
   const user = sshTargetFields().user;
-  const home = user === "root" ? "/root" : "/home/" + user;
+  if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(user)) {
+    return "Nom d’utilisateur invalide : minuscules, chiffres, - ou _ (ex. " + AGENT_USER_DEFAULT + ").";
+  }
   const marker = agentPublicKey.split(/\s+/)[1] || agentPublicKey;
-  return "mkdir -p " + home + "/.ssh\n"
-    + "grep -qF \"" + marker + "\" " + home + "/.ssh/authorized_keys 2>/dev/null || \\\n"
-    + "  echo \"" + agentPublicKey + "\" >> " + home + "/.ssh/authorized_keys\n"
-    + "chown -R " + user + ":" + user + " " + home + "/.ssh\n"
-    + "chmod 700 " + home + "/.ssh\n"
-    + "chmod 600 " + home + "/.ssh/authorized_keys\n"
-    + "tail -n 1 " + home + "/.ssh/authorized_keys";
+  return "U=" + user + "\n"
+    + "id \"$U\" >/dev/null 2>&1 || useradd -m -s /bin/bash \"$U\"\n"
+    + "H=$(getent passwd \"$U\" | cut -d: -f6); G=$(id -gn \"$U\")\n"
+    + "install -d -m 700 -o \"$U\" -g \"$G\" \"$H/.ssh\"\n"
+    + "grep -qF \"" + marker + "\" \"$H/.ssh/authorized_keys\" 2>/dev/null || \\\n"
+    + "  echo \"" + agentPublicKey + "\" >> \"$H/.ssh/authorized_keys\"\n"
+    + "chown \"$U:$G\" \"$H/.ssh/authorized_keys\"; chmod 600 \"$H/.ssh/authorized_keys\"\n"
+    + "sshd -T 2>/dev/null | grep -qi '^allowusers' && ! sshd -T 2>/dev/null | grep -i '^allowusers' | grep -qw \"$U\" \\\n"
+    + "  && echo \"ATTENTION : AllowUsers est actif dans sshd, ajoute $U à la liste puis recharge sshd.\"\n"
+    + "tail -n 1 \"$H/.ssh/authorized_keys\"\n"
+    + "# Uniquement si l’agent doit installer ou déployer (pas sur un serveur en lecture seule) :\n"
+    + "# echo \"$U ALL=(ALL) NOPASSWD:ALL\" > /etc/sudoers.d/$U && chmod 440 /etc/sudoers.d/$U";
 }
 
 function refreshPwsh() {
@@ -588,7 +598,7 @@ async function installKey() {
     return;
   }
   if (!t.user) {
-    setStatus("Indique l’utilisateur SSH (ubuntu ou root).", "err");
+    setStatus("Indique l’utilisateur SSH (compte de l’agent, ex. autopilot).", "err");
     return;
   }
   if (!password) {

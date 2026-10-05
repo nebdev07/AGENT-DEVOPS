@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app29" />
+  <link rel="stylesheet" href="/console.css?v=app30" />
 </head>
 <body>
   <div class="bg"></div>
@@ -92,7 +92,7 @@
           <p>Menu <a href="#cockpit" data-view="cockpit">Cockpit</a>. Renseigne au minimum :</p>
           <ul>
             <li><strong>Hôte / IP</strong> — l’adresse de ton VPS</li>
-            <li><strong>Utilisateur</strong> — souvent <code>ubuntu</code>, parfois <code>root</code></li>
+            <li><strong>Utilisateur</strong> — le compte <strong>dédié à l’agent</strong>, nom simple de ton choix (défaut <code>autopilot</code>). Il est créé par la méthode D de l’étape 3, quelle que soit la distribution. Les comptes livrés par l’hébergeur (<code>ubuntu</code>, <code>debian</code>, <code>root</code>…) ne servent qu’à la méthode A.</li>
             <li><strong>Port</strong> — <code>22</code> sauf si tu l’as changé</li>
             <li><strong>Système</strong> — <code>Auto</code> convient</li>
           </ul>
@@ -134,7 +134,7 @@
           <p class="hint">
             Pour l’afficher toi-même dans PowerShell : <code>Get-Content $HOME\.ssh\vps-autopilot.pub</code>.
             Elle va sur le VPS dans <code>~/.ssh/authorized_keys</code> de l’utilisateur avec lequel l’agent se connecte
-            (<code>ubuntu</code> ou <code>root</code>, le même que dans le champ Utilisateur).
+            (le même que dans le champ Utilisateur, ex. <code>autopilot</code>).
           </p>
           <div class="callout">
             <strong>Connecté en <code>root</code> ?</strong> Sur le serveur, <code>~</code> désigne alors <code>/root</code>, pas
@@ -177,11 +177,14 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
               </div>
             </section>
             <section class="method">
-              <h4>D — L’admin du serveur la pose (aucun accès partagé)</h4>
+              <h4>D — L’admin du serveur crée le compte de l’agent (aucun accès partagé)</h4>
               <p>
-                Pour un serveur que tu n’administres pas (ex. serveur DTSI) : envoie ce bloc à l’administrateur.
-                Il le colle dans sa propre session <code>root</code> (ou avec <code>sudo -i</code>). Personne ne te donne
-                de mot de passe, et l’agent ne reçoit que le droit de se connecter avec <em>ce</em> compte.
+                Recommandé, et seul moyen pour un serveur que tu n’administres pas (ex. serveur DTSI) : envoie ce bloc à
+                l’administrateur. Il le colle dans sa propre session <code>root</code> (ou après <code>sudo -i</code>).
+                Le bloc crée le compte de l’agent s’il n’existe pas (Ubuntu, Debian, RHEL, Rocky, Alma, Fedora…), puis y pose
+                la clé. Personne ne te donne de mot de passe, et le compte n’a <strong>aucun droit sudo</strong> par défaut :
+                assez pour l’analyse. La dernière ligne, commentée, donne sudo sans mot de passe ; à activer seulement si
+                l’agent doit installer ou déployer.
               </p>
               <div class="copyrow">
                 <pre id="adminCmd">Chargement…</pre>
@@ -353,7 +356,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
       </label>
       <div class="row2">
         <label class="field">Utilisateur SSH
-          <input id="sshUser" type="text" placeholder="selon l’OS" />
+          <input id="sshUser" type="text" placeholder="ex. autopilot" />
         </label>
         <label class="field">Port
           <input id="sshPort" type="number" value="22" min="1" max="65535" />
@@ -675,6 +678,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app29"></script>
+  <script src="/console.js?v=app30"></script>
 </body>
 </html>
