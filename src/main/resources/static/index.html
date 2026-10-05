@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app30" />
+  <link rel="stylesheet" href="/console.css?v=app31" />
 </head>
 <body>
   <div class="bg"></div>
@@ -186,6 +186,19 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
                 assez pour l’analyse. La dernière ligne, commentée, donne sudo sans mot de passe ; à activer seulement si
                 l’agent doit installer ou déployer.
               </p>
+              <div class="callout">
+                <strong>Compte qui sera créé : <code id="adminUserName">autopilot</code></strong>
+                (nom par défaut : <code>autopilot</code>). Il est modifiable, de deux façons :
+                <ol>
+                  <li><strong>Avant de copier</strong> : saisis le nom voulu dans le champ <strong>Utilisateur SSH</strong> du
+                    <a href="#cockpit" data-view="cockpit">Cockpit</a> (panneau de gauche). Le bloc ci-dessous se met à jour
+                    tout seul.</li>
+                  <li><strong>Après avoir copié</strong> : change la première ligne du bloc, <code>U=autopilot</code>, par
+                    exemple <code>U=agentdtsi</code>.</li>
+                </ol>
+                Nom simple : minuscules, chiffres, <code>-</code> ou <code>_</code>, commence par une lettre.
+                Saisis ensuite <strong>le même nom</strong> dans le champ Utilisateur SSH pour analyser.
+              </div>
               <div class="copyrow">
                 <pre id="adminCmd">Chargement…</pre>
                 <button id="btnCopyAdmin" type="button" class="ghost slim">Copier</button>
@@ -678,6 +691,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app30"></script>
+  <script src="/console.js?v=app31"></script>
 </body>
 </html>

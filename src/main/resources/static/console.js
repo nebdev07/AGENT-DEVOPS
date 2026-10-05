@@ -276,6 +276,7 @@ function refreshPwsh() {
   const t = sshTargetFields();
   $("pwshCmd").textContent = pwshSnippet();
   $("adminCmd").textContent = adminSnippet();
+  $("adminUserName").textContent = t.user;
   $("verifyCmd").textContent = "ssh -i $HOME\\.ssh\\vps-autopilot " + t.portFlag + t.user + "@" + t.host;
 }
 
