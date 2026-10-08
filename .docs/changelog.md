@@ -5,6 +5,9 @@
 
 ## 2026-10-08
 
+- **ARC : statistiques de visites (Umami) en production.** Code ARC commité et poussé (`[skip ci]` pour ne pas déclencher les anciens workflows Tomcat) : API `1f1b173`, site `74c7acb`, back-office `2f4b5c6` ; fichiers `.properties` locaux et scripts de travail laissés hors commit. Umami v2.19 installé **à la main, hors agent**, dans `/opt/vps-autopilot/umami/` (700 root) : conteneurs `arc-umami` + `arc-umami-db` (PostgreSQL 16 dédié, réseau privé `arc_umami`), tableau de bord sur `127.0.0.1:3002` seulement (tunnel SSH), Traefik publie uniquement `/umami/script.js` et `/umami/api/send`. Mot de passe admin par défaut remplacé (aléatoire, `admin-password.txt`), site « ARC-NWANYO » créé, jeton de lecture dans `svc-api.local.env`. Plateforme `arc` : `NEXT_PUBLIC_UMAMI_*` (site), `APP_ANALYTICS_UMAMI_BASE_URL=http://arc-umami:3000` et `WEBSITE_ID` (API). Contrôles : traceur chargé, visite de test enregistrée puis remise à zéro, API ARC → Umami joignable.
+- **Défaut connu de l'agent** : déploiement de plateforme signalé en échec (« Connection reset », SSH coupé après ~5 min) alors que le rôle a continué et terminé sur le serveur. À corriger : lancer le rôle détaché (systemd-run) et suivre son état, au lieu d'une session SSH unique.
+
 - **ARC : mail opérationnel.** Mot de passe de `noreply@arc-nwanyo.org` posé dans `svc-api.local.env` sur le VPS (hors intention, hors chat), envoi de test SMTP accepté par `mail.arc-nwanyo.org:587` (250), API redémarrée (`docker compose up -d --no-build api`). Incident : une première tentative a affiché le mot de passe dans la console locale (ordre des lignes du script) ; changement du mot de passe demandé à l'opérateur.
 
 ## 2026-10-07
