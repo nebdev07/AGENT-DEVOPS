@@ -16,19 +16,42 @@ public record PlatformSpec(
         String id,
         String baseDomain,
         String routing,
-        List<PlatformServiceSpec> services
+        List<PlatformServiceSpec> services,
+        List<String> aliases
 ) {
 
     public static final String ROUTING_HOST = "host";
     public static final String ROUTING_PATH = "path";
+    public static final int MAX_ALIASES = 4;
 
     private static final Pattern SLUG = Pattern.compile("^[a-z][a-z0-9-]{0,31}$");
+    private static final Pattern HOSTNAME = Pattern.compile(
+            "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$");
+
+    public PlatformSpec {
+        aliases = aliases == null ? List.of() : List.copyOf(aliases);
+    }
+
+    public PlatformSpec(String id, String baseDomain, String routing, List<PlatformServiceSpec> services) {
+        this(id, baseDomain, routing, services, List.of());
+    }
 
     public static PlatformSpec normalized(
             String id,
             String baseDomain,
             String routing,
             List<PlatformServiceSpec> services,
+            String vpsIp
+    ) {
+        return normalized(id, baseDomain, routing, services, List.of(), vpsIp);
+    }
+
+    public static PlatformSpec normalized(
+            String id,
+            String baseDomain,
+            String routing,
+            List<PlatformServiceSpec> services,
+            List<String> aliases,
             String vpsIp
     ) {
         if (id == null || id.isBlank()) {
@@ -136,7 +159,53 @@ public record PlatformSpec(
             }
             clean.add(n);
         }
-        return new PlatformSpec(slug, domain, route, List.copyOf(clean));
+        return new PlatformSpec(slug, domain, route, List.copyOf(clean),
+                normalizeAliases(aliases, pathRouting, sharedHost));
+    }
+
+    /**
+     * Adresses secondaires (ex. www.) redirigées en 301 vers l'hôte unique d'une plateforme en chemins.
+     * Une adresse sans DNS vers ce serveur ferait échouer en boucle la demande de certificat.
+     */
+    static List<String> normalizeAliases(List<String> raw, boolean pathRouting, String sharedHost) {
+        if (raw == null) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (String a : raw) {
+            if (a == null || a.isBlank()) {
+                continue;
+            }
+            String host = a.trim().toLowerCase(Locale.ROOT);
+            if (!pathRouting) {
+                throw new IllegalArgumentException(OperatorMessage.of(
+                        "les adresses secondaires ne s'appliquent qu'au routage par chemins.",
+                        "Bande Plateformes › Adresses secondaires",
+                        "passe en « Chemins sur un seul hôte » ou vide le champ."));
+            }
+            if (!HOSTNAME.matcher(host).matches()) {
+                throw new IllegalArgumentException(OperatorMessage.of(
+                        "adresse secondaire « " + a.trim() + " » invalide.",
+                        "Bande Plateformes › Adresses secondaires",
+                        "un nom de domaine complet, ex. www.mondomaine.org (pas d'IP, pas de chemin)."));
+            }
+            if (host.equals(sharedHost)) {
+                throw new IllegalArgumentException(OperatorMessage.of(
+                        "« " + host + " » est déjà l'hôte principal.",
+                        "Bande Plateformes › Adresses secondaires",
+                        "n'y mets que les autres adresses, ex. www."));
+            }
+            if (!out.contains(host)) {
+                out.add(host);
+            }
+        }
+        if (out.size() > MAX_ALIASES) {
+            throw new IllegalArgumentException(OperatorMessage.of(
+                    "plus de " + MAX_ALIASES + " adresses secondaires.",
+                    "Bande Plateformes › Adresses secondaires",
+                    "garde les adresses réellement publiées."));
+        }
+        return List.copyOf(out);
     }
 
     public boolean pathRouting() {
@@ -145,11 +214,11 @@ public record PlatformSpec(
 
     public PlatformSpec resolved() {
         return new PlatformSpec(id, baseDomain, routing,
-                services.stream().map(PlatformServiceSpec::resolved).toList());
+                services.stream().map(PlatformServiceSpec::resolved).toList(), aliases);
     }
 
     public PlatformSpec masked() {
         return new PlatformSpec(id, baseDomain, routing,
-                services.stream().map(PlatformServiceSpec::masked).toList());
+                services.stream().map(PlatformServiceSpec::masked).toList(), aliases);
     }
 }

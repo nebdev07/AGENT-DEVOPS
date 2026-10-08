@@ -111,6 +111,9 @@ final class PlatformCompose {
             sb.append("      - vps.autopilot.service=").append(s.id()).append("\n");
             appendRouterLabels(sb, router, s.hostname(), s.pathPrefix(), platform.pathRouting(),
                     s.stripPath(platform.pathRouting()), !profile.httpOnly());
+            if (s == aliasCarrier(platform)) {
+                appendAliasRedirect(sb, platform, s.hostname(), profile);
+            }
             sb.append("      - traefik.http.services.").append(router)
                     .append(".loadbalancer.server.port=").append(s.port()).append("\n");
         }
@@ -205,6 +208,44 @@ final class PlatformCompose {
                 sb.append("      - traefik.http.routers.").append(router)
                         .append("-secure.middlewares=").append(mw).append("\n");
             }
+        }
+    }
+
+    /** Service qui porte les routeurs des adresses secondaires : la racine « / », sinon le premier. */
+    static PlatformServiceSpec aliasCarrier(PlatformSpec platform) {
+        if (platform.aliases().isEmpty() || platform.services().isEmpty()) {
+            return null;
+        }
+        return platform.services().stream()
+                .filter(s -> s.pathPrefix() == null || s.pathPrefix().isBlank() || "/".equals(s.pathPrefix()))
+                .findFirst()
+                .orElse(platform.services().get(0));
+    }
+
+    /** {@code $$} : compose interpréterait {@code $1} comme une variable. */
+    private static void appendAliasRedirect(StringBuilder sb, PlatformSpec platform, String mainHost,
+                                            ServerProfile profile) {
+        String router = platform.id() + "-alias";
+        String mw = router + "-redirect";
+        String rule = platform.aliases().stream()
+                .map(a -> "Host(`" + a + "`)")
+                .reduce((a, b) -> a + " || " + b)
+                .orElseThrow();
+        String target = profile.scheme() + "://" + profile.authority(mainHost) + "/$${1}";
+        sb.append("      - traefik.http.middlewares.").append(mw)
+                .append(".redirectregex.regex=^https?://[^/]+/(.*)\n");
+        sb.append("      - traefik.http.middlewares.").append(mw)
+                .append(".redirectregex.replacement=").append(target).append("\n");
+        sb.append("      - traefik.http.middlewares.").append(mw).append(".redirectregex.permanent=true\n");
+        sb.append("      - \"traefik.http.routers.").append(router).append(".rule=").append(rule).append("\"\n");
+        sb.append("      - traefik.http.routers.").append(router).append(".entrypoints=web\n");
+        sb.append("      - traefik.http.routers.").append(router).append(".middlewares=").append(mw).append("\n");
+        if (!profile.httpOnly()) {
+            sb.append("      - \"traefik.http.routers.").append(router).append("-secure.rule=").append(rule).append("\"\n");
+            sb.append("      - traefik.http.routers.").append(router).append("-secure.entrypoints=websecure\n");
+            sb.append("      - traefik.http.routers.").append(router).append("-secure.tls=true\n");
+            sb.append("      - traefik.http.routers.").append(router).append("-secure.tls.certresolver=le\n");
+            sb.append("      - traefik.http.routers.").append(router).append("-secure.middlewares=").append(mw).append("\n");
         }
     }
 

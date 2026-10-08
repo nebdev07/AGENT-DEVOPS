@@ -136,6 +136,7 @@ PUT :
 
 Hôte vide → `service.plateforme.domaine` (routage host) ou `plateforme.domaine` (routage path) ; sslip si `vpsIp`.  
 `routing: path` : un DNS partagé, `pathPrefix` par service (`/` , `/api`). Traefik `PathPrefix` + `StripPrefix` (sauf `/`). Collision d’hôte avec une app 1:1 → `400`.  
+`aliases` (optionnel, 2026-10-07, routage `path` seulement, 4 max) : adresses secondaires, ex. `["www.mondomaine.org"]`, redirigées en 301 vers l’hôte principal en gardant le chemin, avec leur propre certificat. Chaque adresse doit déjà pointer vers le serveur (sinon la demande de certificat échoue en boucle). IP, hôte principal ou routage `host` → `400`.  
 Réponse : `{ platforms, deployReady: true, note }`.
 
 ## POST `/api/v1/platforms/deploy`

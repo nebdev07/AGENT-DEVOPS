@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app34" />
+  <link rel="stylesheet" href="/console.css?v=app35" />
 </head>
 <body>
   <div class="bg"></div>
@@ -595,6 +595,9 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
                 <option value="path">Chemins sur un seul hôte (/ et /api)</option>
               </select>
             </label>
+            <label class="field">Adresses secondaires redirigées vers l'hôte (optionnel, chemins seulement)
+              <input id="platAliases" type="text" value="" placeholder="www.mondomaine.org" autocomplete="off" />
+            </label>
             <p class="hint" id="platHostHint">Hôte d’un service si le champ est vide : <code>id.plateforme.domaine</code> — ou sslip si tu as analysé une IP.</p>
             <div id="platServices" class="plat-services"></div>
             <div class="app-form-actions">
@@ -762,6 +765,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app34"></script>
+  <script src="/console.js?v=app35"></script>
 </body>
 </html>

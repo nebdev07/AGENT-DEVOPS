@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PlatformComposeTest {
 
@@ -79,6 +80,50 @@ class PlatformComposeTest {
                 .isEqualTo("https://ma-asso.apps.exemple.com/api/");
         assertThat(PlatformCompose.publicUrl(p, p.services().get(1)))
                 .isEqualTo("https://ma-asso.apps.exemple.com/");
+    }
+
+    @Test
+    void aliasesRedirectPermanentlyToMainHostFromRootServiceOnly() {
+        PlatformSpec p = PlatformSpec.normalized(
+                "asso",
+                "",
+                "path",
+                List.of(
+                        new PlatformServiceSpec("api", "https://github.com/org/api.git", "main",
+                                "asso.org", 8080, "", List.of(), Map.of(), "/api"),
+                        new PlatformServiceSpec("www", "https://github.com/org/site.git", "main",
+                                "asso.org", 3000, "", List.of(), Map.of(), "/")
+                ),
+                List.of(" WWW.asso.org ", "www.asso.org", "old.asso.org"),
+                null
+        );
+        assertThat(p.aliases()).containsExactly("www.asso.org", "old.asso.org");
+        assertThat(PlatformCompose.aliasCarrier(p).id()).isEqualTo("www");
+
+        String yaml = PlatformCompose.yaml(p);
+        assertThat(yaml).contains("\"traefik.http.routers.asso-alias-secure.rule=Host(`www.asso.org`) || Host(`old.asso.org`)\"");
+        assertThat(yaml).contains("traefik.http.routers.asso-alias-secure.tls.certresolver=le");
+        assertThat(yaml).contains("asso-alias-redirect.redirectregex.replacement=https://asso.org/$${1}");
+        assertThat(yaml).contains("asso-alias-redirect.redirectregex.permanent=true");
+        assertThat(yaml.indexOf("asso-alias")).isGreaterThan(yaml.indexOf("container_name: plat-asso-www"));
+
+        String plain = PlatformCompose.yaml(p, new ServerProfile(true, 91, true));
+        assertThat(plain).contains("replacement=http://asso.org:91/$${1}");
+        assertThat(plain).doesNotContain("asso-alias-secure");
+    }
+
+    @Test
+    void aliasesRejectedOutsidePathRoutingOrWhenInvalid() {
+        PlatformServiceSpec www = new PlatformServiceSpec("www", "https://github.com/org/site.git", "main",
+                "asso.org", 3000, "", List.of(), Map.of(), "/");
+        assertThatThrownBy(() -> PlatformSpec.normalized("asso", "", "host", List.of(www),
+                List.of("www.asso.org"), null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PlatformSpec.normalized("asso", "", "path", List.of(www),
+                List.of("1.2.3.4"), null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PlatformSpec.normalized("asso", "", "path", List.of(www),
+                List.of("asso.org"), null)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(PlatformCompose.yaml(PlatformSpec.normalized("asso", "", "path", List.of(www), null)))
+                .doesNotContain("alias");
     }
 
     @Test

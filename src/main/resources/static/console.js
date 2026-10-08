@@ -1861,6 +1861,7 @@ function clearPlatForm() {
   platEditingId = "";
   if ($("platId")) $("platId").value = "";
   if ($("platRouting")) $("platRouting").value = "host";
+  if ($("platAliases")) $("platAliases").value = "";
   if ($("platBase") && $("publicBaseDomain")) $("platBase").value = $("publicBaseDomain").value.trim();
   const box = $("platServices");
   if (box) box.innerHTML = "";
@@ -1875,6 +1876,7 @@ function fillPlatForm(p) {
   $("platId").value = p.id || "";
   $("platBase").value = p.baseDomain || "";
   if ($("platRouting")) $("platRouting").value = p.routing === "path" ? "path" : "host";
+  if ($("platAliases")) $("platAliases").value = (p.aliases || []).join(", ");
   const box = $("platServices");
   box.innerHTML = "";
   (p.services || []).forEach((s) => addPlatServiceRow(s));
@@ -2446,6 +2448,8 @@ async function savePlatform() {
       baseDomain: $("platBase").value.trim(),
       routing: platRoutingMode(),
       services,
+      aliases: ($("platAliases") ? $("platAliases").value : "")
+        .split(/[\s,;]+/).map((a) => a.trim()).filter(Boolean),
     };
     const idx = list.findIndex((p) => p.id === (platEditingId || spec.id));
     if (idx >= 0) list[idx] = spec;
