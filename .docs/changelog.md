@@ -3,6 +3,10 @@
 > Ne jamais effacer une entrée.  
 > Dernière mise à jour : 2026-10-05
 
+## 2026-10-08
+
+- **ARC : mail opérationnel.** Mot de passe de `noreply@arc-nwanyo.org` posé dans `svc-api.local.env` sur le VPS (hors intention, hors chat), envoi de test SMTP accepté par `mail.arc-nwanyo.org:587` (250), API redémarrée (`docker compose up -d --no-build api`). Incident : une première tentative a affiché le mot de passe dans la console locale (ordre des lignes du script) ; changement du mot de passe demandé à l'opérateur.
+
 ## 2026-10-07
 
 - **Plateformes : adresses secondaires redirigées** (`aliases` sur `PlatformSpec`, routage par chemins seulement, 4 max). Traefik : routeurs `<id>-alias` (+ `-secure` avec certificat Let's Encrypt) portés par le service racine, middleware `redirectregex` permanent vers l'hôte principal en gardant le chemin (`$${1}` échappé pour compose). Validation : nom de domaine complet, pas d'IP, différent de l'hôte principal. Cockpit : champ « Adresses secondaires » dans la bande Plateformes. Cache `?v=app35`. Tests : 127 → 129.
