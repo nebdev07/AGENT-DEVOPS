@@ -5,7 +5,7 @@ import com.nebdev.devopsagent.discovery.model.LiveSnapshot;
 import com.nebdev.devopsagent.discovery.model.ServerSnapshot;
 import com.nebdev.devopsagent.risk.ActionGuard;
 import com.nebdev.devopsagent.risk.ForbiddenTargetGuard;
-import com.nebdev.devopsagent.ssh.SshConnector;
+import com.nebdev.devopsagent.ssh.RemoteJobRunner;
 import com.nebdev.devopsagent.ssh.SshTarget;
 import com.nebdev.devopsagent.state.StateStore;
 import org.springframework.stereotype.Service;
@@ -28,7 +28,7 @@ public class PlatformDeployService {
     private final StateStore stateStore;
     private final ActionGuard actionGuard;
     private final ForbiddenTargetGuard forbiddenTargetGuard;
-    private final SshConnector sshConnector;
+    private final RemoteJobRunner jobRunner;
     private final DiscoveryService discoveryService;
     private final GitDeployKeyStore gitDeployKeyStore;
     private final ServerProfiles serverProfiles;
@@ -39,7 +39,7 @@ public class PlatformDeployService {
             StateStore stateStore,
             ActionGuard actionGuard,
             ForbiddenTargetGuard forbiddenTargetGuard,
-            SshConnector sshConnector,
+            RemoteJobRunner jobRunner,
             DiscoveryService discoveryService,
             GitDeployKeyStore gitDeployKeyStore,
             ServerProfiles serverProfiles
@@ -50,7 +50,7 @@ public class PlatformDeployService {
         this.stateStore = stateStore;
         this.actionGuard = actionGuard;
         this.forbiddenTargetGuard = forbiddenTargetGuard;
-        this.sshConnector = sshConnector;
+        this.jobRunner = jobRunner;
         this.discoveryService = discoveryService;
         this.gitDeployKeyStore = gitDeployKeyStore;
     }
@@ -124,7 +124,7 @@ public class PlatformDeployService {
         String script = RoleScript.loadPlatform(platform, gitKeys, profile);
         String raw;
         try {
-            raw = sshConnector.runStdinScript(script, target, DEPLOY_TIMEOUT_SECONDS);
+            raw = jobRunner.run(script, target, DEPLOY_TIMEOUT_SECONDS);
         } catch (IOException e) {
             AppSpec dummy = AppSpec.normalized(
                     platform.id(),

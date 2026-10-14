@@ -2,6 +2,7 @@ package com.nebdev.devopsagent.stack;
 
 import com.nebdev.devopsagent.risk.ActionGuard;
 import com.nebdev.devopsagent.risk.ForbiddenTargetGuard;
+import com.nebdev.devopsagent.ssh.RemoteJobRunner;
 import com.nebdev.devopsagent.ssh.SshConnector;
 import com.nebdev.devopsagent.ssh.SshTarget;
 import org.springframework.stereotype.Service;
@@ -32,18 +33,21 @@ public class PlatformRestoreService {
     private final ActionGuard actionGuard;
     private final ForbiddenTargetGuard forbiddenTargetGuard;
     private final SshConnector sshConnector;
+    private final RemoteJobRunner jobRunner;
     private final SecureRandom random = new SecureRandom();
 
     public PlatformRestoreService(
             PlatformIntentStore store,
             ActionGuard actionGuard,
             ForbiddenTargetGuard forbiddenTargetGuard,
-            SshConnector sshConnector
+            SshConnector sshConnector,
+            RemoteJobRunner jobRunner
     ) {
         this.store = store;
         this.actionGuard = actionGuard;
         this.forbiddenTargetGuard = forbiddenTargetGuard;
         this.sshConnector = sshConnector;
+        this.jobRunner = jobRunner;
     }
 
     public record RestoreFile(Path path, String originalName) {}
@@ -97,7 +101,7 @@ public class PlatformRestoreService {
         sshConnector.uploadFiles(target, remoteDir, files);
         String raw;
         try {
-            raw = sshConnector.runStdinScript(script, target, RESTORE_TIMEOUT_SECONDS);
+            raw = jobRunner.run(script, target, RESTORE_TIMEOUT_SECONDS);
         } catch (IOException e) {
             raw = e.getMessage() == null ? "" : e.getMessage();
             throwIfKnown(raw);

@@ -5,7 +5,7 @@ import com.nebdev.devopsagent.discovery.model.LiveSnapshot;
 import com.nebdev.devopsagent.discovery.model.ServerSnapshot;
 import com.nebdev.devopsagent.risk.ActionGuard;
 import com.nebdev.devopsagent.risk.ForbiddenTargetGuard;
-import com.nebdev.devopsagent.ssh.SshConnector;
+import com.nebdev.devopsagent.ssh.RemoteJobRunner;
 import com.nebdev.devopsagent.ssh.SshTarget;
 import com.nebdev.devopsagent.state.StateStore;
 import org.springframework.stereotype.Service;
@@ -20,7 +20,10 @@ public class AppDeployService {
     private final StateStore stateStore;
     private final ActionGuard actionGuard;
     private final ForbiddenTargetGuard forbiddenTargetGuard;
-    private final SshConnector sshConnector;
+    /** Build Docker d’une app sans cache : peut dépasser 10 min sur un petit VPS. */
+    static final int DEPLOY_TIMEOUT_SECONDS = 1800;
+
+    private final RemoteJobRunner jobRunner;
     private final DiscoveryService discoveryService;
     private final GitDeployKeyStore gitDeployKeyStore;
 
@@ -30,7 +33,7 @@ public class AppDeployService {
             StateStore stateStore,
             ActionGuard actionGuard,
             ForbiddenTargetGuard forbiddenTargetGuard,
-            SshConnector sshConnector,
+            RemoteJobRunner jobRunner,
             DiscoveryService discoveryService,
             GitDeployKeyStore gitDeployKeyStore
     ) {
@@ -39,7 +42,7 @@ public class AppDeployService {
         this.stateStore = stateStore;
         this.actionGuard = actionGuard;
         this.forbiddenTargetGuard = forbiddenTargetGuard;
-        this.sshConnector = sshConnector;
+        this.jobRunner = jobRunner;
         this.discoveryService = discoveryService;
         this.gitDeployKeyStore = gitDeployKeyStore;
     }
@@ -119,7 +122,7 @@ public class AppDeployService {
         String script = RoleScript.loadApp(effective, scaffoldB64, gitKey);
         String raw;
         try {
-            raw = sshConnector.runStdinScript(script, target, 600);
+            raw = jobRunner.run(script, target, DEPLOY_TIMEOUT_SECONDS);
         } catch (IOException e) {
             throw AppRemoteFailure.unknown(e, effective);
         }
