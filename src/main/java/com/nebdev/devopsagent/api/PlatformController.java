@@ -7,6 +7,7 @@ import com.nebdev.devopsagent.stack.AppDeployPlan;
 import com.nebdev.devopsagent.stack.PlatformDeployService;
 import com.nebdev.devopsagent.stack.PlatformIntentStore;
 import com.nebdev.devopsagent.stack.PlatformRestoreService;
+import com.nebdev.devopsagent.stack.PlatformSecretService;
 import com.nebdev.devopsagent.stack.PlatformSpec;
 import com.nebdev.devopsagent.stack.PlatformSqlService;
 import com.nebdev.devopsagent.stack.SqlConsolePolicy;
@@ -41,17 +42,20 @@ public class PlatformController {
     private final PlatformDeployService deployService;
     private final PlatformRestoreService restoreService;
     private final PlatformSqlService sqlService;
+    private final PlatformSecretService secretService;
 
     public PlatformController(
             PlatformIntentStore store,
             PlatformDeployService deployService,
             PlatformRestoreService restoreService,
-            PlatformSqlService sqlService
+            PlatformSqlService sqlService,
+            PlatformSecretService secretService
     ) {
         this.store = store;
         this.deployService = deployService;
         this.restoreService = restoreService;
         this.sqlService = sqlService;
+        this.secretService = secretService;
     }
 
     @GetMapping
@@ -205,6 +209,48 @@ public class PlatformController {
         );
     }
 
+    @GetMapping("/secrets")
+    public Map<String, Object> secrets(
+            @RequestParam("id") String id,
+            @RequestParam("host") String host,
+            @RequestParam(value = "port", required = false) Integer port,
+            @RequestParam("user") String user
+    ) throws IOException {
+        Map<String, List<String>> names = secretService.list(id.trim(), target(host, port, user));
+        return Map.of("id", id.trim(), "names", names);
+    }
+
+    @PostMapping("/secrets")
+    public Map<String, Object> setSecret(@RequestBody SecretRequest body) throws IOException {
+        requireSecretBody(body);
+        PlatformSecretService.Outcome o = secretService.set(body.id().trim(), body.service(), body.name(), body.value(),
+                !Boolean.FALSE.equals(body.restart()), target(body.host(), body.port(), body.user()),
+                Boolean.TRUE.equals(body.confirm()));
+        return Map.of("status", "ok", "risk", "CHANGE", "outcome", o);
+    }
+
+    @PostMapping("/secrets/remove")
+    public Map<String, Object> removeSecret(@RequestBody SecretRequest body) throws IOException {
+        requireSecretBody(body);
+        PlatformSecretService.Outcome o = secretService.unset(body.id().trim(), body.service(), body.name(),
+                !Boolean.FALSE.equals(body.restart()), target(body.host(), body.port(), body.user()),
+                Boolean.TRUE.equals(body.confirm()));
+        return Map.of("status", "ok", "risk", "CHANGE", "outcome", o);
+    }
+
+    private static void requireSecretBody(SecretRequest body) {
+        if (body == null || body.id() == null || body.id().isBlank()) {
+            throw new IllegalArgumentException("Indique la plateforme.");
+        }
+    }
+
+    private static SshTarget target(String host, Integer port, String user) {
+        if (host == null || host.isBlank() || user == null || user.isBlank()) {
+            throw new IllegalArgumentException("Indique l’hôte et l’utilisateur SSH.");
+        }
+        return new SshTarget(host.trim(), port == null ? 22 : port, user.trim());
+    }
+
     private static PlatformRestoreService.RestoreFile toTemp(MultipartFile part, List<Path> temps) throws IOException {
         if (part == null || part.isEmpty()) {
             return null;
@@ -239,4 +285,13 @@ public class PlatformController {
     public record DeployRequest(String id, String host, Integer port, String user, Boolean confirm) {}
 
     public record SqlRequest(String id, String host, Integer port, String user, String sql, Boolean confirm) {}
+
+    /** {@code value} n’est jamais renvoyé, journalisé ni enregistré sur ce poste. */
+    public record SecretRequest(String id, String service, String name, String value, Boolean restart,
+                                String host, Integer port, String user, Boolean confirm) {
+        @Override
+        public String toString() {
+            return "SecretRequest[id=" + id + ", service=" + service + ", name=" + name + ", value=***]";
+        }
+    }
 }

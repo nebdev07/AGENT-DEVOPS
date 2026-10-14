@@ -25,7 +25,8 @@ public class ActionGuard {
             "restore-platform",
             "sql-write-platform",
             "run-backup",
-            "restore-drill"
+            "restore-drill",
+            "set-platform-secret"
     );
 
     public void assertAllowed(RiskLevel level, String action) {

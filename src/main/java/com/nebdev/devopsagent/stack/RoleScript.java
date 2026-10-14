@@ -17,7 +17,7 @@ public final class RoleScript {
 
     private static final Set<String> ALLOWED = Set.of(
             "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups", "app", "platform",
-            "platform-restore", "platform-sql", "backup-drill");
+            "platform-restore", "platform-sql", "backup-drill", "platform-secret");
     private static final Pattern SAFE_TOKEN = Pattern.compile("^[A-Za-z0-9._-]{0,80}$");
     private static final Map<String, String> FLAGS = new LinkedHashMap<>();
 
@@ -252,6 +252,34 @@ public final class RoleScript {
             prefix.append("DRILL_FILES_BYTES=").append(extractedBytes).append('\n');
         }
         return prefix + load("backup-drill");
+    }
+
+    /**
+     * Secrets d’exécution d’une plateforme. La valeur part en base64 dans le script envoyé sur l’entrée standard
+     * (jamais en argument de commande) ; {@code value} est ignorée sauf pour {@code SET}.
+     */
+    public static String loadPlatformSecret(String platformId, PlatformSecrets.Mode mode, String serviceId,
+                                            String name, String value, boolean restart) {
+        PlatformSecrets.requireId(platformId);
+        StringBuilder prefix = new StringBuilder();
+        prefix.append("PLATFORM_ID=").append(platformId).append('\n');
+        prefix.append("SECRET_MODE=").append(mode.script()).append('\n');
+        boolean targetsOne = switch (mode) {
+            case LIST -> false;
+            case SET, UNSET -> true;
+        };
+        if (targetsOne) {
+            PlatformSecrets.requireId(serviceId);
+            PlatformSecrets.requireName(name);
+            prefix.append("SECRET_SERVICE=").append(serviceId).append('\n');
+            prefix.append("SECRET_NAME=").append(name).append('\n');
+            prefix.append("SECRET_RESTART=").append(restart ? "1" : "0").append('\n');
+        }
+        if (mode == PlatformSecrets.Mode.SET) {
+            PlatformSecrets.requireValue(value);
+            prefix.append("SECRET_VALUE_B64=").append(b64(value)).append('\n');
+        }
+        return prefix + load("platform-secret");
     }
 
     private static String b64(String text) {
