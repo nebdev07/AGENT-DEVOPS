@@ -16,6 +16,8 @@ state/agent-local.yml
 !state/.gitkeep
 state/*.report.txt
 state/backups/
+state/journal/
+state/*.bak-*
 state/exports/
 state/backup.key
 state/git-deploy
