@@ -106,6 +106,16 @@ class AuditRulesTest {
     }
 
     @Test
+    void smallFilesArchiveNextToRealDumpIsNotFlagged() {
+        BackupFile dump = new BackupFile("dump-20261014T163000Z.sql.gz.enc", NOW.minusSeconds(3600).getEpochSecond(), 4_300_000);
+        BackupFile files = new BackupFile("files-20261014T163000Z.tar.gz.enc", NOW.minusSeconds(3590).getEpochSecond(), 320);
+        AuditReport r = AuditRules.evaluate(snap("ubuntu", "24.04", "no", "no", "active", "active", List.of(),
+                hygiene(0, 0, false, true, true, List.of(dump, files), List.of()), true, true, 10));
+
+        assertThat(ids(r)).doesNotContain("backup-empty", "backup-old", "no-backup");
+    }
+
+    @Test
     void criticalFindingCapsGradeAtD() {
         BackupFile ok = new BackupFile("d.enc", NOW.getEpochSecond(), 9_000_000);
         AuditReport r = AuditRules.evaluate(snap("ubuntu", "24.04", "no", "no", "active", "active", List.of(),

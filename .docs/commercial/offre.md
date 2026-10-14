@@ -44,7 +44,8 @@ Engagement de maintenance : 6 mois. Paiement annuel : 2 mois offerts. Interventi
 
 ## Limites, dites clairement
 
-- Les sauvegardes automatiques couvrent les **bases de données** (MariaDB / MySQL). Les fichiers déposés par vos utilisateurs (images, pièces jointes) sont repris lors de la migration ; leur sauvegarde quotidienne fait l'objet d'une option à venir.
+- ~~Les sauvegardes automatiques couvrent les **bases de données** (MariaDB / MySQL). Les fichiers déposés par vos utilisateurs (images, pièces jointes) sont repris lors de la migration ; leur sauvegarde quotidienne fait l'objet d'une option à venir.~~ *(version du 2026-10-14 matin, remplacée)*
+- Les sauvegardes automatiques couvrent les **bases de données** (MariaDB / MySQL) **et les fichiers déposés par vos utilisateurs** (images, pièces jointes) stockés par vos applications. Chaque sauvegarde est vérifiée ; un exercice de restauration prouve qu'elle se réimporte.
 - La copie de sauvegarde hors serveur est conservée chez l'opérateur, chiffrée. Une copie vers un stockage externe de votre choix est prévue.
 - Pas de surveillance 24 h / 24 : intervention aux heures ouvrées (Pro : le jour ouvré suivant).
 

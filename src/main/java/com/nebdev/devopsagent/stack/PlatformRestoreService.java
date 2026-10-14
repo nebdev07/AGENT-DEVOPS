@@ -85,6 +85,12 @@ public class PlatformRestoreService {
                     "coche Volume fichiers sur le service concerné, Enregistrer, puis Restaurer."));
         }
         String subdir = normalizeSubdir(uploadsSubdir);
+        if (uploads != null && !subdir.isEmpty() && isAgentFilesBackup(uploads.originalName())) {
+            throw new IllegalArgumentException(OperatorMessage.of(
+                    "une sauvegarde de fichiers de l’agent se restaure à la racine du volume.",
+                    WHERE,
+                    "laisse le sous-dossier vide, puis Restaurer."));
+        }
         Map<String, Path> files = new LinkedHashMap<>();
         String sqlName = null;
         String uploadsName = null;
@@ -134,8 +140,15 @@ public class PlatformRestoreService {
                 "exporte avec mysqldump / mariadb-dump (fichier .sql, ou compressé .sql.gz)."));
     }
 
+    static boolean isAgentFilesBackup(String original) {
+        return original != null && original.trim().toLowerCase(Locale.ROOT).endsWith(".tar.gz.enc");
+    }
+
     static String archiveRemoteName(String original) {
         String n = original == null ? "" : original.trim().toLowerCase(Locale.ROOT);
+        if (isAgentFilesBackup(n)) {
+            return "uploads.tar.gz.enc";
+        }
         if (n.endsWith(".tar.gz") || n.endsWith(".tgz")) {
             return "uploads.tar.gz";
         }
@@ -146,7 +159,7 @@ public class PlatformRestoreService {
             return "uploads.zip";
         }
         throw new IllegalArgumentException(OperatorMessage.of(
-                "l’archive « " + original + " » n’est pas un .tar.gz, .tgz, .tar ni .zip.",
+                "l’archive « " + original + " » n’est pas un .tar.gz, .tgz, .tar, .zip ni une sauvegarde de l’agent.",
                 WHERE,
                 "compresse le dossier des fichiers (contenu à la racine de l’archive)."));
     }
@@ -178,7 +191,7 @@ public class PlatformRestoreService {
             if (t.startsWith("DB_BACKUP=") || t.startsWith("SQL_RESTORED=") || t.startsWith("TABLES=")
                     || t.startsWith("UPLOADS_BACKUP=") || t.startsWith("UPLOADS_RESTORED=") || t.startsWith("FILES=")
                     || t.startsWith("SERVICES_STOPPED=") || t.startsWith("SERVICES_STARTED=")
-                    || t.startsWith("FK_CHECKS=") || t.startsWith("DB_ROLLED_BACK=")) {
+                    || t.startsWith("FK_CHECKS=") || t.startsWith("DB_ROLLED_BACK=") || t.startsWith("UPLOADS_ROLLED_BACK=")) {
                 out.add(t);
             }
         }
@@ -226,10 +239,21 @@ public class PlatformRestoreService {
                     "recrée l’archive depuis l’intérieur du dossier (tar -C dossier -czf uploads.tar.gz .)."));
         }
         if (raw.contains("UPLOADS_EXTRACT_FAILED") || raw.contains("BAD_ARCHIVE_TYPE")) {
+            String state = raw.contains("UPLOADS_ROLLED_BACK=")
+                    ? " Les fichiers d’avant ont été remis."
+                    : raw.contains("UPLOADS_ROLLBACK_FAILED")
+                            ? " ATTENTION : la remise des fichiers d’avant a aussi échoué (copie dans le dossier backups)."
+                            : "";
             throw new IllegalStateException(OperatorMessage.of(
-                    "l’archive de fichiers n’a pas pu être extraite.",
+                    "l’archive de fichiers n’a pas pu être extraite." + state,
                     WHERE,
                     "vérifie qu’elle s’ouvre en local (.tar.gz ou .zip), puis Restaurer."));
+        }
+        if (raw.contains("NEED_BACKUP_PASSPHRASE")) {
+            throw new IllegalStateException(OperatorMessage.of(
+                    "la phrase de chiffrement des sauvegardes est absente du VPS : l’archive de l’agent ne peut pas être lue.",
+                    WHERE,
+                    "Installations › Sauvegardes chiffrées, puis Restaurer."));
         }
         if (raw.contains("DOCKER_MISSING")) {
             throw new IllegalStateException(OperatorMessage.of(

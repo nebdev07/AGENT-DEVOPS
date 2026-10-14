@@ -1008,6 +1008,32 @@ function backupCheckText(b) {
   return { tone: "ok", text: "complète · " + dbs.length + " base(s), " + c.applicationTables + " table(s) : " + (dbs.join(", ") || "—") };
 }
 
+function backupFilesText(b) {
+  if (!b.files) return "Fichiers des volumes : aucune archive avec cette sauvegarde (aucun volume, ou sauvegarde d’avant la mise à jour)";
+  const c = b.files.check;
+  if (!c) return "Fichiers des volumes : archive copiée, non vérifiée (" + humanBytes(b.files.sizeBytes) + ")";
+  if (!c.ok) return "Fichiers des volumes : archive inutilisable : " + c.problem;
+  const vols = Object.entries(c.volumes || {}).map(([v, n]) => v + " (" + n + ")");
+  return "Fichiers des volumes : " + c.files + " fichier(s), " + humanBytes(c.bytes) + " · " + vols.join(", ");
+}
+
+function backupPlatformsFor(b) {
+  const dbs = Object.keys(b.check?.databases || {});
+  const vols = b.files?.check?.ok ? Object.keys(b.files.check.volumes || {}) : [];
+  return (journey.platforms || []).map((p) => p.id).filter((id) => {
+    const key = id.replace(/-/g, "_");
+    return dbs.includes("app_" + key) || vols.includes("plat_" + key + "_uploads");
+  });
+}
+
+function backupRestoreParts(b, platformId) {
+  const key = platformId.replace(/-/g, "_");
+  return {
+    db: Object.keys(b.check?.databases || {}).includes("app_" + key),
+    files: !!(b.files?.check?.ok && Object.keys(b.files.check.volumes || {}).includes("plat_" + key + "_uploads")),
+  };
+}
+
 function renderBackups(list) {
   const box = $("backupList");
   box.innerHTML = "";
@@ -1015,13 +1041,12 @@ function renderBackups(list) {
     box.innerHTML = "<p class=\"hint\">Aucune copie sur ce poste pour ce serveur. Clique <strong>Copier la dernière</strong> (ou <strong>Sauvegarder maintenant</strong>).</p>";
     return;
   }
-  const allPlatforms = (journey.platforms || []).map((p) => p.id);
   list.forEach((b, i) => {
-    const inBackup = Object.keys(b.check?.databases || {});
-    const platforms = allPlatforms.filter((id) => inBackup.includes("app_" + id.replace(/-/g, "_")));
+    const platforms = backupPlatformsFor(b);
     const row = document.createElement("div");
     const check = backupCheckText(b);
-    row.className = "backup-row tone-" + check.tone;
+    const filesBad = !!(b.files?.check && !b.files.check.ok);
+    row.className = "backup-row tone-" + (filesBad ? "alert" : check.tone);
     const drill = b.drill
       ? (b.drill.ok ? "Exercice réussi le " : "Exercice ÉCHOUÉ le ")
         + new Date(b.drill.drilledAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })
@@ -1030,6 +1055,7 @@ function renderBackups(list) {
     row.innerHTML = "<div class=\"backup-main\"><strong>" + esc(backupLabel(b.file)) + "</strong>"
       + " <span class=\"hint\">" + esc(humanBytes(b.sizeBytes)) + (i === 0 ? " · la plus récente" : "") + "</span>"
       + "<p class=\"backup-check\">" + esc(check.text) + "</p>"
+      + "<p class=\"backup-check" + (filesBad ? " bad" : "") + "\">" + esc(backupFilesText(b)) + "</p>"
       + "<p class=\"hint backup-drill" + (b.drill && !b.drill.ok ? " bad" : "") + "\">" + esc(drill) + "</p></div>";
     const actions = document.createElement("div");
     actions.className = "backup-row-actions";
@@ -1056,8 +1082,8 @@ function renderBackups(list) {
       const btnRestore = document.createElement("button");
       btnRestore.type = "button";
       btnRestore.className = "ghost danger";
-      btnRestore.textContent = "Restaurer la base";
-      btnRestore.addEventListener("click", () => restoreFromBackup(b.file, sel.value));
+      btnRestore.textContent = "Restaurer la plateforme";
+      btnRestore.addEventListener("click", () => restoreFromBackup(b, sel.value));
       actions.append(sel, btnRestore);
     }
     row.appendChild(actions);
@@ -1096,11 +1122,12 @@ async function runBackupNow() {
   }
   const ok = await showConfirmPlan({
     title: "Sauvegarder maintenant",
-    detail: "Sauvegarde immédiate de MariaDB sur " + body.user + "@" + body.host + ".",
+    detail: "Sauvegarde immédiate de MariaDB et des volumes de fichiers sur " + body.user + "@" + body.host + ".",
     actions: [
       "Export complet de MariaDB sur le VPS, contrôle de la marque de fin",
-      "Chiffrement AES-256 sur le VPS, 14 fichiers gardés",
-      "Copie sur ce poste (SHA-256 contrôlé), puis lecture complète du fichier",
+      "Archive des volumes de fichiers des plateformes et des apps (/app/data)",
+      "Chiffrement AES-256 sur le VPS, 14 sauvegardes gardées",
+      "Copie sur ce poste (SHA-256 contrôlé, reprise si la liaison coupe), puis lecture complète",
     ],
   });
   if (!ok) return;
@@ -1170,11 +1197,12 @@ async function drillBackup(file) {
     detail: "Prouver que la sauvegarde du " + backupLabel(file) + " se réimporte, sur " + body.user + "@" + body.host + ".",
     actions: [
       "Extraction locale de chaque base applicative de la sauvegarde",
-      "Envoi SFTP vers un dossier temporaire du VPS",
+      "Envoi SFTP vers un dossier temporaire du VPS (avec l’archive des fichiers s’il y en a une)",
       "Import dans une base jetable restore_check_…, comptage des tables",
-      "Suppression de la base jetable et du dossier temporaire (même en cas d’échec)",
+      "Fichiers : extraction dans un dossier jetable de /var/tmp, comptage par volume",
+      "Suppression de la base, des dossiers jetables et temporaires (même en cas d’échec)",
     ],
-    warnings: ["Tes bases en service ne sont pas modifiées. L’import consomme du CPU et du disque pendant quelques instants."],
+    warnings: ["Tes bases et volumes en service ne sont pas modifiés. L’exercice consomme du CPU et du disque pendant quelques instants."],
   });
   if (!ok) return;
   backupSay("");
@@ -1198,7 +1226,9 @@ async function drillBackup(file) {
   loadBackups();
 }
 
-async function restoreFromBackup(file, platformId) {
+async function restoreFromBackup(b, platformId) {
+  const file = b.file;
+  const parts = backupRestoreParts(b, platformId);
   let body;
   try {
     body = backupTargetBody({ confirm: true, file, platformId, foreignKeyChecks: true });
@@ -1206,17 +1236,19 @@ async function restoreFromBackup(file, platformId) {
     backupSay(e.message, "err");
     return;
   }
+  const what = parts.db && parts.files ? "la base et les fichiers" : parts.db ? "la base" : "les fichiers";
+  const actions = [];
+  if (parts.db) actions.push("Extraction locale de la base app_" + platformId.replace(/-/g, "_") + " depuis la sauvegarde");
+  actions.push("Envoi SFTP vers le VPS" + (parts.files ? " (archive chiffrée des fichiers comprise)" : ""));
+  actions.push("Arrêt des services, copie de l’existant sur le VPS, remplacement, redémarrage");
+  if (parts.db) actions.push("En cas d’échec d’import : retour automatique à la base actuelle");
+  if (parts.files) actions.push("Volume de fichiers remis à l’identique de la sauvegarde (propriétaires et droits compris) ; en cas d’échec, retour aux fichiers actuels");
   const ok = await showConfirmPlan({
     kicker: "CHANGE · données de production",
     title: "Restaurer « " + platformId + " »",
-    detail: "Remplacer la base de « " + platformId + " » par celle de la sauvegarde du " + backupLabel(file) + ", sur " + body.user + "@" + body.host + ".",
-    actions: [
-      "Extraction locale de la base app_" + platformId.replace(/-/g, "_") + " depuis la sauvegarde",
-      "Envoi SFTP vers le VPS",
-      "Arrêt des services, sauvegarde de la base actuelle, import, redémarrage",
-      "En cas d’échec d’import : retour automatique à la base actuelle",
-    ],
-    warnings: ["Les données écrites depuis cette sauvegarde seront perdues (elles restent dans la sauvegarde « before-restore » du VPS)."],
+    detail: "Remplacer " + what + " de « " + platformId + " » par ceux de la sauvegarde du " + backupLabel(file) + ", sur " + body.user + "@" + body.host + ".",
+    actions,
+    warnings: ["Les données écrites et les fichiers déposés depuis cette sauvegarde seront retirés (ils restent dans la copie « before-restore » du VPS)."],
   });
   if (!ok) return;
   backupSay("");
@@ -1227,7 +1259,7 @@ async function restoreFromBackup(file, platformId) {
     hideBusy();
     const report = (j.report || []).join("\n");
     backupSay("Restauré.\n" + report, "ok");
-    showResult({ ok: true, kicker: "CHANGE · réussi", title: "Base de " + platformId + " restaurée", detail: report,
+    showResult({ ok: true, kicker: "CHANGE · réussi", title: "« " + platformId + " » restaurée (" + what + ")", detail: report,
       next: "Recharge le site de la plateforme pour contrôler." });
   } catch (e) {
     hideBusy();

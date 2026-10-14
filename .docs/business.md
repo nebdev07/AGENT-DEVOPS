@@ -31,7 +31,7 @@ L'agent transforme des jours de travail manuel en heures. On vend **ce résultat
 
 ## Ce qui n'est pas encore vendable (spécifié ou absent)
 
-~~Restauration complète depuis les sauvegardes de l'agent~~ (livrée 2026-10-14 pour les bases MariaDB), ~~rapport client exportable~~ (livré 2026-10-14), sauvegardes hors-site autres que le poste opérateur (BIZ-09), **sauvegarde des fichiers déposés par les utilisateurs (volumes `/app/data`) : non couverte par les sauvegardes de l'agent** (BIZ-11), comptes multi-opérateurs (V9), installation de l'agent par un tiers, déploiement sans internet côté serveur. Voir `BIZ-*` dans le backlog.
+~~Restauration complète depuis les sauvegardes de l'agent~~ (livrée 2026-10-14 pour les bases MariaDB), ~~rapport client exportable~~ (livré 2026-10-14), sauvegardes hors-site autres que le poste opérateur (BIZ-09), ~~**sauvegarde des fichiers déposés par les utilisateurs (volumes `/app/data`) : non couverte par les sauvegardes de l'agent** (BIZ-11)~~ (livrée 2026-10-14 ; restauration depuis la console pour les plateformes, pas encore pour les apps 1:1), comptes multi-opérateurs (V9), installation de l'agent par un tiers, déploiement sans internet côté serveur. Voir `BIZ-*` dans le backlog.
 
 ## Trois étapes, dans cet ordre
 
@@ -85,7 +85,7 @@ Règle : le forfait se situe entre **30 % et 50 % du coût manuel chez un indép
 
 ### Ce qu'on ne promet pas encore
 
-- Les **fichiers déposés par les utilisateurs** (images, pièces jointes) ne sont pas dans les sauvegardes automatiques de l'agent (BIZ-11) : en Standard, ils sont repris une fois lors de la migration ; en maintenance, les sauvegarder par un moyen manuel documenté ou attendre BIZ-11.
+- ~~Les **fichiers déposés par les utilisateurs** (images, pièces jointes) ne sont pas dans les sauvegardes automatiques de l'agent (BIZ-11) : en Standard, ils sont repris une fois lors de la migration ; en maintenance, les sauvegarder par un moyen manuel documenté ou attendre BIZ-11.~~ (obsolète 2026-10-14 : BIZ-11 livré, les fichiers des volumes sont dans la sauvegarde quotidienne. Un serveur équipé avant doit avoir le rôle réinstallé ; tant que ce n'est pas fait, ne pas le promettre pour ce serveur.)
 - La copie hors serveur est **sur le poste de l'opérateur** (BIZ-09 : stockage objet). Le dire au client.
 - Pas de garantie de disponibilité chiffrée (SLA) : pas de supervision 24/7.
 

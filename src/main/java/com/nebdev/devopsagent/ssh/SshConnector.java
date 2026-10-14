@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.PublicKey;
 import java.util.List;
@@ -21,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 public class SshConnector {
+
+    static final int STALLED_ATTEMPTS = 3;
 
     private final DevopsProperties properties;
     private final TrustedHostStore trustedHostStore;
@@ -96,12 +99,46 @@ public class SshConnector {
         }
     }
 
-    /** Télécharge un fichier distant lisible par l’utilisateur SSH (SFTP, clé de l’agent). */
+    /**
+     * Télécharge un fichier distant lisible par l’utilisateur SSH (SFTP, clé de l’agent). Une coupure reprend là où
+     * le fichier local s’est arrêté (liaison lente ou instable) ; abandon après {@value #STALLED_ATTEMPTS} essais
+     * de suite sans progrès. Un fichier local déjà présent est considéré comme le début du même fichier distant :
+     * l’appelant contrôle l’empreinte à la fin.
+     */
     public void downloadFile(SshTarget target, String remotePath, Path localFile) throws IOException {
         DevopsProperties.Ssh ssh = properties.getSsh();
         if (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank()) {
             throw new IllegalStateException("DEVOPS_SSH_KEY est vide. Renseigner .env (chemin de la clé privée).");
         }
+        int stalled = 0;
+        long best = localSize(localFile);
+        while (true) {
+            IOException failure = null;
+            try {
+                if (downloadFrom(ssh, target, remotePath, localFile, localSize(localFile))) {
+                    return;
+                }
+            } catch (IOException e) {
+                failure = e;
+            }
+            long now = localSize(localFile);
+            if (now > best) {
+                best = now;
+                stalled = 0;
+            } else if (++stalled >= STALLED_ATTEMPTS) {
+                IOException e = failure != null ? failure : new IOException("Téléchargement incomplet : " + remotePath);
+                rethrow(e, target, false);
+                throw e;
+            }
+        }
+    }
+
+    private static long localSize(Path file) throws IOException {
+        return Files.exists(file) ? Files.size(file) : 0;
+    }
+
+    private boolean downloadFrom(DevopsProperties.Ssh ssh, SshTarget target, String remotePath, Path localFile, long offset)
+            throws IOException {
         try (SSHClient client = new SSHClient()) {
             if (ssh.isTrustUnknown()) {
                 client.addHostKeyVerifier(new PromiscuousVerifier());
@@ -116,11 +153,19 @@ public class SshConnector {
                     : client.loadKeys(ssh.getPrivateKeyPath(), ssh.getPassphrase());
             client.authPublickey(target.user(), keys);
             try (SFTPClient sftp = client.newSFTPClient()) {
-                sftp.get(remotePath, new FileSystemFile(localFile.toFile()));
+                long size = sftp.size(remotePath);
+                long start = offset;
+                if (start > size) {
+                    Files.deleteIfExists(localFile);
+                    start = 0;
+                }
+                if (start < size) {
+                    sftp.get(remotePath, new FileSystemFile(localFile.toFile()), start);
+                } else if (!Files.exists(localFile)) {
+                    Files.createFile(localFile);
+                }
+                return Files.size(localFile) == size;
             }
-        } catch (IOException e) {
-            rethrow(e, target, false);
-            throw e;
         }
     }
 

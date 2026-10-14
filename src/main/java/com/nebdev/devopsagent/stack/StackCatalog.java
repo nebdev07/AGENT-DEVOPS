@@ -318,7 +318,8 @@ public final class StackCatalog {
                                 "Dump chiffré",
                                 "Un dump en clair volé = toutes les données métier. Le chiffrement se fait avant de quitter le VPS.",
                                 "mariadb-dump de toutes les bases via docker exec, refusé s’il est incomplet, gzip, "
-                                        + "openssl AES-256-CBC, plaintext effacé. Minuteur quotidien vers 02:30.",
+                                        + "openssl AES-256-CBC, plaintext effacé ; archive tar chiffrée en flux des volumes "
+                                        + "de fichiers (/app/data). Minuteur quotidien vers 02:30.",
                                 true,
                                 StackComponent.PolicyImpact.WARNING,
                                 "Sans dump chiffré, une copie hors-site serait lisible si interceptée."
@@ -336,8 +337,9 @@ public final class StackCatalog {
                                 "restore-proof",
                                 "Preuve de restauration",
                                 "Un backup qui ne restaure pas n’existe pas. On le saurait trop tard, après l’incident.",
-                                "Copie déchiffrée et lue en entier (marque de fin, tables par base) ; exercice de restauration "
-                                        + "à la demande dans une base jetable du VPS (bande Sauvegardes).",
+                                "Copie déchiffrée et lue en entier (marque de fin, tables par base, fichiers par volume) ; "
+                                        + "exercice de restauration à la demande dans une base et un dossier jetables du VPS "
+                                        + "(bande Sauvegardes).",
                                 true,
                                 StackComponent.PolicyImpact.WARNING,
                                 "Sans test de restore, on découvre un backup mort le jour J."

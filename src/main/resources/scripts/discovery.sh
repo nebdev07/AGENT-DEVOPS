@@ -116,9 +116,17 @@ fi
 
 section BACKUPS
 # L’ancien rôle (avant ADR-041) posait le marqueur sans script fiable : sans le script, à réinstaller.
+# Script d’avant BIZ-11 (sans les volumes de fichiers) : à réinstaller aussi. Sans droit de lecture, pas de contrôle.
+backup_script_current() {
+  if [ -n "$SUDO" ] || [ -r /usr/local/bin/vps-autopilot-backup ]; then
+    $SUDO grep -q '^# vps-autopilot-backup v2' /usr/local/bin/vps-autopilot-backup 2>/dev/null
+  else
+    return 0
+  fi
+}
 if { $SUDO test -f /opt/vps-autopilot/backups/.vps-autopilot-backups 2>/dev/null \
       || test -f /opt/vps-autopilot/backups/.vps-autopilot-backups 2>/dev/null; } \
-    && test -f /usr/local/bin/vps-autopilot-backup 2>/dev/null; then
+    && test -f /usr/local/bin/vps-autopilot-backup 2>/dev/null && backup_script_current; then
   echo PRESENT
   $SUDO ls -1 /opt/vps-autopilot/backups/*.enc 2>/dev/null | tail -n 3 \
     || ls -1 /opt/vps-autopilot/backups/*.enc 2>/dev/null | tail -n 3 \

@@ -341,7 +341,8 @@ button:hover:not(:disabled), .btn:hover { filter: brightness(1.08); }
 .backup-row.tone-unknown { border-left-color: var(--warn); }
 .backup-main { flex: 1 1 22rem; min-width: 0; }
 .backup-main p { margin: 0.3rem 0 0; overflow-wrap: anywhere; }
-.backup-drill.bad { color: var(--danger); }
+.backup-drill.bad,
+.backup-check.bad { color: var(--danger); }
 .backup-row-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .backup-actions button,
 .backup-row-actions button { width: auto; margin-top: 0; padding-inline: 1rem; }

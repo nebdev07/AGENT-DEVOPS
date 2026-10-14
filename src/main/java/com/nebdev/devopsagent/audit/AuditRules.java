@@ -261,7 +261,10 @@ public final class AuditRules {
                     "Mettre en place une sauvegarde quotidienne chiffrée, copiée hors du serveur, et tester sa restauration."));
             return;
         }
-        BackupFile latest = files.stream().max(Comparator.comparingLong(BackupFile::modifiedEpochSeconds)).orElseThrow();
+        // Les archives de fichiers (files-*) peuvent être petites : la taille et l’âge se jugent sur les dumps.
+        List<BackupFile> dumps = files.stream().filter(f -> !f.name().startsWith("files-")).toList();
+        BackupFile latest = (dumps.isEmpty() ? files : dumps).stream()
+                .max(Comparator.comparingLong(BackupFile::modifiedEpochSeconds)).orElseThrow();
         long ageHours = Duration.between(Instant.ofEpochSecond(latest.modifiedEpochSeconds()), at).toHours();
         boolean suspicious = latest.sizeBytes() < SUSPICIOUS_BACKUP_BYTES;
         if (suspicious) {

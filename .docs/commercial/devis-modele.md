@@ -47,7 +47,7 @@
 
 ## Hors périmètre
 
-Développement ou correction du code des applications ; support aux utilisateurs finaux ; sauvegarde quotidienne des fichiers déposés par les utilisateurs (option à venir) ; surveillance 24 h / 24 ; frais d'hébergement et de nom de domaine.
+Développement ou correction du code des applications ; support aux utilisateurs finaux ; ~~sauvegarde quotidienne des fichiers déposés par les utilisateurs (option à venir)~~ (incluse depuis le 2026-10-14 pour les volumes de données des applications) ; fichiers stockés hors des volumes de données ; surveillance 24 h / 24 ; frais d'hébergement et de nom de domaine.
 
 ## Conditions
 

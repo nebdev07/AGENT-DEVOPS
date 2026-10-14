@@ -43,7 +43,11 @@ final class PlatformCompose {
 
     /** Nom Docker fixe (sans préfixe de projet compose) : la restauration y écrit avant le premier déploiement. */
     static String uploadsVolume(PlatformSpec platform) {
-        return "plat_" + platform.id().replace('-', '_') + "_uploads";
+        return uploadsVolumeName(platform.id());
+    }
+
+    static String uploadsVolumeName(String platformId) {
+        return "plat_" + platformId.replace('-', '_') + "_uploads";
     }
 
     static boolean anyUploads(PlatformSpec platform) {

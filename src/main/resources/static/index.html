@@ -394,15 +394,15 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
 
         <li class="step">
           <h3>7d. Sauvegardes et exercice de restauration</h3>
-          <p>Installe d’abord <strong>Backups chiffrés</strong> (Installations). Le VPS sauvegarde alors MariaDB chaque nuit vers 02:30 : toutes les bases, fichier chiffré, 14 gardés dans <code>/opt/vps-autopilot/backups</code>. Bande <strong>Sauvegardes</strong> (mode expert) :</p>
+          <p>Installe d’abord <strong>Backups chiffrés</strong> (Installations). Le VPS sauvegarde alors chaque nuit vers 02:30 MariaDB (toutes les bases) <strong>et les fichiers déposés par les utilisateurs</strong> (volumes <code>/app/data</code> des plateformes et des apps) : deux fichiers chiffrés de même horodatage, 14 sauvegardes gardées dans <code>/opt/vps-autopilot/backups</code>. Un serveur équipé avant cette mise à jour apparaît « à installer » : réinstalle Backups chiffrés pour ajouter les fichiers. Bande <strong>Sauvegardes</strong> (mode expert) :</p>
           <ul>
             <li><strong>Sauvegarder maintenant</strong> (à confirmer) : sauvegarde immédiate, copie sur ce poste, lecture complète.</li>
-            <li><strong>Copier la dernière</strong> : amène sur ce poste la sauvegarde de la nuit (dans <code>state/backups/&lt;serveur&gt;/</code>) et la vérifie. Refusé sur un serveur en lecture seule.</li>
-            <li><strong>Vérifier</strong> : déchiffre et lit toute la copie. « Complète » = la fin du dump est présente ; le nombre de tables par base est affiché. « Inutilisable » = ne compte pas dessus.</li>
-            <li><strong>Exercice de restauration</strong> (à confirmer) : chaque base de la sauvegarde est importée dans une base jetable du VPS, ses tables sont comptées puis la base jetable est supprimée. Tes bases ne sont pas touchées. Fais-le au moins une fois par mois : une sauvegarde qui ne se restaure pas n’existe pas.</li>
-            <li><strong>Restaurer la base</strong> (à confirmer) : n’apparaît que si la base de la plateforme est dans la sauvegarde. La base actuelle est d’abord sauvegardée sur le VPS ; si l’import échoue, elle revient automatiquement.</li>
+            <li><strong>Copier la dernière</strong> : amène sur ce poste la sauvegarde de la nuit et son archive de fichiers (dans <code>state/backups/&lt;serveur&gt;/</code>) et les vérifie. Si la liaison coupe, la copie reprend où elle s’était arrêtée ; relancer « Copier la dernière » reprend aussi. Refusé sur un serveur en lecture seule.</li>
+            <li><strong>Vérifier</strong> : déchiffre et lit toute la copie. « Complète » = la fin du dump est présente ; le nombre de tables par base est affiché. Ligne « Fichiers des volumes » : nombre de fichiers par volume. « Inutilisable » = ne compte pas dessus.</li>
+            <li><strong>Exercice de restauration</strong> (à confirmer) : chaque base de la sauvegarde est importée dans une base jetable du VPS, ses tables sont comptées puis la base jetable est supprimée ; l’archive des fichiers est extraite dans un dossier jetable de <code>/var/tmp</code> et ses fichiers comptés par volume. Tes bases et volumes ne sont pas touchés. Fais-le au moins une fois par mois : une sauvegarde qui ne se restaure pas n’existe pas.</li>
+            <li><strong>Restaurer la plateforme</strong> (à confirmer) : n’apparaît que si la base ou le volume de fichiers de la plateforme est dans la sauvegarde. L’existant est d’abord copié sur le VPS ; le volume est remis <strong>à l’identique</strong> (les fichiers ajoutés depuis sont retirés, propriétaires et droits remis) ; si l’import ou l’extraction échoue, l’existant revient automatiquement.</li>
             <li>La clé de chiffrement est <code>state/backup.key</code> sur ce poste (et sur le VPS, lisible par root seul). <strong>Sans elle, aucune sauvegarde ne s’ouvre</strong> : garde-en une copie en lieu sûr.</li>
-            <li>Pas encore couvert : les fichiers déposés par les utilisateurs (volume fichiers d’une plateforme). Pour eux, « Restaurer les données » avec ta propre archive.</li>
+            <li>Apps (une app = un conteneur) : leurs fichiers sont sauvegardés, vérifiés et testés, mais la restauration depuis la console ne couvre que les plateformes.</li>
           </ul>
         </li>
 

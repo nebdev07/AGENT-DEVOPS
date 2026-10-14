@@ -94,5 +94,37 @@ class BackupServiceTest {
                 .hasMessageContaining("Access denied");
         assertThatThrownBy(() -> BackupService.throwIfKnown("NEED_BACKUP_ROLE"))
                 .hasMessageContaining("pas installées");
+        assertThatThrownBy(() -> BackupService.throwIfKnown("BACKUP_READY=/x\nBACKUP_FILES_FAILED\nFILES_ERR: No space left on device"))
+                .hasMessageContaining("archive des fichiers a échoué")
+                .hasMessageContaining("No space left");
+    }
+
+    @Test
+    void filesArchiveSharesTheDumpTimestamp() {
+        assertThat(BackupService.filesNameFor("dump-20261014T162526Z.sql.gz.enc"))
+                .isEqualTo("files-20261014T162526Z.tar.gz.enc")
+                .matches(BackupService.FILES_ARCHIVE_NAME.pattern());
+        assertThatThrownBy(() -> BackupService.filesNameFor("../dump.sql")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void drillReportCoversTablesAndFiles() {
+        String raw = "DRILL_DB=app_shop:25:25\nDRILL_VOL=plat_shop_uploads:12:12\nDRILL_DONE\n";
+        assertThat(BackupService.drillLines(raw)).containsExactly(
+                "app_shop : 25 table(s) restaurée(s) sur 25",
+                "volume plat_shop_uploads : 12 fichier(s) restauré(s) sur 12");
+        assertThat(BackupService.drillCountsMatch(raw)).isTrue();
+    }
+
+    @Test
+    void drillFileGapOrMissingSpaceFails() {
+        String gap = "DRILL_VOL=plat_shop_uploads:12:11\nDRILL_DONE\n";
+        assertThat(BackupService.drillCountsMatch(gap)).isFalse();
+        assertThat(BackupService.drillLines(gap)).singleElement().asString().contains("ÉCART");
+
+        String noSpace = "DRILL_DB=app_shop:25:25\nDRILL_FILES_NO_SPACE=209715200:104857600\n";
+        assertThat(BackupService.drillCountsMatch(noSpace)).isFalse();
+        assertThat(BackupService.drillLines(noSpace)).last().asString()
+                .contains("place insuffisante").contains("200 Mo").contains("100 Mo");
     }
 }

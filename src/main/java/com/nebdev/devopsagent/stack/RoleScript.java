@@ -205,6 +205,21 @@ public final class RoleScript {
      * @param expectedTables nom de fichier → (base, tables attendues)
      */
     public static String loadBackupDrill(String remoteDir, Map<String, Map.Entry<String, Integer>> expectedTables) {
+        return loadBackupDrill(remoteDir, expectedTables, null, Map.of(), 0);
+    }
+
+    /**
+     * @param filesArchive   nom de l’archive des fichiers envoyée dans {@code remoteDir}, ou {@code null}
+     * @param expectedFiles  fichiers attendus par volume
+     * @param extractedBytes taille cumulée des fichiers (contrôle de place dans /var/tmp)
+     */
+    public static String loadBackupDrill(
+            String remoteDir,
+            Map<String, Map.Entry<String, Integer>> expectedTables,
+            String filesArchive,
+            Map<String, Integer> expectedFiles,
+            long extractedBytes
+    ) {
         if (remoteDir == null || !remoteDir.matches("^/tmp/autopilot-restore-drill-[a-z0-9-]{1,80}$")) {
             throw new IllegalArgumentException("Dossier distant de l’exercice de restauration invalide.");
         }
@@ -217,7 +232,26 @@ public final class RoleScript {
             }
             manifest.append(file).append('\t').append(db).append('\t').append(e.getValue().getValue()).append('\n');
         }
-        return "DRILL_DIR=" + remoteDir + "\nDRILL_MANIFEST_B64=" + b64(manifest.toString()) + "\n" + load("backup-drill");
+        StringBuilder prefix = new StringBuilder();
+        prefix.append("DRILL_DIR=").append(remoteDir).append('\n');
+        prefix.append("DRILL_MANIFEST_B64=").append(manifest.isEmpty() ? "" : b64(manifest.toString())).append('\n');
+        if (filesArchive != null) {
+            if (!SAFE_TOKEN.matcher(filesArchive).matches() || filesArchive.isEmpty() || filesArchive.contains("..")
+                    || extractedBytes < 0) {
+                throw new IllegalArgumentException("Archive de fichiers invalide pour l’exercice : " + filesArchive);
+            }
+            StringBuilder files = new StringBuilder();
+            for (Map.Entry<String, Integer> e : expectedFiles.entrySet()) {
+                if (!e.getKey().matches("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$") || e.getKey().contains("..")) {
+                    throw new IllegalArgumentException("Nom de volume invalide pour l’exercice : " + e.getKey());
+                }
+                files.append(e.getKey()).append('\t').append(e.getValue()).append('\n');
+            }
+            prefix.append("DRILL_FILES=").append(filesArchive).append('\n');
+            prefix.append("DRILL_FILES_MANIFEST_B64=").append(b64(files.toString())).append('\n');
+            prefix.append("DRILL_FILES_BYTES=").append(extractedBytes).append('\n');
+        }
+        return prefix + load("backup-drill");
     }
 
     private static String b64(String text) {

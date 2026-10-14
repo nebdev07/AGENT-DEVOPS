@@ -139,11 +139,142 @@ class BackupArchiveTest {
         assertThat(out).doesNotExist();
     }
 
+    @Test
+    void filesArchiveCountsFilesAndBytesPerVolume() throws Exception {
+        TarBuilder tar = new TarBuilder()
+                .dir("plat_shop_uploads/_data/")
+                .file("plat_shop_uploads/_data/a.jpg", "12345")
+                .dir("plat_shop_uploads/_data/docs/")
+                .file("plat_shop_uploads/_data/docs/b.pdf", "abc")
+                .dir("plat_blog_uploads/_data/")
+                .end();
+        BackupArchive.FilesVerification v = BackupArchive.verifyFiles(encrypt(tar.bytes(), PASS), PASS);
+        assertThat(v.ok()).isTrue();
+        assertThat(v.filesByVolume()).containsEntry("plat_shop_uploads", 2).containsEntry("plat_blog_uploads", 0);
+        assertThat(v.bytesByVolume()).containsEntry("plat_shop_uploads", 8L);
+        assertThat(v.totalFiles()).isEqualTo(2);
+    }
+
+    @Test
+    void filesArchiveWithGnuLongNameIsRead() throws Exception {
+        String longName = "plat_shop_uploads/_data/" + "x".repeat(120) + ".txt";
+        TarBuilder tar = new TarBuilder().longName(longName).file("././@LongLink-target", "hello").end();
+        BackupArchive.FilesVerification v = BackupArchive.verifyFiles(encrypt(tar.bytes(), PASS), PASS);
+        assertThat(v.ok()).isTrue();
+        assertThat(v.filesByVolume()).containsEntry("plat_shop_uploads", 1);
+    }
+
+    @Test
+    void truncatedFilesArchiveIsRejected() throws Exception {
+        byte[] full = new TarBuilder().file("plat_shop_uploads/_data/a.jpg", "12345").bytes();
+        BackupArchive.FilesVerification v = BackupArchive.verifyFiles(encrypt(full, PASS), PASS);
+        assertThat(v.ok()).isFalse();
+        assertThat(v.problem()).contains("tronquée");
+    }
+
+    @Test
+    void filesArchiveWithEscapingPathIsRejected() throws Exception {
+        TarBuilder tar = new TarBuilder().file("plat_shop_uploads/_data/../../etc/passwd", "x").end();
+        BackupArchive.FilesVerification v = BackupArchive.verifyFiles(encrypt(tar.bytes(), PASS), PASS);
+        assertThat(v.ok()).isFalse();
+        assertThat(v.problem()).contains("chemin inattendu");
+    }
+
+    @Test
+    void filesArchiveWithCorruptedHeaderIsRejected() throws Exception {
+        byte[] bytes = new TarBuilder().file("plat_shop_uploads/_data/a.jpg", "12345").end().bytes();
+        bytes[10] ^= 0x01;
+        BackupArchive.FilesVerification v = BackupArchive.verifyFiles(encrypt(bytes, PASS), PASS);
+        assertThat(v.ok()).isFalse();
+        assertThat(v.problem()).contains("somme de contrôle");
+    }
+
+    @Test
+    void filesArchiveWithWrongPassphraseIsRejected() throws Exception {
+        byte[] bytes = new TarBuilder().file("plat_shop_uploads/_data/a.jpg", "12345").end().bytes();
+        BackupArchive.FilesVerification v = BackupArchive.verifyFiles(encrypt(bytes, PASS), "ffffffffffffffffffffffffffffffff");
+        assertThat(v.ok()).isFalse();
+    }
+
+    /** Archive tar minimale (ustar, GNU {@code L} pour les noms longs), comme {@code tar -czf} sur le VPS. */
+    private static final class TarBuilder {
+        private final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        private String pendingLongName;
+
+        TarBuilder dir(String name) {
+            header(name, '5', 0);
+            return this;
+        }
+
+        TarBuilder file(String name, String content) {
+            byte[] data = content.getBytes(StandardCharsets.UTF_8);
+            header(pendingLongName != null ? pendingLongName.substring(0, 99) : name, '0', data.length);
+            pendingLongName = null;
+            body(data);
+            return this;
+        }
+
+        TarBuilder longName(String name) {
+            byte[] data = (name + "\0").getBytes(StandardCharsets.UTF_8);
+            header("././@LongLink", 'L', data.length);
+            body(data);
+            pendingLongName = name;
+            return this;
+        }
+
+        TarBuilder end() {
+            out.writeBytes(new byte[1024]);
+            return this;
+        }
+
+        byte[] bytes() {
+            return out.toByteArray();
+        }
+
+        private void header(String name, char type, long size) {
+            byte[] h = new byte[512];
+            byte[] n = name.getBytes(StandardCharsets.UTF_8);
+            System.arraycopy(n, 0, h, 0, Math.min(n.length, 100));
+            put(h, 100, "0000644");
+            put(h, 108, "0000000");
+            put(h, 116, "0000000");
+            put(h, 124, String.format("%011o", size));
+            put(h, 136, "00000000000");
+            Arrays.fill(h, 148, 156, (byte) ' ');
+            h[156] = (byte) type;
+            put(h, 257, "ustar");
+            put(h, 263, "00");
+            long sum = 0;
+            for (byte b : h) {
+                sum += b & 0xff;
+            }
+            put(h, 148, String.format("%06o", sum));
+            h[154] = 0;
+            h[155] = ' ';
+            out.writeBytes(h);
+        }
+
+        private void body(byte[] data) {
+            out.writeBytes(data);
+            int pad = (512 - data.length % 512) % 512;
+            out.writeBytes(new byte[pad]);
+        }
+
+        private static void put(byte[] h, int off, String v) {
+            byte[] b = v.getBytes(StandardCharsets.US_ASCII);
+            System.arraycopy(b, 0, h, off, b.length);
+        }
+    }
+
     /** Même format que {@code openssl enc -aes-256-cbc -pbkdf2} d’un flux gzip. */
     private Path encrypt(String sql, String pass) throws Exception {
+        return encrypt(sql.getBytes(StandardCharsets.UTF_8), pass);
+    }
+
+    private Path encrypt(byte[] plain, String pass) throws Exception {
         ByteArrayOutputStream gz = new ByteArrayOutputStream();
         try (GZIPOutputStream out = new GZIPOutputStream(gz)) {
-            out.write(sql.getBytes(StandardCharsets.UTF_8));
+            out.write(plain);
         }
         byte[] salt = new byte[8];
         new SecureRandom().nextBytes(salt);

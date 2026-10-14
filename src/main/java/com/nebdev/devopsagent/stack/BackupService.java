@@ -32,20 +32,25 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Sauvegardes MariaDB de l’agent (ADR-034, ADR-041) : sauvegarde à la demande, copie sur le poste opérateur
- * (SHA-256 contrôlé), vérification réelle du contenu, exercice de restauration dans une base jetable, restauration
- * d’une plateforme depuis une sauvegarde.
+ * Sauvegardes de l’agent (ADR-034, ADR-041) : dump MariaDB + archive des volumes de fichiers (BIZ-11), sauvegarde
+ * à la demande, copie sur le poste opérateur (SHA-256 contrôlé), vérification réelle du contenu, exercice de
+ * restauration (base et dossier jetables), restauration d’une plateforme depuis une sauvegarde.
  */
 @Service
 public class BackupService {
 
     static final int BACKUP_TIMEOUT_SECONDS = 1800;
     static final Pattern FILE_NAME = Pattern.compile("^dump-\\d{8}T\\d{6}Z\\.sql\\.gz\\.enc$");
+    static final Pattern FILES_ARCHIVE_NAME = Pattern.compile("^files-\\d{8}T\\d{6}Z\\.tar\\.gz\\.enc$");
     private static final Pattern READY = Pattern.compile("(?m)^BACKUP_READY=(\\S+)\\s*$");
     private static final Pattern SHA = Pattern.compile("(?m)^BACKUP_SHA256=([a-fA-F0-9]{64})\\s*$");
+    private static final Pattern FILES_READY = Pattern.compile("(?m)^FILES_READY=(\\S+)\\s*$");
+    private static final Pattern FILES_SHA = Pattern.compile("(?m)^FILES_SHA256=([a-fA-F0-9]{64})\\s*$");
+    private static final Pattern DRILL_VOL = Pattern.compile("(?m)^DRILL_VOL=([^:\\s]+):(\\d+):(\\d+)\\s*$");
     private static final Pattern COPY_READY = Pattern.compile("(?m)^COPY_READY=(/tmp/autopilot-backup-[a-f0-9]+\\.enc)\\s*$");
     private static final Pattern DRILL_DB = Pattern.compile("(?m)^DRILL_DB=([^:\\s]+):(\\d+):(\\d+)\\s*$");
     private static final String REMOTE_DIR = "/opt/vps-autopilot/backups/";
+    private static final String DRILL_FILES = "files.tar.gz.enc";
     private static final String WHERE = "Bande Sauvegardes";
     private static final String SUDO_PREAMBLE = "set -eu\n"
             + "if [ \"$(id -u)\" -eq 0 ]; then SUDO=\"\"; else SUDO=\"sudo -n\"; "
@@ -89,7 +94,20 @@ public class BackupService {
     /** Résultat d’un exercice de restauration : une ligne par base (attendu / obtenu). */
     public record Drill(boolean ok, List<String> lines, String drilledAt) {}
 
-    /** Copie locale d’une sauvegarde, avec ses dernières preuves. */
+    /** Vérification de l’archive des volumes de fichiers (BIZ-11). */
+    public record FilesCheck(
+            boolean ok,
+            Map<String, Integer> volumes,
+            int files,
+            long bytes,
+            String problem,
+            String checkedAt
+    ) {}
+
+    /** Archive des volumes de fichiers prise en même temps que le dump ({@code files-<horodatage>.tar.gz.enc}). */
+    public record FilesPart(String file, long sizeBytes, String sha256, FilesCheck check) {}
+
+    /** Copie locale d’une sauvegarde, avec ses dernières preuves ; {@code files} absent si aucun volume. */
     public record LocalBackup(
             String host,
             String file,
@@ -98,7 +116,8 @@ public class BackupService {
             String remotePath,
             String copiedAt,
             Check check,
-            Drill drill
+            Drill drill,
+            FilesPart files
     ) {}
 
     // ---------------------------------------------------------------- phrase de passe
@@ -156,7 +175,26 @@ public class BackupService {
                     WHERE, "extrait : " + excerpt(raw)));
         }
         Matcher sha = SHA.matcher(raw);
-        return copyOffsite(target, ready.group(1).trim(), sha.find() ? sha.group(1).toLowerCase(Locale.ROOT) : "");
+        String dumpPath = ready.group(1).trim();
+        Path dump = copyToLocal(target, dumpPath, sha.find() ? sha.group(1).toLowerCase(Locale.ROOT) : "", FILE_NAME);
+        Matcher files = FILES_READY.matcher(raw);
+        if (files.find()) {
+            String filesPath = files.group(1).trim();
+            if (!Path.of(filesPath).getFileName().toString().equals(filesNameFor(dump.getFileName().toString()))) {
+                throw new IllegalStateException("Archive de fichiers sans le même horodatage que le dump : " + filesPath);
+            }
+            Matcher fsha = FILES_SHA.matcher(raw);
+            copyToLocal(target, filesPath, fsha.find() ? fsha.group(1).toLowerCase(Locale.ROOT) : "", FILES_ARCHIVE_NAME);
+        }
+        return verify(target.host(), dump.getFileName().toString());
+    }
+
+    /** {@code dump-<horodatage>.sql.gz.enc} → {@code files-<horodatage>.tar.gz.enc}. */
+    static String filesNameFor(String dumpName) {
+        if (!FILE_NAME.matcher(dumpName).matches()) {
+            throw new IllegalArgumentException("Nom de sauvegarde invalide.");
+        }
+        return "files-" + dumpName.substring("dump-".length(), dumpName.length() - ".sql.gz.enc".length()) + ".tar.gz.enc";
     }
 
     /**
@@ -169,7 +207,10 @@ public class BackupService {
                 + "F=\"$($SUDO sh -c 'ls -1t " + REMOTE_DIR + "dump-*.sql.gz.enc 2>/dev/null | head -n 1')\"\n"
                 + "[ -n \"$F\" ] || { echo NO_BACKUP_FILE; exit 1; }\n"
                 + "echo \"BACKUP_READY=$F\"\n"
-                + "echo \"BACKUP_SHA256=$($SUDO sha256sum \"$F\" | awk '{print $1}')\"\n";
+                + "echo \"BACKUP_SHA256=$($SUDO sha256sum \"$F\" | awk '{print $1}')\"\n"
+                + "S=\"${F##*/dump-}\"; G=\"" + REMOTE_DIR + "files-${S%.sql.gz.enc}.tar.gz.enc\"\n"
+                + "if $SUDO test -f \"$G\"; then echo \"FILES_READY=$G\"; "
+                + "echo \"FILES_SHA256=$($SUDO sha256sum \"$G\" | awk '{print $1}')\"; fi\n";
         String raw;
         try {
             raw = sshConnector.runStdinScript(script, target, 120);
@@ -182,12 +223,19 @@ public class BackupService {
     }
 
     LocalBackup copyOffsite(SshTarget target, String remotePath, String remoteSha) throws IOException {
+        Path local = copyToLocal(target, remotePath, remoteSha, FILE_NAME);
+        return verify(target.host(), local.getFileName().toString());
+    }
+
+    private Path copyToLocal(SshTarget target, String remotePath, String remoteSha, Pattern allowedName) throws IOException {
         String name = Path.of(remotePath).getFileName().toString();
-        if (!remotePath.equals(REMOTE_DIR + name) || !FILE_NAME.matcher(name).matches()) {
+        if (!remotePath.equals(REMOTE_DIR + name) || !allowedName.matcher(name).matches()) {
             throw new IllegalStateException("Chemin de sauvegarde inattendu : " + remotePath);
         }
         String tmp = "/tmp/autopilot-backup-" + HexFormat.of().formatHex(nextBytes(8)) + ".enc";
         String prepare = SUDO_PREAMBLE
+                + "find /tmp -maxdepth 1 -name 'autopilot-backup-*.enc' -user \"$(id -un)\" -mmin +120 -delete "
+                + "2>/dev/null || true\n"
                 + "$SUDO install -m 600 -o \"$(id -un)\" '" + remotePath + "' '" + tmp + "'\n"
                 + "echo COPY_READY=" + tmp + "\n";
         String raw = sshConnector.runStdinScript(prepare, target, 300);
@@ -223,7 +271,7 @@ public class BackupService {
         meta.remove("check");
         meta.remove("drill");
         writeMeta(local, meta);
-        return verify(target.host(), name);
+        return local;
     }
 
     // ---------------------------------------------------------------- consultation / vérification
@@ -253,14 +301,29 @@ public class BackupService {
         Map<String, Object> meta = readMeta(local);
         meta.put("check", check);
         writeMeta(local, meta);
+        Path files = companion(local);
+        if (files != null) {
+            BackupArchive.FilesVerification fv = BackupArchive.verifyFiles(files, passphrase());
+            Map<String, Object> fmeta = readMeta(files);
+            fmeta.put("check", new FilesCheck(fv.ok(), fv.filesByVolume(), fv.totalFiles(), fv.totalBytes(),
+                    fv.problem(), Instant.now().toString()));
+            writeMeta(files, fmeta);
+        }
         return describe(host, local);
+    }
+
+    /** Archive des fichiers copiée avec ce dump, ou {@code null}. */
+    private static Path companion(Path dump) {
+        Path files = dump.resolveSibling(filesNameFor(dump.getFileName().toString()));
+        return Files.isRegularFile(files) ? files : null;
     }
 
     // ---------------------------------------------------------------- exercice de restauration
 
     /**
      * Importe chaque base applicative de la sauvegarde dans une base jetable du VPS, compte les tables puis la
-     * supprime. Les bases en service ne sont pas touchées. CHANGE confirmé.
+     * supprime ; extrait l’archive des fichiers dans un dossier jetable et compte les fichiers par volume. Les bases
+     * et volumes en service ne sont pas touchés. CHANGE confirmé.
      */
     public LocalBackup drill(SshTarget target, String file, boolean confirmed) throws IOException {
         actionGuard.assertConfirmedChange("restore-drill", confirmed);
@@ -273,10 +336,18 @@ public class BackupService {
                     "cette sauvegarde n’est pas exploitable : " + v.problem(),
                     WHERE, "lance « Sauvegarder maintenant », puis refais l’exercice sur la nouvelle copie."));
         }
+        Path filesArchive = companion(local);
+        BackupArchive.FilesVerification fv = filesArchive == null ? null : BackupArchive.verifyFiles(filesArchive, pass);
+        if (fv != null && !fv.ok()) {
+            throw new IllegalStateException(OperatorMessage.of(
+                    "l’archive des fichiers de cette sauvegarde n’est pas exploitable : " + fv.problem(),
+                    WHERE, "lance « Sauvegarder maintenant », puis refais l’exercice sur la nouvelle copie."));
+        }
+        List<String> databases = v.noDatabase() ? List.of() : v.applicationDatabases();
         List<String> lines = new ArrayList<>();
         boolean ok;
-        if (v.noDatabase() || v.applicationDatabases().isEmpty()) {
-            lines.add("aucune base applicative dans cette sauvegarde : rien à importer");
+        if (databases.isEmpty() && fv == null) {
+            lines.add("ni base applicative ni volume de fichiers dans cette sauvegarde : rien à restaurer");
             ok = true;
         } else {
             Path work = Files.createTempDirectory("autopilot-drill-");
@@ -284,15 +355,20 @@ public class BackupService {
                 Map<String, Path> uploads = new LinkedHashMap<>();
                 Map<String, Map.Entry<String, Integer>> manifest = new LinkedHashMap<>();
                 int i = 0;
-                for (String db : v.applicationDatabases()) {
+                for (String db : databases) {
                     String name = "db-" + (++i) + ".sql.gz";
                     Path gz = work.resolve(name);
                     int tables = BackupArchive.extractDatabase(local, pass, db, gz);
                     uploads.put(name, gz);
                     manifest.put(name, Map.entry(db, tables));
                 }
+                if (fv != null) {
+                    uploads.put(DRILL_FILES, filesArchive);
+                }
                 String remoteDir = "/tmp/autopilot-restore-drill-" + HexFormat.of().formatHex(nextBytes(4));
-                String script = RoleScript.loadBackupDrill(remoteDir, manifest);
+                String script = fv == null
+                        ? RoleScript.loadBackupDrill(remoteDir, manifest)
+                        : RoleScript.loadBackupDrill(remoteDir, manifest, DRILL_FILES, fv.filesByVolume(), fv.totalBytes());
                 sshConnector.uploadFiles(target, remoteDir, uploads);
                 String raw;
                 try {
@@ -300,29 +376,17 @@ public class BackupService {
                 } catch (IOException e) {
                     raw = e.getMessage() == null ? "" : e.getMessage();
                     throwIfKnown(raw);
-                    if (!raw.contains("DRILL_IMPORT_FAILED")) {
+                    if (!raw.contains("DRILL_IMPORT_FAILED") && !raw.contains("DRILL_FILES_")) {
                         throw new IllegalStateException(OperatorMessage.of(
                                 "l’exercice de restauration s’est arrêté.", WHERE, "extrait : " + excerpt(raw)), e);
                     }
                 }
                 ok = raw.contains("DRILL_DONE");
-                Matcher m = DRILL_DB.matcher(raw);
-                while (m.find()) {
-                    int expected = Integer.parseInt(m.group(2));
-                    int actual = Integer.parseInt(m.group(3));
-                    boolean same = expected == actual;
-                    ok &= same;
-                    lines.add(m.group(1) + " : " + actual + " table(s) restaurée(s) sur " + expected
-                            + (same ? "" : " — ÉCART"));
+                if (databases.isEmpty()) {
+                    lines.add("aucune base applicative dans cette sauvegarde");
                 }
-                for (String line : raw.split("\\R")) {
-                    String t = line.strip();
-                    if (t.startsWith("DRILL_IMPORT_FAILED=")) {
-                        lines.add("échec d’import : " + t.substring("DRILL_IMPORT_FAILED=".length()));
-                    } else if (t.startsWith("DRILL_ERR: ")) {
-                        lines.add(t.substring("DRILL_ERR: ".length()));
-                    }
-                }
+                lines.addAll(drillLines(raw));
+                ok &= drillCountsMatch(raw);
                 if (lines.isEmpty()) {
                     ok = false;
                     lines.add("aucun résultat renvoyé par le VPS : " + excerpt(raw));
@@ -337,9 +401,68 @@ public class BackupService {
         return describe(target.host(), local);
     }
 
+    static List<String> drillLines(String raw) {
+        List<String> lines = new ArrayList<>();
+        Matcher m = DRILL_DB.matcher(raw);
+        while (m.find()) {
+            boolean same = m.group(2).equals(m.group(3));
+            lines.add(m.group(1) + " : " + m.group(3) + " table(s) restaurée(s) sur " + m.group(2)
+                    + (same ? "" : " — ÉCART"));
+        }
+        Matcher vol = DRILL_VOL.matcher(raw);
+        while (vol.find()) {
+            boolean same = vol.group(2).equals(vol.group(3));
+            lines.add("volume " + vol.group(1) + " : " + vol.group(3) + " fichier(s) restauré(s) sur " + vol.group(2)
+                    + (same ? "" : " — ÉCART"));
+        }
+        for (String line : raw.split("\\R")) {
+            String t = line.strip();
+            if (t.startsWith("DRILL_IMPORT_FAILED=")) {
+                lines.add("échec d’import : " + t.substring("DRILL_IMPORT_FAILED=".length()));
+            } else if (t.startsWith("DRILL_ERR: ")) {
+                lines.add(t.substring("DRILL_ERR: ".length()));
+            } else if (t.equals("DRILL_FILES_EXTRACT_FAILED")) {
+                lines.add("fichiers : extraction de l’archive impossible sur le VPS");
+            } else if (t.startsWith("DRILL_FILES_NO_SPACE=")) {
+                String[] p = t.substring("DRILL_FILES_NO_SPACE=".length()).split(":");
+                lines.add("fichiers : exercice non fait, place insuffisante dans /var/tmp (besoin "
+                        + megabytes(p[0]) + " Mo, libre " + megabytes(p.length > 1 ? p[1] : "0") + " Mo)");
+            }
+        }
+        return lines;
+    }
+
+    static boolean drillCountsMatch(String raw) {
+        if (raw.contains("DRILL_IMPORT_FAILED") || raw.contains("DRILL_FILES_EXTRACT_FAILED")
+                || raw.contains("DRILL_FILES_NO_SPACE")) {
+            return false;
+        }
+        for (Pattern p : List.of(DRILL_DB, DRILL_VOL)) {
+            Matcher m = p.matcher(raw);
+            while (m.find()) {
+                if (!m.group(2).equals(m.group(3))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static long megabytes(String bytes) {
+        try {
+            return Long.parseLong(bytes.trim()) / (1024 * 1024);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     // ---------------------------------------------------------------- restauration d’une plateforme
 
-    /** Remplace la base {@code app_<id>} de la plateforme par celle contenue dans la sauvegarde. CHANGE confirmé. */
+    /**
+     * Remplace la base {@code app_<id>} et le volume de fichiers de la plateforme par ceux de la sauvegarde (ce qui
+     * s’y trouve). Le volume est remis à l’identique : les fichiers ajoutés depuis sont retirés (copie de l’existant
+     * gardée sur le VPS). CHANGE confirmé.
+     */
     public PlatformRestoreService.RestoreResult restorePlatform(
             String platformId,
             SshTarget target,
@@ -353,18 +476,37 @@ public class BackupService {
             throw new IllegalArgumentException("Identifiant de plateforme invalide.");
         }
         Path local = requireLocal(target.host(), file);
+        String pass = passphrase();
         String db = "app_" + platformId.replace('-', '_');
+        boolean hasDb = BackupArchive.verify(local, pass).tablesByDatabase().containsKey(db);
+        Path filesArchive = companion(local);
+        boolean hasFiles = false;
+        if (filesArchive != null) {
+            BackupArchive.FilesVerification fv = BackupArchive.verifyFiles(filesArchive, pass);
+            if (!fv.ok()) {
+                throw new IllegalStateException(OperatorMessage.of(
+                        "l’archive des fichiers de cette sauvegarde n’est pas exploitable : " + fv.problem(),
+                        WHERE, "choisis une autre sauvegarde."));
+            }
+            hasFiles = fv.filesByVolume().containsKey(PlatformCompose.uploadsVolumeName(platformId));
+        }
+        if (!hasDb && !hasFiles) {
+            throw new IllegalArgumentException(OperatorMessage.of(
+                    "ni la base « " + db + " » ni les fichiers de « " + platformId + " » ne sont dans la sauvegarde "
+                            + file + ".",
+                    WHERE, "choisis une sauvegarde prise après le premier déploiement de la plateforme."));
+        }
         Path gz = Files.createTempFile("autopilot-restore-", ".sql.gz");
         try {
-            try {
-                BackupArchive.extractDatabase(local, passphrase(), db, gz);
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException(OperatorMessage.of(
-                        "la base « " + db + " » n’est pas dans la sauvegarde " + file + ".",
-                        WHERE, "choisis une sauvegarde prise après le premier déploiement de la plateforme."));
+            PlatformRestoreService.RestoreFile sql = null;
+            if (hasDb) {
+                BackupArchive.extractDatabase(local, pass, db, gz);
+                sql = new PlatformRestoreService.RestoreFile(gz, "backup.sql.gz");
             }
-            return platformRestoreService.restore(platformId, target, confirmed,
-                    new PlatformRestoreService.RestoreFile(gz, "backup.sql.gz"), null, null, foreignKeyChecks);
+            PlatformRestoreService.RestoreFile uploads = hasFiles
+                    ? new PlatformRestoreService.RestoreFile(filesArchive, filesArchive.getFileName().toString())
+                    : null;
+            return platformRestoreService.restore(platformId, target, confirmed, sql, uploads, null, foreignKeyChecks);
         } finally {
             Files.deleteIfExists(gz);
         }
@@ -393,6 +535,16 @@ public class BackupService {
                     "l’export MariaDB est incomplet (marque de fin absente) : fichier rejeté.", WHERE,
                     "vérifie l’espace disque du VPS, puis relance."));
         }
+        if (raw.contains("BACKUP_FILES_FAILED")) {
+            throw new IllegalStateException(OperatorMessage.of(
+                    "la base est sauvegardée sur le VPS, mais l’archive des fichiers a échoué : rien n’a été copié.", WHERE,
+                    "vérifie l’espace disque du VPS, puis relance. " + filesError(raw)));
+        }
+        if (raw.contains("NEED_BACKUP_PASSPHRASE")) {
+            throw new IllegalStateException(OperatorMessage.of(
+                    "la phrase de chiffrement des sauvegardes est absente du VPS.", WHERE,
+                    "Installations › Sauvegardes chiffrées, puis réessaie."));
+        }
         if (raw.contains("MARIADB_ROOT_PW_MISSING")) {
             throw new IllegalStateException(OperatorMessage.of(
                     "MariaDB tourne mais root.pw est absent.", WHERE, "réinstalle MariaDB depuis Installations."));
@@ -406,7 +558,7 @@ public class BackupService {
             throw new IllegalStateException(OperatorMessage.of(
                     "Docker absent ou inaccessible.", WHERE, "installe Docker, puis réessaie."));
         }
-        if (raw.contains("DRILL_FILE_MISSING") || raw.contains("NEED_DRILL_SPEC")) {
+        if (raw.contains("DRILL_FILE_MISSING") || raw.contains("NEED_DRILL_SPEC") || raw.contains("BAD_DRILL_FILE")) {
             throw new IllegalStateException(OperatorMessage.of(
                     "fichier envoyé introuvable sur le VPS.", WHERE, "relance l’exercice (envoi SFTP interrompu)."));
         }
@@ -421,10 +573,29 @@ public class BackupService {
         return "";
     }
 
+    private static String filesError(String raw) {
+        for (String line : raw.split("\\R")) {
+            if (line.startsWith("FILES_ERR: ")) {
+                return "Erreur : " + line.substring("FILES_ERR: ".length()).strip();
+            }
+        }
+        return "";
+    }
+
     private LocalBackup describe(String host, Path local) throws IOException {
         Map<String, Object> meta = readMeta(local);
         Check check = meta.containsKey("check") ? json.convertValue(meta.get("check"), Check.class) : null;
         Drill drill = meta.containsKey("drill") ? json.convertValue(meta.get("drill"), Drill.class) : null;
+        FilesPart filesPart = null;
+        Path files = companion(local);
+        if (files != null) {
+            Map<String, Object> fmeta = readMeta(files);
+            filesPart = new FilesPart(
+                    files.getFileName().toString(),
+                    Files.size(files),
+                    (String) fmeta.getOrDefault("sha256", ""),
+                    fmeta.containsKey("check") ? json.convertValue(fmeta.get("check"), FilesCheck.class) : null);
+        }
         return new LocalBackup(
                 host,
                 local.getFileName().toString(),
@@ -433,7 +604,8 @@ public class BackupService {
                 (String) meta.getOrDefault("remotePath", ""),
                 (String) meta.getOrDefault("copiedAt", ""),
                 check,
-                drill);
+                drill,
+                filesPart);
     }
 
     private Path requireLocal(String host, String file) throws IOException {

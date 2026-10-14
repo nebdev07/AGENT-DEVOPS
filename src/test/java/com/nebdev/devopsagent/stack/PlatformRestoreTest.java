@@ -27,6 +27,32 @@ class PlatformRestoreTest {
         assertThat(PlatformRestoreService.archiveRemoteName("files.zip")).isEqualTo("uploads.zip");
         assertThatThrownBy(() -> PlatformRestoreService.sqlRemoteName("dump.txt")).hasMessageContaining(".sql");
         assertThatThrownBy(() -> PlatformRestoreService.archiveRemoteName("x.rar")).hasMessageContaining(".tar.gz");
+        assertThat(PlatformRestoreService.archiveRemoteName("files-20261014T162526Z.tar.gz.enc"))
+                .isEqualTo("uploads.tar.gz.enc");
+    }
+
+    @Test
+    void agentFilesBackupReplacesTheWholeVolumeWithRollback() {
+        String script = RoleScript.loadPlatformRestore(platform(), "/tmp/autopilot-restore-demo-0a1b2c3d",
+                null, "uploads.tar.gz.enc", null);
+        assertThat(script).contains("*.tar.gz.enc)");
+        assertThat(script).contains("--strip-components=2");
+        assertThat(script).contains("UPLOADS_ROLLED_BACK=");
+        assertThat(script).contains("NEED_BACKUP_PASSPHRASE");
+        assertThatThrownBy(() -> PlatformRestoreService.throwIfKnown(
+                "UPLOADS_BACKUP=/opt/u.tar.gz\nUPLOADS_EXTRACT_FAILED\nUPLOADS_ROLLED_BACK=/opt/u.tar.gz\n"))
+                .hasMessageContaining("fichiers d’avant ont été remis");
+    }
+
+    @Test
+    void drillScriptCarriesFilesManifestAndRejectsUnsafeVolume() {
+        String dir = "/tmp/autopilot-restore-drill-0a1b2c3d";
+        String script = RoleScript.loadBackupDrill(dir, Map.of(), "files.tar.gz.enc",
+                Map.of("plat_demo_uploads", 12), 4096);
+        assertThat(script).contains("DRILL_FILES=files.tar.gz.enc\n").contains("DRILL_FILES_BYTES=4096\n")
+                .contains("DRILL_MANIFEST_B64=\n").contains("/var/tmp/autopilot-files-drill-");
+        assertThatThrownBy(() -> RoleScript.loadBackupDrill(dir, Map.of(), "files.tar.gz.enc",
+                Map.of("../etc", 1), 0)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

@@ -1,5 +1,6 @@
 set -eu
-# VPS Autopilot — restauration des données d’une plateforme (dump SQL + archive de fichiers).
+# VPS Autopilot — restauration des données d’une plateforme (dump SQL + archive de fichiers, ou archive
+# files-*.tar.gz.enc des sauvegardes de l’agent, déchiffrée avec la phrase du VPS).
 # Variables : PLATFORM_ID RESTORE_DIR RESTORE_SQL RESTORE_UPLOADS UPLOADS_VOLUME UPLOADS_SUBDIR PLATFORM_SERVICES
 #             RESTORE_FK_CHECKS (1 par défaut, 0 = clés étrangères non vérifiées pendant l’import)
 # Les fichiers ont été envoyés par SFTP dans RESTORE_DIR (supprimé en fin de script).
@@ -192,14 +193,40 @@ if [ -n "$RESTORE_UPLOADS" ]; then
   MP="$($SUDO docker volume inspect -f '{{.Mountpoint}}' "$UPLOADS_VOLUME")"
   DEST="$MP"
   [ -n "$UPLOADS_SUBDIR" ] && DEST="$MP/$UPLOADS_SUBDIR"
+  UBK=""
   if $SUDO test -d "$DEST" && [ -n "$($SUDO ls -A "$DEST" 2>/dev/null)" ]; then
-    BK="$ROOT/backups/uploads-before-restore-${TS}.tar.gz"
-    $SUDO tar -C "$DEST" -czf "$BK" .
-    $SUDO chmod 600 "$BK"
-    echo "UPLOADS_BACKUP=$BK"
+    UBK="$ROOT/backups/uploads-before-restore-${TS}.tar.gz"
+    $SUDO tar -C "$DEST" -czf "$UBK" .
+    $SUDO chmod 600 "$UBK"
+    echo "UPLOADS_BACKUP=$UBK"
   fi
   $SUDO mkdir -p "$DEST"
   case "$RESTORE_UPLOADS" in
+    *.tar.gz.enc)
+      # Sauvegarde de l’agent (BIZ-11) : le volume est remis à l’identique (propriétaires et droits compris).
+      [ -z "$UPLOADS_SUBDIR" ] || { echo BAD_RESTORE_PATH; exit 1; }
+      PASS=/opt/vps-autopilot/backups/.passphrase
+      $SUDO test -s "$PASS" || { echo NEED_BACKUP_PASSPHRASE; exit 1; }
+      MEMBER="$UPLOADS_VOLUME/_data"
+      dec() { $SUDO openssl enc -d -aes-256-cbc -pbkdf2 -pass "file:$PASS" -in "$ARCHIVE"; }
+      if dec | tar -tzf - 2>/dev/null | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+        echo BAD_ARCHIVE_PATH
+        exit 1
+      fi
+      $SUDO find "$DEST" -mindepth 1 -delete
+      if ! dec | $SUDO tar -C "$DEST" --numeric-owner -p --strip-components=2 -xzf - "$MEMBER"; then
+        echo UPLOADS_EXTRACT_FAILED
+        $SUDO find "$DEST" -mindepth 1 -delete || true
+        if [ -n "$UBK" ]; then
+          if $SUDO tar -C "$DEST" --numeric-owner -p -xzf "$UBK"; then
+            echo "UPLOADS_ROLLED_BACK=$UBK"
+          else
+            echo UPLOADS_ROLLBACK_FAILED
+          fi
+        fi
+        exit 1
+      fi
+      ;;
     *.zip)
       if ! $SUDO python3 -c 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); [sys.exit("BAD_ARCHIVE_PATH") for n in z.namelist() if n.startswith("/") or ".." in n.split("/")]; z.extractall(sys.argv[2])' \
           "$ARCHIVE" "$DEST"; then

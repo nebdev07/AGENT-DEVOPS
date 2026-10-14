@@ -43,7 +43,8 @@ if [ "$APPLY_ENCRYPTED_DUMP" = "1" ]; then
 
   $SUDO tee /usr/local/bin/vps-autopilot-backup >/dev/null <<'BACKUP'
 #!/bin/bash
-# VPS Autopilot — sauvegarde chiffrée de MariaDB (installée par le rôle backups). Lancée par root.
+# vps-autopilot-backup v2
+# VPS Autopilot — sauvegarde chiffrée de MariaDB et des volumes de fichiers (installée par le rôle backups). Root.
 set -euo pipefail
 umask 077
 DIR=/opt/vps-autopilot/backups
@@ -52,7 +53,8 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 PLAIN="$DIR/dump-$STAMP.sql.gz"
 ENC="$PLAIN.enc"
 ERR="$(mktemp)"
-trap 'rm -f "$PLAIN" "$ERR"' EXIT
+FPART=""
+trap 'rm -f "$PLAIN" "$ERR" ${FPART:+"$FPART"}' EXIT
 [ -s "$DIR/.passphrase" ] || { echo NEED_BACKUP_PASSPHRASE; exit 1; }
 
 HAS_DB=0
@@ -95,6 +97,52 @@ echo "BACKUP_SHA256=$(sha256sum "$ENC" | awk '{print $1}')"
 echo "BACKUP_BYTES=$(stat -c %s "$ENC")"
 echo "BACKUP_DUMPED=$DUMPED"
 logger -t vps-autopilot-backup "sauvegarde $ENC ($DUMPED)" 2>/dev/null || true
+
+# Fichiers déposés par les utilisateurs (BIZ-11) : volumes plat_<id>_uploads (plateformes), *app_data_<slug> (apps).
+# Archive chiffrée en flux (aucune copie en clair sur le disque), même horodatage que le dump.
+VOLS=""
+if command -v docker >/dev/null 2>&1; then
+  VOLS="$(docker volume ls -q 2>/dev/null \
+    | grep -E '^(plat_[a-z0-9_]+_uploads|([a-z0-9][a-z0-9_.-]*_)?app_data_[A-Za-z0-9_.-]+)$' || true)"
+fi
+MEMBERS=()
+if [ -n "$VOLS" ]; then
+  VROOT="$(docker info -f '{{.DockerRootDir}}')/volumes"
+  for V in $VOLS; do
+    MP="$(docker volume inspect -f '{{.Mountpoint}}' "$V" 2>/dev/null || true)"
+    if [ "$MP" = "$VROOT/$V/_data" ] && [ -d "$MP" ]; then
+      MEMBERS+=("$V/_data")
+      echo "FILES_VOLUME=$V:$(find "$MP" -type f | wc -l | tr -d ' ')"
+    else
+      echo "FILES_SKIPPED=$V"
+    fi
+  done
+fi
+if [ "${#MEMBERS[@]}" -eq 0 ]; then
+  echo FILES_NONE
+  exit 0
+fi
+FENC="$DIR/files-$STAMP.tar.gz.enc"
+FPART="$FENC.part"
+set +e
+tar -C "$VROOT" -czf - "${MEMBERS[@]}" 2>"$ERR" \
+  | openssl enc -aes-256-cbc -pbkdf2 -pass "file:$DIR/.passphrase" -out "$FPART"
+ST=("${PIPESTATUS[@]}")
+set -e
+# tar sort 1 si un fichier change pendant la lecture : l’archive reste lisible.
+if [ "${ST[0]}" -gt 1 ] || [ "${ST[1]}" -ne 0 ]; then
+  echo BACKUP_FILES_FAILED
+  grep -v 'file changed as we read it' "$ERR" | head -n 5 | sed 's/^/FILES_ERR: /'
+  exit 1
+fi
+mv "$FPART" "$FENC"
+FPART=""
+chmod 600 "$FENC"
+ls -1t "$DIR"/files-*.tar.gz.enc 2>/dev/null | tail -n +"$((KEEP + 1))" | xargs -r rm -f
+echo "FILES_READY=$FENC"
+echo "FILES_SHA256=$(sha256sum "$FENC" | awk '{print $1}')"
+echo "FILES_BYTES=$(stat -c %s "$FENC")"
+logger -t vps-autopilot-backup "fichiers $FENC (${#MEMBERS[@]} volume(s))" 2>/dev/null || true
 BACKUP
   $SUDO chmod 700 /usr/local/bin/vps-autopilot-backup
 

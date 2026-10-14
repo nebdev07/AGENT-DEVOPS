@@ -54,7 +54,7 @@ Le Client autorise sans nouvel accord : les sauvegardes quotidiennes et leur cop
 1. Les sauvegardes sont chiffrées sur le serveur avant toute copie. La clé de chiffrement est conservée par le Prestataire et **remise au Client** sur demande et en fin de mandat.
 2. Sur le serveur, les 14 sauvegardes les plus récentes sont conservées. Les copies hors serveur sont conservées par le Prestataire [sur son poste d'exploitation / stockage désigné] pendant [durée convenue], puis supprimées.
 3. Le Prestataire n'exploite les données du Client à aucune autre fin que l'exécution du mandat. Il ne les communique à aucun tiers.
-4. Les sauvegardes automatiques couvrent les bases de données ; les fichiers déposés par les utilisateurs n'y sont pas inclus à la date du mandat (voir devis).
+4. ~~Les sauvegardes automatiques couvrent les bases de données ; les fichiers déposés par les utilisateurs n'y sont pas inclus à la date du mandat (voir devis).~~ *(remplacé le 2026-10-14)* Les sauvegardes automatiques couvrent les bases de données et les fichiers déposés par les utilisateurs que les applications stockent dans leurs volumes de données. Les fichiers stockés ailleurs sur le serveur ne sont pas inclus, sauf mention contraire au devis.
 
 ## 8. Journal et compte rendu
 
