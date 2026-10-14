@@ -324,6 +324,18 @@ button:hover:not(:disabled), .btn:hover { filter: brightness(1.08); }
 .band-backups .band-label { color: var(--edge-actions); }
 .backup-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.75rem 0; }
 .backup-list { display: grid; gap: 0.6rem; }
+.band-journal {
+  background: var(--band-report);
+  border-left-color: var(--edge-report);
+}
+.band-journal .band-label { color: var(--edge-report); }
+.journal-list { overflow-x: auto; }
+.journal-list table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.journal-list th,
+.journal-list td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08)); vertical-align: top; }
+.journal-list td:first-child { white-space: nowrap; }
+.journal-list .ko { color: var(--danger); }
+.journal-list .risk-CHANGE { font-weight: 600; }
 .backup-row {
   display: flex;
   gap: 0.75rem;

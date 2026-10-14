@@ -961,6 +961,9 @@ $("btnAudit").addEventListener("click", downloadAudit);
 $("btnBackupRun").addEventListener("click", runBackupNow);
 $("btnBackupFetch").addEventListener("click", fetchLatestBackup);
 $("btnBackupRefresh").addEventListener("click", loadBackups);
+$("btnJournalRefresh").addEventListener("click", loadJournal);
+$("btnJournalHtml").addEventListener("click", () => exportJournal("html"));
+$("btnJournalCsv").addEventListener("click", () => exportJournal("csv"));
 
 function backupSay(msg, kind) {
   const st = $("backupStatus");
@@ -1091,7 +1094,31 @@ function renderBackups(list) {
   });
 }
 
+function renderAutoDrill() {
+  const box = $("autoDrill");
+  const h = journey.snapshot?.hygiene;
+  if (!h || h.drillTimer == null) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const d = h.autoDrill;
+  const timer = h.drillTimer ? "programmé chaque 1er du mois" : "non programmé (réinstalle Backups chiffrés)";
+  if (!d) {
+    box.className = "backup-check bad";
+    box.textContent = "Exercice automatique sur le VPS : jamais fait · " + timer + ".";
+    return;
+  }
+  const when = new Date(d.at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+  box.className = "backup-check" + (d.ok ? "" : " bad");
+  box.textContent = "Exercice automatique sur le VPS : " + (d.ok ? "réussi" : "ÉCHOUÉ") + " le " + when
+    + (d.lines?.length ? " · " + d.lines.map((l) => l.replace(/^DRILL_(DB|VOL|PROBLEM)=/, "")).join(" · ") : "")
+    + " · " + timer + ".";
+}
+
 async function loadBackups() {
+  loadJournal();
+  renderAutoDrill();
   const host = backupHost();
   if (!host) {
     renderBackups([]);
@@ -1267,6 +1294,56 @@ async function restoreFromBackup(b, platformId) {
     showResult({ ok: false, kicker: "CHANGE · échec", title: "Restauration interrompue", detail: e.message,
       next: "Lis Cause / Où / À faire. La base précédente reste sauvegardée sur le VPS." });
   }
+}
+
+const JOURNAL_RISK = { READ: "Lecture", LOCAL: "Poste", CHANGE: "Modification" };
+
+async function loadJournal() {
+  const box = $("journalList");
+  const host = backupHost();
+  if (!host) {
+    box.innerHTML = "<p class=\"hint\">Analyse d’abord un serveur.</p>";
+    return;
+  }
+  try {
+    const r = await fetch("/api/v1/journal?limit=50&host=" + encodeURIComponent(host));
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    const entries = j.entries || [];
+    if (!entries.length) {
+      box.innerHTML = "<p class=\"hint\">Aucune action enregistrée pour ce serveur.</p>";
+      return;
+    }
+    box.innerHTML = "<table><thead><tr><th>Date</th><th>Action</th><th>Type</th><th>Résultat</th><th>Détails</th></tr></thead><tbody>"
+      + entries.map((e) => {
+        const details = Object.entries(e.details || {}).map(([k, v]) => k + "=" + v).join(", ");
+        return "<tr><td>" + esc(new Date(e.at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "medium" }))
+          + "</td><td class=\"risk-" + esc(e.risk) + "\">" + esc(e.action)
+          + "</td><td>" + esc(JOURNAL_RISK[e.risk] || e.risk)
+          + "</td><td" + (e.outcome === "OK" ? ">Réussi" : " class=\"ko\">Échec ou refus" + (e.error ? " · " + esc(e.error) : ""))
+          + "</td><td>" + esc(details) + "</td></tr>";
+      }).join("")
+      + "</tbody></table>"
+      + (entries.length >= 50 ? "<p class=\"hint\">50 dernières actions. L’export contient tout.</p>" : "");
+  } catch (e) {
+    box.innerHTML = "<p class=\"hint\">" + esc(e.message) + "</p>";
+  }
+}
+
+function exportJournal(format) {
+  const host = backupHost();
+  if (!host) {
+    $("journalList").innerHTML = "<p class=\"hint\">Analyse d’abord un serveur.</p>";
+    return;
+  }
+  const client = $("auditClient").value.trim();
+  const a = document.createElement("a");
+  a.href = "/api/v1/journal/export?format=" + format + "&host=" + encodeURIComponent(host)
+    + (client ? "&client=" + encodeURIComponent(client) : "");
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 async function downloadAudit() {
@@ -2493,6 +2570,142 @@ function fillSqlPlatforms(platforms) {
   if (prev && platforms.some((p) => p.id === prev)) sel.value = prev;
 }
 
+let secretPlatforms = [];
+
+function fillSecretPlatforms(platforms) {
+  secretPlatforms = platforms;
+  const sel = $("secretPlat");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  platforms.forEach((p) => {
+    const o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = p.id;
+    sel.appendChild(o);
+  });
+  if (prev && platforms.some((p) => p.id === prev)) sel.value = prev;
+  fillSecretServices();
+}
+
+function fillSecretServices() {
+  const sel = $("secretSvc");
+  const p = secretPlatforms.find((x) => x.id === $("secretPlat").value);
+  const prev = sel.value;
+  sel.innerHTML = "";
+  (p?.services || []).forEach((s) => {
+    const o = document.createElement("option");
+    o.value = s.id;
+    o.textContent = s.id;
+    sel.appendChild(o);
+  });
+  if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+}
+
+function secretSay(msg, kind) {
+  const st = $("secretStatus");
+  st.hidden = !msg;
+  st.textContent = msg || "";
+  st.className = "app-form-status" + (kind ? " " + kind : "");
+}
+
+const SECRET_ACTION = {
+  SECRET_ADDED: "ajouté",
+  SECRET_REPLACED: "remplacé",
+  SECRET_REMOVED: "retiré",
+  SECRET_ABSENT: "absent (rien à retirer)",
+};
+const SECRET_RESTART = {
+  RESTARTED: "service redémarré avec la nouvelle valeur.",
+  RESTART_FAILED: "le redémarrage a échoué : vérifie l’état du service (Déployer le relance).",
+  RESTART_SKIPPED: "service non redémarré : la valeur s’appliquera au prochain Déployer.",
+  RESTART_SKIPPED_NOT_DEPLOYED: "conteneur pas encore créé : la valeur s’appliquera au premier Déployer.",
+};
+
+async function changeSecret(remove) {
+  const t = target();
+  const id = $("secretPlat").value;
+  const service = $("secretSvc").value;
+  const name = $("secretName").value.trim();
+  const value = $("secretValue").value;
+  if (!t.host || !t.user) {
+    secretSay("Cause : IP ou utilisateur SSH vide.\nÀ faire : remplis IP + utilisateur en haut, Analyser.", "err");
+    return;
+  }
+  if (!id || !service) {
+    secretSay("Cause : aucune plateforme ou aucun service.\nÀ faire : Enregistrer puis Déployer la plateforme.", "err");
+    return;
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_.]{0,127}$/.test(name)) {
+    secretSay("Nom de variable invalide : lettres, chiffres, _ et . (ex. MAIL_PASSWORD).", "err");
+    return;
+  }
+  if (!remove && !value) {
+    secretSay("Saisis la valeur (elle reste masquée).", "err");
+    return;
+  }
+  if (!remove && /['\r\n]/.test(value)) {
+    secretSay("La valeur ne peut contenir ni apostrophe droite (') ni retour à la ligne.", "err");
+    return;
+  }
+  const restart = $("secretRestart").checked;
+  const what = remove ? "retirer la variable " + name : "poser la variable " + name + " (valeur masquée)";
+  if (!window.confirm("CHANGE sur " + t.user + "@" + t.host + " :\n" + what + "\ndans svc-" + service + ".local.env de « " + id + " »."
+    + (restart ? "\nLe service « " + service + " » sera redémarré (coupure de quelques secondes)." : "")
+    + "\n\nContinuer ?")) {
+    return;
+  }
+  const body = { id, service, name, restart, host: t.host, port: t.port, user: t.user, confirm: true };
+  if (!remove) body.value = value;
+  showBusy({ risk: "CHANGE", title: remove ? "Retrait du secret" : "Pose du secret", detail: name + " → " + id + " / " + service });
+  try {
+    const r = await fetch("/api/v1/platforms/secrets" + (remove ? "/remove" : ""), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    $("secretValue").value = "";
+    const o = j.outcome || {};
+    secretSay(name + " " + (SECRET_ACTION[o.action] || "traité") + ". " + (SECRET_RESTART[o.restart] || ""),
+      o.restart === "RESTART_FAILED" ? "err" : "ok");
+  } catch (e) {
+    secretSay(e.message, "err");
+  } finally {
+    hideBusy();
+    loadJournal();
+  }
+}
+
+async function listSecrets() {
+  const t = target();
+  const id = $("secretPlat").value;
+  if (!t.host || !t.user || !id) {
+    secretSay("Remplis IP + utilisateur et choisis une plateforme.", "err");
+    return;
+  }
+  secretSay("Lecture des noms sur le VPS…");
+  try {
+    const q = new URLSearchParams({ id, host: t.host, port: String(t.port), user: t.user });
+    const r = await fetch("/api/v1/platforms/secrets?" + q);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    const lines = Object.entries(j.names || {}).map(([svc, names]) =>
+      svc + " : " + (names.length ? names.join(", ") : "aucune"));
+    secretSay(lines.length ? "Variables posées (noms seulement) :\n" + lines.join("\n") : "Aucun fichier de secrets sur le VPS.", "ok");
+  } catch (e) {
+    secretSay(e.message, "err");
+  }
+}
+
+if ($("btnSecretSet")) {
+  $("secretPlat").addEventListener("change", fillSecretServices);
+  $("btnSecretSet").addEventListener("click", () => changeSecret(false));
+  $("btnSecretRemove").addEventListener("click", () => changeSecret(true));
+  $("btnSecretList").addEventListener("click", listSecrets);
+}
+
 function sqlSay(msg, kind) {
   const st = $("sqlStatus");
   st.hidden = !msg;
@@ -2653,6 +2866,7 @@ if ($("btnSqlRun")) {
 function renderPlatList(platforms, deployReady) {
   fillRestorePlatforms(platforms);
   fillSqlPlatforms(platforms);
+  fillSecretPlatforms(platforms);
   journey.platforms = platforms;
   renderJourney();
   const box = $("platList");

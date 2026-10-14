@@ -28,7 +28,7 @@ Tout serveur, base de données ou service qui n'apparaît pas dans ce tableau es
 1. Le Prestataire utilise un **compte dédié** ([nom du compte]) et une **clé SSH dédiée** au Client. Aucun mot de passe n'est transmis par e-mail ou messagerie.
 2. Les droits d'administration (sudo) sont accordés à ce compte pour la durée du mandat.
 3. Le Client peut suspendre l'accès à tout moment ; il en informe le Prestataire par écrit.
-4. **En fin de mandat**, le Prestataire retire sa clé et son compte, puis remet au Client une attestation de retrait. Le Client peut le vérifier lui-même (procédure fournie).
+4. **En fin de mandat**, le Prestataire retire sa clé et son compte, puis remet au Client une attestation de retrait. Le Client peut le vérifier lui-même (procédure fournie : annexe « Procédure de retrait des accès », `retrait-acces.md`).
 
 ## 4. Nature des actions
 

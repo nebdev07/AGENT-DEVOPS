@@ -27,7 +27,7 @@ L'agent transforme des jours de travail manuel en heures. On vend **ce résultat
 |---|---|
 | Déploiements et restaurations longs qui survivent à une coupure SSH (BIZ-01, ADR-040) | Lab : tâche de 6 min récupérée, code retour transmis |
 | Rapport d'audit client : note A–E, constats classés, recommandations, HTML imprimable en PDF (BIZ-04) | Lab : rapport C 62/100, puis A 91/100 après correction |
-| Sauvegardes MariaDB réelles : quotidiennes, chiffrées, copiées sur le poste, contenu vérifié, exercice de restauration, restauration d'une plateforme depuis une sauvegarde (BIZ-03, ADR-041) | Lab : dump 4 Mo, exercice 25/25 tables |
+| Sauvegardes MariaDB réelles : quotidiennes, chiffrées, copiées sur le poste, contenu vérifié, exercice de restauration, restauration d'une plateforme depuis une sauvegarde (BIZ-03, ADR-041) | Lab : dump 4 Mo, exercice 25/25 tables ; exercice mensuel automatique sur le serveur (BIZ-12) |
 
 ## Ce qui n'est pas encore vendable (spécifié ou absent)
 
@@ -108,7 +108,7 @@ Comptes, sessions, paramètres par compte. Plus grand potentiel, plus grand risq
 ## Risques et garde-fous
 
 - **Accès aux serveurs clients** : mandat écrit (périmètre, horaires, interlocuteur), clé dédiée par client, retrait des accès documenté en fin de mission.
-- **Responsabilité** : jamais de CHANGE sans plan confirmé (ADR-003) ; sauvegarde avant toute écriture ; journal des actions remis au client.
+- **Responsabilité** : jamais de CHANGE sans plan confirmé (ADR-003) ; sauvegarde avant toute écriture ; journal des actions remis au client (implémenté 2026-10-14 : journal par serveur, export HTML/CSV, BIZ-06 / ADR-042).
 - **Promesses** : ne pas vendre « données protégées » tant que la restauration depuis les sauvegardes de l'agent n'est pas livrée et testée (`BIZ-03`).
 - **Références** : citer un client (ARC, DTSI) seulement avec son accord. La copie publique de l'agent reste sans projet personnel (ADR-022).
 

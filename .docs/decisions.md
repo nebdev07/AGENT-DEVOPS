@@ -490,3 +490,38 @@
   11. Restaurer une plateforme depuis une sauvegarde remet aussi `plat_<id>_uploads` : l'archive chiffrée est envoyée, déchiffrée sur le VPS avec sa phrase (`NEED_BACKUP_PASSPHRASE` sinon), le volume est **vidé puis remis à l'identique** (propriétaires et droits numériques gardés) après copie de l'existant ; si l'extraction échoue, l'existant est remis (`UPLOADS_ROLLED_BACK`). Une archive personnelle reste fusionnée comme avant.
   12. Téléchargement SFTP **repris** à l'octet près après une coupure (abandon après 3 essais de suite sans progrès) ; le `.part` est gardé pour reprendre au prochain appel, l'empreinte SHA-256 tranche à la fin. Copies temporaires de plus de 2 h laissées dans `/tmp` effacées à la copie suivante. Motif : liaison opérateur mesurée à ~13 Ko/s le 2026-10-14, cinq copies coupées avant reprise.
   - Non couvert : restauration des fichiers d'une **app** 1:1 depuis la console (sauvegardés, vérifiés et testés seulement) ; volumes d'autres noms.
+- **Amendement 2026-10-14 (2) — exercice automatique et purge locale (BIZ-12)** (implémenté, testé sur le lab) :
+  13. Le rôle installe aussi `/usr/local/bin/vps-autopilot-backup-drill` (700 root, marqué `# vps-autopilot-backup-drill v1`) et le minuteur `vps-autopilot-backup-drill.timer` (**1er du mois, 04:00 ± 1 h**, `Persistent`, `Nice=10`), et lance un premier exercice à l'installation. L'exercice se fait **sur le VPS, sans l'agent** : dernière sauvegarde du VPS, chaque base applicative découpée du dump (`awk`, en-tête et pied repris, `DEFINER` retirés) et importée dans `restore_check_<hex>`, tables comptées contre les `CREATE TABLE` du dump ; archive des fichiers listée puis extraite dans `/var/tmp/autopilot-auto-drill-*`, fichiers comptés contre la liste de l'archive ; tout est supprimé (même en échec). Place exigée : 10 × taille chiffrée + 200 Mo.
+  14. Résultat dans `/opt/vps-autopilot/backups/drill-last.txt` (600 root : `DRILL_AT`, `DRILL_DUMP`, `DRILL_DB=base:attendu:obtenu`, `DRILL_VOL=…`, `DRILL_PROBLEM=…`, `DRILL_OK`) et une ligne par exercice dans `drill-history.log` (24 gardées). L'analyse le lit (`ServerSnapshot.Hygiene.autoDrill`, `drillTimer`) ; l'audit dit **ELEVE** si le dernier exercice a échoué, **FAIBLE** s'il n'y en a pas depuis 40 jours, point fort sinon. Un serveur sans le script d'exercice est reproposé à l'installation (point 9 étendu).
+  15. Purge des copies du poste après chaque nouvelle copie : les **10** plus récentes par serveur sont gardées, **plus la plus récente dont l'exercice a réussi** (la dernière preuve de restauration n'est jamais effacée) ; dump, archive des fichiers et fiches `.json` partent ensemble.
+  - Motif : l'exercice à la demande dépendait de l'opérateur ; le mandat (article 5) promet un exercice mensuel. Un exercice sur le VPS ne prouve pas la copie hors serveur : celle-ci reste vérifiée à chaque copie (point 4).
+
+---
+
+## ADR-042 - Journal des actions par serveur
+
+- **Date** : 2026-10-14
+- **Statut** : Accepted (implémenté, testé sur le lab) — `BIZ-06`
+- **Contexte** : le mandat d'intervention (article 8) promet un journal des actions remis au client. Rien ne gardait la trace de qui avait fait quoi, quand, avec quel résultat.
+- **Décision** :
+  1. Un filtre HTTP (`JournalFilter`) journalise **après exécution** toute requête de la console qui agit : POST / PUT / DELETE sous `/api/v1/` et la génération du rapport d'audit. Les lectures de la console (GET) ne le sont pas. Libellé et type (Lecture / Poste / Modification) donnés par `ActionCatalog` ; une route inconnue est journalisée comme « Modification » avec méthode et chemin.
+  2. Une ligne JSON par action dans `state/journal/<serveur>.jsonl` (append-only, non versionné) ; sans serveur désigné : `_poste.jsonl`. Champs : date UTC, compte Windows, serveur, utilisateur SSH, action, type, résultat (OK / ECHEC), code HTTP, durée, détails, message d'erreur.
+  3. **Liste blanche** des détails recopiés (`id`, `platformId`, `service`, `name`, `component`, `file`, `repo`, `confirm`, `rotate` ; en réponse `file`, `risk`) : le corps brut n'est **jamais** écrit (SQL, mots de passe, valeurs de secrets, variables d'environnement).
+  4. Export `GET /api/v1/journal/export?format=html|csv` : page imprimable pour le client ou CSV (`;`, BOM UTF-8, formules neutralisées). Rien ne s'efface depuis la console.
+  5. Un échec d'écriture du journal n'empêche pas l'action (avertissement dans le log de l'agent).
+- **Conséquence** : bande **Journal** (mode expert), Aide 7e. Limite : journal local au poste d'exploitation ; une action faite à la main en SSH n'y figure pas.
+
+---
+
+## ADR-043 - Secrets d'exécution posés depuis le cockpit
+
+- **Date** : 2026-10-14
+- **Statut** : Accepted (implémenté, testé sur le lab) — `BIZ-05`
+- **Contexte** : les variables secrètes d'une plateforme (mot de passe SMTP, jetons) étaient soit dans l'intention locale (`platforms-intent.json`, masquées à l'écran mais stockées), soit posées à la main en SSH dans `svc-<service>.local.env` (ARC, 2026-10-08, avec un incident d'affichage du mot de passe).
+- **Décision** :
+  1. CHANGE `set-platform-secret` : `POST /api/v1/platforms/secrets` (poser / remplacer) et `/secrets/remove` (retirer) écrivent **une** variable dans `svc-<service>.local.env` sur le VPS, puis recréent le service (`docker compose up -d --no-build <service>`) si demandé.
+  2. La valeur ne passe que par le script envoyé sur l'**entrée standard** SSH (base64), jamais en argument de commande ; sur le VPS elle va par un tube dans un fichier 600 `deploy` créé avant (`install -m 600`), puis remplacement atomique. Elle n'est **jamais** enregistrée sur le poste, renvoyée par l'API, affichée, ni journalisée (ADR-042). La sortie du rôle ne contient que des noms.
+  3. Écriture `NOM='valeur'` (guillemets simples) : Docker Compose ne fait alors aucune substitution (`$`, `#`, `\` gardés). Refusé : apostrophe droite, retour à la ligne, valeur > 4 096 caractères ; nom `[A-Za-z_][A-Za-z0-9_.]*`.
+  4. `GET /api/v1/platforms/secrets` (READ) liste les **noms** posés par service, jamais les valeurs.
+  5. `svc-<service>.local.env` est lu en dernier par Compose : il prime sur une variable de même nom de la fiche.
+- **Conséquence** : panneau « Secrets d'exécution » sous la console SQL, Aide 7b. Non couvert : apps 1:1 (une app = un conteneur) ; secrets de build (figés dans l'image). Les secrets déjà dans l'intention y restent tant que l'opérateur ne les retire pas de la fiche.

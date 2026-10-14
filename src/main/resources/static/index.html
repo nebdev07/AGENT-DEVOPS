@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app37" />
+  <link rel="stylesheet" href="/console.css?v=app39" />
 </head>
 <body>
   <div class="bg"></div>
@@ -371,7 +371,8 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li><strong>Enregistrer</strong> reste local. <strong>Déployer</strong> ouvre un popup de plan, puis un CHANGE : clone de chaque Git, build, Traefik HTTPS, aucun port publié. Redis / MariaDB doivent déjà être installés si tu les as cochés sur un service.</li>
             <li>Chaque service a besoin d’un <strong>Dockerfile</strong> (racine du dépôt ou sous-dossier) <em>ou</em> d’un <strong>modèle</strong> choisi dans la liste « Dockerfile » : Next.js, Node, Spring Boot (Java 11 / 17 / 21). L’agent écrit alors <code>Dockerfile.autopilot</code> sur le serveur, sans toucher au dépôt. <em>(Avant V7-06 : pas de modèle pour les plateformes.)</em></li>
             <li><strong>Garder le préfixe</strong> : à cocher quand l’app sait déjà qu’elle vit sous <code>/chemin</code> (Next <code>basePath</code>, Spring <code>context-path</code>). Sinon Traefik retire le préfixe.</li>
-            <li><strong>Variables de build</strong> (une par ligne, <code>CLE=valeur</code>) : figées dans l’image, ex. <code>NEXT_PUBLIC_API_URL</code>. <strong>Variables d’exécution</strong> : lues au démarrage du conteneur, ex. <code>SPRING_PROFILES_ACTIVE</code>. <code>{{HOST}}</code> est remplacé par le nom d’hôte du service. Les secrets (mots de passe, tokens) s’affichent <code>********</code> : laisse-les ainsi pour garder la valeur enregistrée. Réglage manuel possible sur le VPS dans <code>svc-&lt;id&gt;.local.env</code>.</li>
+            <li><strong>Variables de build</strong> (une par ligne, <code>CLE=valeur</code>) : figées dans l’image, ex. <code>NEXT_PUBLIC_API_URL</code>. <strong>Variables d’exécution</strong> : lues au démarrage du conteneur, ex. <code>SPRING_PROFILES_ACTIVE</code>. <code>{{HOST}}</code> est remplacé par le nom d’hôte du service. Les secrets (mots de passe, tokens) s’affichent <code>********</code> : laisse-les ainsi pour garder la valeur enregistrée. Mieux : pose-les avec <strong>Secrets d’exécution</strong> (ligne suivante), ils ne sont alors jamais enregistrés sur ce poste.</li>
+            <li><strong>Secrets d’exécution</strong> (sous la console SQL) : choisis la plateforme, le service, le nom (ex. <code>MAIL_PASSWORD</code>) et la valeur (saisie masquée), puis <strong>Poser le secret</strong> (à confirmer). La valeur est écrite directement dans <code>svc-&lt;service&gt;.local.env</code> sur le VPS (600, compte <code>deploy</code>), prime sur une variable de même nom de la fiche, et le service est redémarré si la case est cochée. Elle n’est jamais enregistrée sur ce poste, jamais réaffichée, jamais dans le journal. <strong>Voir les noms posés</strong> liste les noms, jamais les valeurs. <strong>Retirer</strong> supprime la ligne. Refusé : apostrophe droite <code>'</code> ou retour à la ligne dans la valeur. La plateforme doit avoir été déployée une fois.</li>
             <li><strong>Redis privé</strong> : un Redis sans mot de passe réservé à la plateforme (réseau interne), pour une app qui ne sait pas envoyer de mot de passe Redis.</li>
             <li><strong>Modèle site + back-office + API</strong> pré-remplit 3 services d’exemple (site Next <code>/</code>, back-office Next <code>/admin</code>, API Spring Boot <code>/api</code> avec base, cache et fichiers). Remplace l’identifiant et les dépôts Git par les tiens, ajuste les chemins, puis Enregistrer.</li>
             <li><strong>Dépôts privés</strong> : GitHub refuse la même Deploy key sur deux dépôts. Sous la liste, une ligne par dépôt <code>git@…</code> : Générer, Copier, ouvrir le lien « Deploy keys », coller la clé avec <em>Allow write access</em> décoché.</li>
@@ -400,10 +401,38 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li><strong>Copier la dernière</strong> : amène sur ce poste la sauvegarde de la nuit et son archive de fichiers (dans <code>state/backups/&lt;serveur&gt;/</code>) et les vérifie. Si la liaison coupe, la copie reprend où elle s’était arrêtée ; relancer « Copier la dernière » reprend aussi. Refusé sur un serveur en lecture seule.</li>
             <li><strong>Vérifier</strong> : déchiffre et lit toute la copie. « Complète » = la fin du dump est présente ; le nombre de tables par base est affiché. Ligne « Fichiers des volumes » : nombre de fichiers par volume. « Inutilisable » = ne compte pas dessus.</li>
             <li><strong>Exercice de restauration</strong> (à confirmer) : chaque base de la sauvegarde est importée dans une base jetable du VPS, ses tables sont comptées puis la base jetable est supprimée ; l’archive des fichiers est extraite dans un dossier jetable de <code>/var/tmp</code> et ses fichiers comptés par volume. Tes bases et volumes ne sont pas touchés. Fais-le au moins une fois par mois : une sauvegarde qui ne se restaure pas n’existe pas.</li>
+            <li><strong>Exercice automatique</strong> : depuis cette version, le VPS refait lui-même l’exercice chaque 1er du mois vers 04:00 (et une fois à l’installation) sur sa dernière sauvegarde : chaque base est importée dans une base jetable, chaque volume extrait dans <code>/var/tmp</code>, les tables et fichiers sont comptés contre le contenu de la sauvegarde, puis tout est supprimé. Le résultat s’affiche au-dessus de la liste après une analyse, et dans le rapport d’audit (échec = risque élevé ; plus de 40 jours sans exercice = constat faible). Un serveur équipé avant apparaît « à installer » : réinstalle Backups chiffrés.</li>
+            <li><strong>Copies sur ce poste</strong> : les 10 plus récentes par serveur sont gardées, plus la dernière dont l’exercice a réussi ; les plus anciennes (dump, archive des fichiers, fiches) sont supprimées après chaque nouvelle copie.</li>
             <li><strong>Restaurer la plateforme</strong> (à confirmer) : n’apparaît que si la base ou le volume de fichiers de la plateforme est dans la sauvegarde. L’existant est d’abord copié sur le VPS ; le volume est remis <strong>à l’identique</strong> (les fichiers ajoutés depuis sont retirés, propriétaires et droits remis) ; si l’import ou l’extraction échoue, l’existant revient automatiquement.</li>
             <li>La clé de chiffrement est <code>state/backup.key</code> sur ce poste (et sur le VPS, lisible par root seul). <strong>Sans elle, aucune sauvegarde ne s’ouvre</strong> : garde-en une copie en lieu sûr.</li>
             <li>Apps (une app = un conteneur) : leurs fichiers sont sauvegardés, vérifiés et testés, mais la restauration depuis la console ne couvre que les plateformes.</li>
           </ul>
+        </li>
+
+        <li class="step">
+          <h3>7e. Journal des interventions</h3>
+          <p>Bande <strong>Journal</strong> (mode expert) : chaque action lancée depuis la console sur ce serveur (analyse, installation, déploiement, sauvegarde, exercice, restauration, SQL, rapport d’audit) avec la date, le compte Windows qui l’a lancée, l’utilisateur SSH, le résultat et, en cas d’échec ou de refus, le message.</p>
+          <ul>
+            <li><strong>Exporter (HTML)</strong> : page imprimable à joindre au compte rendu d’intervention (nom du client repris de la bande Rapport). <strong>Exporter (CSV)</strong> : pour un tableur.</li>
+            <li>Le journal est sur ce poste, un fichier par serveur dans <code>state/journal/</code> ; les réglages faits sans serveur sont dans <code>_poste.jsonl</code>. On n’y efface rien depuis la console.</li>
+            <li>Jamais recopiés : le texte des requêtes SQL, les mots de passe, les variables d’environnement. Seuls l’identifiant de plateforme, le composant, le fichier de sauvegarde et la confirmation sont gardés.</li>
+          </ul>
+        </li>
+
+        <li class="step">
+          <h3>7f. Fin de mission : retirer les accès de l’agent</h3>
+          <p>À faire dans les 2 jours ouvrés après la fin du mandat. Procédure complète, avec la vérification du client à chaque étape : <code>.docs/commercial/retrait-acces.md</code>.</p>
+          <ol>
+            <li><strong>Dernières preuves</strong> : Analyser, Rapport d’audit client, Sauvegarder maintenant + Exercice de restauration, Journal › Exporter (HTML et CSV). Tout remettre au client.</li>
+            <li><strong>Clé de chiffrement</strong> : remettre le contenu de <code>state/backup.key</code> par un canal convenu (jamais avec les sauvegardes).</li>
+            <li><strong>Mots de passe</strong> connus pendant la mission (SMTP, hébergeur…) : le client les change.</li>
+            <li><strong>Clés Git</strong> : supprimer les Deploy keys <code>vps-autopilot-git-readonly…</code> de chaque dépôt.</li>
+            <li><strong>sudo</strong> : supprimer <code>/etc/sudoers.d/90-vps-autopilot-temp</code> et le fichier du compte de l’agent.</li>
+            <li><strong>Clé SSH</strong> : retirer la ligne de la clé de l’agent de <code>authorized_keys</code> (chaque compte où elle est posée), supprimer le compte dédié s’il ne sert plus. Le client vérifie que la connexion est refusée.</li>
+            <li><strong>Ce poste</strong> : Oublier le serveur, retirer ses plateformes et apps, supprimer <code>state/backups/&lt;serveur&gt;/</code> à la date prévue, garder le journal le temps convenu.</li>
+            <li><strong>Attestation de retrait</strong> signée, remise au client.</li>
+          </ol>
+          <p class="hint">Les sauvegardes, l’exercice mensuel, la garde en ligne et les sites restent sur le serveur et continuent de tourner sans l’agent : ils appartiennent au client.</p>
         </li>
 
         <li class="step">
@@ -694,6 +723,39 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <p id="sqlStatus" class="app-form-status" hidden></p>
             <div id="sqlResults" class="sql-results"></div>
             </div>
+            <div id="secSecrets" data-jsec="sql">
+            <p class="kicker" style="margin-top:1.1rem">Secrets d’exécution · sur le VPS seulement</p>
+            <p class="hint">
+              Mot de passe SMTP, jeton d’API… La valeur part directement dans <code>svc-&lt;service&gt;.local.env</code> sur le VPS (600, lu au démarrage du conteneur) :
+              <strong>jamais enregistrée sur ce poste, jamais réaffichée, jamais dans le journal</strong>. Elle prime sur une variable de même nom de la fiche.
+            </p>
+            <div class="row2 app-fields">
+              <label class="field">Plateforme
+                <select id="secretPlat"></select>
+              </label>
+              <label class="field">Service
+                <select id="secretSvc"></select>
+              </label>
+            </div>
+            <div class="row2 app-fields">
+              <label class="field">Nom de la variable
+                <input id="secretName" type="text" autocomplete="off" spellcheck="false" placeholder="MAIL_PASSWORD" />
+              </label>
+              <label class="field">Valeur
+                <input id="secretValue" type="password" autocomplete="new-password" spellcheck="false" placeholder="saisie masquée" />
+              </label>
+            </div>
+            <label class="field plat-keep restore-fk">
+              <input id="secretRestart" type="checkbox" checked />
+              Redémarrer le service pour l’appliquer
+            </label>
+            <div class="app-form-actions">
+              <button id="btnSecretSet" type="button">Poser le secret</button>
+              <button id="btnSecretRemove" type="button" class="ghost danger">Retirer</button>
+              <button id="btnSecretList" type="button" class="ghost">Voir les noms posés</button>
+            </div>
+            <p id="secretStatus" class="app-form-status" hidden></p>
+            </div>
           </article>
         </div>
 
@@ -746,7 +808,23 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
               <button id="btnBackupRefresh" type="button" class="ghost">Actualiser</button>
             </div>
             <p id="backupStatus" class="app-form-status" hidden></p>
+            <p id="autoDrill" class="backup-check" hidden></p>
             <div id="backupList" class="backup-list"></div>
+          </article>
+        </div>
+
+        <div class="band band-journal">
+          <p class="band-label">Journal</p>
+          <article class="card" id="journalCard">
+            <p class="kicker">Journal des interventions · ce VPS</p>
+            <h2>Qui a fait quoi, quand, avec quel résultat</h2>
+            <p class="hint">Chaque action lancée depuis cette console est enregistrée sur ce poste (<code>state/journal/</code>). Les requêtes SQL et les mots de passe ne sont jamais recopiés.</p>
+            <div class="backup-actions">
+              <button id="btnJournalRefresh" type="button" class="ghost">Actualiser</button>
+              <button id="btnJournalHtml" type="button" class="ghost">Exporter (HTML)</button>
+              <button id="btnJournalCsv" type="button" class="ghost">Exporter (CSV)</button>
+            </div>
+            <div id="journalList" class="journal-list"></div>
           </article>
         </div>
       </div>
@@ -812,6 +890,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app37"></script>
+  <script src="/console.js?v=app39"></script>
 </body>
 </html>
