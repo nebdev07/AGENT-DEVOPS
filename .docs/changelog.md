@@ -1,7 +1,21 @@
 # Changelog — VPS Autopilot
 
 > Ne jamais effacer une entrée.  
-> Dernière mise à jour : 2026-10-05
+> Dernière mise à jour : 2026-10-14
+
+## 2026-10-14
+
+- **Plan A → D du premier client payant livré** (`plan-commercial.md`, ADR-039). Tests : 164, 0 échec (3 ignorés hors lab, dont les 2 tests lab activés par `AUTOPILOT_LAB_HOST`, passés sur le lab). Essais réels sur le lab `57.128.186.38` uniquement.
+- **A — Opérations longues fiables (BIZ-01, ADR-040).** `RemoteJobRunner` + scripts `job-launch.sh` / `job-poll.sh` / `job-fetch.sh` : tâche détachée (`systemd-run --collect`, repli `setsid nohup`), suivi par connexions courtes, lancement idempotent, script effacé après exécution, `umask 077`. Branché sur Déployer plateforme (2 700 s), Déployer app (1 800 s), Restaurer. `SshConnector` : délai de lecture sur toutes les connexions (un suivi s'était figé 9 min sur une connexion morte lors du premier essai). Lab : tâche de 6 min 20 récupérée (399 s), tâche en échec → code 3 transmis.
+- **B — Rapport d'audit client (BIZ-04).** `discovery.sh` section `HYGIENE` ; `ServerSnapshot.Hygiene` ; paquet `audit` (`AuditReport`, `AuditRules`, `AuditHtmlRenderer`) ; `AuditController` (`GET /api/v1/audit`, `/api/v1/audit/report`) ; bouton et champ « Client » dans la bande Rapport. Lab : note C (62/100) : sauvegardes vides, anciennes et non programmées, redémarrage requis, 41 mises à jour.
+- **C — Sauvegardes réelles (BIZ-03 pour MariaDB, ADR-041).** **Défaut grave corrigé** : l'ancien rôle appelait `mysqldump`, absent de `mariadb:11.4`, erreur masquée ; les deux sauvegardes du lab (144 octets) contenaient le message d'erreur Docker chiffré et la « preuve de restauration » les acceptait. Rôle réécrit (`/usr/local/bin/vps-autopilot-backup`, `mariadb-dump`, `pipefail`, fin de dump exigée, minuteur systemd quotidien, 14 gardés). `BackupArchive` (déchiffrement + lecture en flux, extraction d'une base), `BackupService`, `BackupController` (`/api/v1/backups` : liste, `run`, `fetch-latest`, `verify`, `drill`, `restore-platform`), rôle `backup-drill`, `SshConnector.downloadFile` (SFTP). CHANGE whitelistés `run-backup`, `restore-drill`. L'analyse ne voit plus l'ancien rôle comme installé. Bande **Sauvegardes** dans le cockpit (mode expert). `BackupRestoreProofTest` inversé : la vraie sauvegarde cassée du lab est maintenant **rejetée**. Lab : rôle réinstallé, dump 4,3 Mo, SHA-256 identique, 2 bases / 25 tables, exercice de restauration 25/25, aucune base jetable restante, minuteur actif ; audit du lab C 62 → **A 91**. Cache `?v=app37`.
+- **D — Prix et documents commerciaux.** Grille de départ en FCFA HT (hypothèses + méthode + seuils) dans `business.md` : Audit 75 000, Mise en ligne Essentiel 350 000 / Standard 650 000, Maintenance Veille 35 000 / Pro 75 000 par mois. `commercial/offre.md`, `commercial/devis-modele.md`, `commercial/mandat-intervention.md` (BIZ-07, relecture juridique à faire). Limites écrites : fichiers des volumes non sauvegardés (BIZ-11), copie hors serveur sur le poste opérateur (BIZ-09).
+- **Constat** : le VPS ARC `213.156.134.92` n'a **aucune sauvegarde de l'agent** (BIZ-13). Rien n'y a été fait : installation à décider par l'opérateur.
+- **ARC : sauvegardes installées (BIZ-13, accord de l'opérateur, 16:25 UTC).** Analyse lecture seule d'abord (audit B 83/100, seul constat élevé : aucune sauvegarde). Rôle `backups` (ADR-041) installé : première sauvegarde 745 Ko, `app_arc` 46 tables, copie sur le poste (SHA-256 identique), minuteur quotidien actif. Exercice de restauration : 46/46 tables, base jetable supprimée, `/tmp` propre. Site et back-office en 200 après l'opération.
+
+## 2026-10-13
+
+- **Monétisation spécifiée (ADR-039, docs seulement, pas de code).** Nouveau `business.md` : service géré d'abord (Audit, Mise en ligne au forfait, Maintenance mensuelle), licence auto-hébergée ensuite, plateforme V9 en dernier. Backlog `BIZ-01` à `BIZ-10` : `BIZ-01` à `BIZ-07` (P0) bloquent le premier client payant (déploiement long fiable, parcours testé sur VPS vierge, restauration complète, rapport d'audit, secrets depuis le cockpit, journal des actions, mandat d'intervention). Prix non fixés.
 
 ## 2026-10-08
 

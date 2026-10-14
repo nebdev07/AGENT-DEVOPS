@@ -1,7 +1,7 @@
 # Backlog — VPS Autopilot
 
 > Enrichir ; marquer `Done` sans effacer.  
-> Dernière mise à jour : 2026-09-29
+> Dernière mise à jour : 2026-10-13 (BIZ-*, ADR-039)
 
 | ID | Priorité | Item | Statut |
 |---|---|---|---|
@@ -32,5 +32,18 @@
 | PLAT-01 | P2 | Auth + sessions opérateur (ADR-031 / V9) | Open — spécifié seulement |
 | PLAT-02 | P2 | Paramètres VPS / apps isolés par compte | Open — après PLAT-01 |
 | PLAT-03 | P2 | Cockpit public derrière login (remplace cargo anonyme) | Open — après PLAT-01 ; ADR-030 amendé |
+| BIZ-01 | P0 | Déploiement long fiable : rôle lancé détaché (`systemd-run`), état suivi par l'agent, plus de faux échec à la coupure SSH | **Done 2026-10-14** (ADR-040, lab : tâche 6 min 20) — ~~Open — défaut constaté 2026-10-08~~ |
+| BIZ-02 | P0 | Parcours guidé testé de bout en bout sur un VPS vierge (Analyser → En ligne) | Open |
+| BIZ-03 | P0 | Restauration complète depuis les sauvegardes chiffrées de l'agent + test de restauration périodique | **Done 2026-10-14 pour MariaDB** (ADR-041 : minuteur quotidien, vérification complète, exercice de restauration, restauration de plateforme ; lab 25/25 tables). Exercice **à la demande** (mensuel en maintenance, pas encore automatique). ~~Open — preuve de déchiffrement seule aujourd'hui (ADR-034)~~ |
+| BIZ-04 | P0 | Rapport d'audit exportable (lecture seule) remis au client : risques, ports, sauvegardes, versions | **Done 2026-10-14** (`GET /api/v1/audit/report`, note A–E, HTML imprimable ; lab C 62 → A 91) — ~~Open~~ |
+| BIZ-05 | P0 | Secrets d'exécution (mot de passe SMTP, etc.) posés depuis le cockpit, jamais dans l'intention ni à l'écran | Open — fait à la main pour ARC 2026-10-08 |
+| BIZ-06 | P0 | Journal des actions par serveur (qui, quoi, quand, résultat), exportable | Open |
+| BIZ-07 | P0 | Mandat d'intervention type + procédure de retrait des accès en fin de mission | **Partiel 2026-10-14** : modèle `commercial/mandat-intervention.md` (à faire relire par un juriste) ; procédure pas à pas de retrait des accès à écrire — hors code |
+| BIZ-08 | P1 | Étude de cas ARC (avec accord) + page de présentation de l'offre | Open |
+| BIZ-09 | P1 | Sauvegardes hors-site vers un stockage objet (le poste opérateur ne tient pas plusieurs clients) | Open — amende ADR-034 le moment venu |
+| BIZ-10 | P2 | Installation de l'agent par un tiers sans le porteur (prérequis licence) | Open — étape 2 ADR-039 |
+| BIZ-11 | P0 | Sauvegarde quotidienne des fichiers déposés par les utilisateurs (volumes `/app/data` des plateformes) + restauration | Open — ADR-041 ne couvre que MariaDB ; limite écrite dans l'offre |
+| BIZ-12 | P1 | Exercice de restauration automatique (mensuel) + purge des copies locales anciennes (`state/backups/<serveur>/`) | Open — 2026-10-14 |
+| BIZ-13 | P0 | **VPS ARC `213.156.134.92` : aucune sauvegarde de l'agent** (analyse 2026-10-07). Installer le rôle `backups` (ADR-041) puis exercice de restauration — CHANGE en production, accord explicite de l'opérateur requis | **Done 2026-10-14** (accord opérateur) : rôle installé, minuteur actif, sauvegarde `app_arc` 46 tables, exercice 46/46, site en ligne, aucune base jetable restante — ~~Open — constaté 2026-10-14~~ |
 
 Les items Open ne s’exécutent **pas** sur ARC (`54.37.156.11`) ni DTSI (`154.0.30.233`).

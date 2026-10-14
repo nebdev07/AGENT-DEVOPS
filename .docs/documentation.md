@@ -37,7 +37,10 @@ Règles Cursor : [`.cursor/rules.md`](../.cursor/rules.md).
 | `vision.md` | published | Objectif long terme |
 | `current_state.md` | published | Spécifié vs implémenté |
 | `architecture.md` | published | Couches, modules, flux |
-| `decisions.md` | published | ADR-001 → ADR-036 |
+| `decisions.md` | published | ~~ADR-001 → ADR-036~~ ~~ADR-001 → ADR-039 (2026-10-13)~~ ADR-001 → ADR-041 (2026-10-14) |
+| `commercial/offre.md`, `commercial/devis-modele.md`, `commercial/mandat-intervention.md` | draft | Documents commerciaux (2026-10-14), prix = hypothèses de `business.md` |
+| `plan-commercial.md` | draft | Plan A → D du premier client payant (2026-10-13) |
+| `business.md` | draft | Monétisation : offres, cibles, étapes, risques (ADR-039) |
 | `security.md` | published | Risques, SSH, cibles interdites |
 | `api.md` | published | Endpoints V0–V7-05 |
 | `conventions.md` | published | Gouvernance + code |

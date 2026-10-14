@@ -357,6 +357,7 @@
   4. Hors-site : l’agent télécharge le `.enc` (SSH `base64`) vers `state/backups/` + métadonnées `.last-backup`.
   5. Preuve minimale : déchiffrement local + magic gzip/sql → `RESTORE_PROOF_OK` dans la réponse API. Restore SQL complet = chantier suivant.
 - **Conséquence** : discovery lit le marqueur ; pile backups devient SKIP après premier apply réussi. Relance périodique / restore complet : backlog V4 suite.
+- **Amendement 2026-10-14** : points 2 (`mysqldump`), 4 (copie `base64`, `.last-backup`) et 5 (preuve minimale) **obsolètes, remplacés par ADR-041**. `mysqldump` est absent de `mariadb:11.4` : les sauvegardes produites par ce rôle contenaient le message d'erreur Docker chiffré, et la preuve minimale les acceptait.
 
 ---
 
@@ -435,3 +436,50 @@
   - Durcissement appliqué hors agent (SSH + sudo temporaire) : SSH `X11Forwarding no`, `MaxAuthTries 3`, `LoginGraceTime 30` (fichier `/etc/ssh/sshd_config.d/90-vps-autopilot.conf`, mot de passe gardé : serveur partagé) ; Apache `ServerTokens Prod`, `ServerSignature Off` (sauvegarde `security.conf.bak-vps-autopilot`) ; `prism.service` (doublon en boucle de plantage) arrêté et désactivé. Applications vérifiées en 200 par l'adresse publique.
   - **fail2ban écarté** : la passerelle traduit les adresses sources (toutes les connexions SSH arrivent de la même adresse interne), un bannissement couperait tout le monde.
   - Points 3 à 7 et 10 (profil serveur, routage par chemin, modèle `static`, analyse par serveur, plusieurs plateformes par hôte) restent **implémentés dans l'agent** et valables pour tout serveur. Les plateformes `dismas` et `prism` restent déclarées localement pour une reprise si la sortie internet est rétablie (ou avec un registre d'images interne).
+
+---
+
+## ADR-039 - Monétisation : service géré d'abord, logiciel ensuite
+
+- **Date** : 2026-10-13
+- **Statut** : Accepted (stratégie spécifiée ; aucune offre facturée à ce jour)
+- **Contexte** : l'opérateur veut que la plateforme devienne une activité rentable. L'agent a deux mises en production réelles (ARC en ligne sur son domaine, serveur DTSI analysé et sécurisé), mais reste mono-opérateur, local, et dépend de son auteur. V9 (multi-opérateurs) n'a pas de code.
+- **Décision** :
+  1. **Étape 1 : vendre un service** (audit, mise en ligne au forfait, maintenance mensuelle). L'agent est l'outil interne qui rend le service rentable ; il n'est pas livré au client.
+  2. **Étape 2 : licence auto-hébergée** pour agences, seulement après plusieurs clients du service.
+  3. **Étape 3 : plateforme en ligne (V9)** seulement si les étapes 1 et 2 prouvent la demande. ADR-031 inchangé (facturation hors V9 jour 1).
+  4. Avant le premier client payant, les tâches `BIZ-01` à `BIZ-07` (P0) sont livrées. On ne vend pas de sauvegarde jamais restaurée.
+  5. Tout serveur client suit les mêmes règles que le lab : plan + confirmation (ADR-003), sauvegarde avant écriture, cibles bloquées et lecture seule dans `state/agent-local.yml`.
+- **Conséquence** : nouveau doc `business.md` ; backlog `BIZ-*` ; la roadmap technique V0–V9 ne change pas, les `BIZ-*` passent devant V5/V8/V9.
+- **Suite 2026-10-14** : grille de prix de départ (hypothèses) dans `business.md`, documents `commercial/` (offre, devis, mandat). `BIZ-01`, `BIZ-03`, `BIZ-04`, `BIZ-07` (modèle) livrés.
+
+---
+
+## ADR-040 - Opérations longues : tâche détachée suivie par courtes connexions
+
+- **Date** : 2026-10-14
+- **Statut** : Accepted (implémenté, testé sur le lab)
+- **Contexte** : déployer une plateforme ou restaurer des données dure de quelques minutes à 45 min. Une seule session SSH portait tout le travail : une coupure réseau (vue le 2026-10-08 après ~5 min) faisait annoncer un échec alors que le rôle continuait et terminait sur le serveur. Une connexion figée sans RST bloquait aussi la lecture indéfiniment.
+- **Décision** :
+  1. `RemoteJobRunner` : le script est déposé dans `~/.vps-autopilot/jobs/<id>/` (dossier 700, `umask 077`), lancé par `systemd-run --collect` (repli `setsid nohup`), puis suivi toutes les 10 s par de courtes connexions SSH (`job-poll.sh`) ; sortie et code retour récupérés en fin (`job-fetch.sh`).
+  2. Lancement idempotent (un dossier existant n'est pas relancé), 3 essais de lancement, coupures de suivi tolérées jusqu'au délai. Le script est **effacé du disque** dès qu'il a tourné (il peut contenir des secrets) ; dossiers de plus de 14 jours supprimés.
+  3. Même contrat d'erreur que `SshConnector.runStdinScript` (`Commande distante exit=N`, `###STDOUT###`, `###STDERR###`) : les lecteurs de marqueurs ne changent pas. Délai dépassé : message « toutes les étapes continuent sur le serveur ».
+  4. Branché sur Déployer plateforme (2 700 s), Déployer app (1 800 s), Restaurer, Sauvegarder maintenant, Exercice de restauration. `SshConnector` pose un délai de lecture (`setTimeout`) sur toutes ses connexions.
+- **Conséquence** : `BIZ-01` livré. Essai lab : tâche de 6 min 20 récupérée, code 3 transmis pour une tâche en échec. Le script vit brièvement sur le disque du serveur (700, propriétaire SSH) : accepté, plutôt que de le garder dans une session fragile.
+
+---
+
+## ADR-041 - Sauvegardes réelles : dump vérifié, minuteur, exercice de restauration
+
+- **Date** : 2026-10-14
+- **Statut** : Accepted (implémenté, testé sur le lab) — remplace les points 2, 4 et 5 d'ADR-034
+- **Contexte** : les sauvegardes d'ADR-034 étaient vides (erreur `mysqldump` chiffrée), jouées une seule fois à l'installation, et la « preuve » ne lisait que l'en-tête. On ne vend pas une sauvegarde jamais restaurée (ADR-039).
+- **Décision** :
+  1. Rôle `backups` : installe `/usr/local/bin/vps-autopilot-backup` (700 root). `mariadb-dump` (repli `mysqldump`) de toutes les bases, `pipefail`, erreur affichée (`BACKUP_DUMP_FAILED`, `DUMP_ERR:`), marque de fin `-- Dump completed` exigée (`BACKUP_DUMP_INCOMPLETE`), mot de passe root par variable d'environnement (pas en ligne de commande), 14 fichiers gardés.
+  2. **Minuteur systemd quotidien** (`vps-autopilot-backup.timer`, 02:30 ± 30 min, `Persistent`). La phrase de chiffrement est donc aussi sur le serveur : `/opt/vps-autopilot/backups/.passphrase`, 600 root, à côté des fichiers qu'elle chiffre. Accepté : la copie hors serveur protège contre la perte du serveur, pas contre un attaquant root (déjà maître des bases).
+  3. L'analyse ne considère les sauvegardes « présentes » que si le marqueur **et** le script existent : un serveur resté sur l'ancien rôle est reproposé à l'installation.
+  4. Côté agent (`BackupArchive`, `BackupService`) : copie par SFTP vers `state/backups/<serveur>/` (copie temporaire 600 dans `/tmp`, effacée), SHA-256 comparé ; **vérification** = déchiffrement et lecture en flux de tout le fichier, marque de fin, tables comptées par base ; résultat dans `<fichier>.json`.
+  5. **Exercice de restauration** (CHANGE `restore-drill`) : chaque base applicative est extraite localement, envoyée, importée dans une base jetable `restore_check_<hex>`, ses tables (`BASE TABLE`) comptées et comparées aux `CREATE TABLE` du dump, puis la base jetable supprimée (même en échec). Les bases en service ne sont pas touchées.
+  6. **Restaurer une plateforme depuis une sauvegarde** : extraction de `app_<id>` puis `PlatformRestoreService` (sauvegarde de l'existant, retour arrière si l'import échoue). CHANGE `restore-platform`.
+  7. CHANGE `run-backup` (Sauvegarder maintenant). « Copier la dernière » sans confirmation, refusée sur un serveur en lecture seule (écrit dans `/tmp`, sort les données d'un tiers).
+- **Conséquence** : `BIZ-03` livré pour les bases MariaDB. Non couverts : fichiers déposés par les utilisateurs (volumes, `BIZ-11`), copie hors poste opérateur (`BIZ-09`), purge des copies locales. Essai lab : dump 4,3 Mo, exercice 25/25 tables, audit du lab C 62 → A 91.

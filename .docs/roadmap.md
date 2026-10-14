@@ -20,6 +20,8 @@ SKIP/READY = déjà là **sur l’IP analysée**. La roadmap suit les traitement
 
 **Lecture produit** : V0–V8 = outil mono-opérateur (poste local). V9 = plusieurs utilisateurs, chacun sa session et ses VPS (ADR-031).
 
+**Piste commerciale (ADR-039, 2026-10-13)** : service géré → licence → V9. Les tâches `BIZ-01` à `BIZ-07` passent avant V5, V8 et V9. Détail : `business.md`.
+
 ## Sprint 1 (V0) — critère de done
 
 L’agent se connecte (ou lit une fixture), décrit **exactement** le serveur, écrit un JSON d’état, n’a **rien modifié**.

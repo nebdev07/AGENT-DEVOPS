@@ -1,6 +1,6 @@
 # API — VPS Autopilot
 
-> Dernière mise à jour : 2026-09-29  
+> Dernière mise à jour : 2026-10-14 (audit, sauvegardes)  
 > Implémenté : V0–V3 partiel + V7-01/02/04/05 (plateformes + Git privé). Base : `http://127.0.0.1:8088`
 
 Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `cargo` (image Docker) : `/` + `GET /api/v1/health` seulement ; le reste → `403` (ADR-030).
@@ -37,6 +37,14 @@ Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `c
 | POST | `/api/v1/platforms/sql/analyze` | READ. `{sql}` → `{risk: READ\|CHANGE, statements[], warnings[]}` ; 400 si refusé (DROP, TRUNCATE, droits, fichiers…) | **oui 2026-10-01** |
 | POST | `/api/v1/platforms/sql` | `{id, host, port, user, sql, confirm}`. Lecture : READ. Écriture : CHANGE `sql-write-platform` (confirm requis, sauvegarde avant). → `{platformId, risk, database, backup, statements:[{index, sql, status: ok\|error\|skipped, columns, rows, affectedRows}], error, outputTruncated}` | **oui 2026-10-01** |
 | GET | `/api/v1/platforms/status?id=` | READ. `{id, online, services:[{service, url, httpCode, online}]}` (HTTPS, certificat valide, `httpCode=-1` si injoignable) | **oui 2026-10-01** |
+| GET | `/api/v1/audit?host=` | READ, sans connexion (dernière analyse enregistrée). `{host, hostname, capturedAt, os, score, grade, findings:[{id, severity: CRITIQUE\|ELEVE\|MOYEN\|FAIBLE, category, title, observed, risk, recommendation}], strengths[], facts}`. `400` si aucune analyse SSH réelle | **oui 2026-10-14** |
+| GET | `/api/v1/audit/report?host=&client=` | READ. Rapport HTML autonome (imprimable en PDF), pièce jointe `audit-<hôte>-<aaaammjj>.html`. `client` = nom affiché (facultatif) | **oui 2026-10-14** |
+| GET | `/api/v1/backups?host=` | Local. Copies de sauvegarde sur ce poste (`state/backups/<serveur>/`) : `{host, backups:[{file, sizeBytes, sha256, remotePath, copiedAt, check:{ok, noDatabase, databases{base: tables}, applicationTables, problem, checkedAt}, drill:{ok, lines[], drilledAt}}]}` | **oui 2026-10-14** |
+| POST | `/api/v1/backups/run` | CHANGE `run-backup`. `{host, port, user, confirm}` : sauvegarde immédiate sur le VPS (tâche détachée), copie SFTP (SHA-256 comparé), vérification. → une copie (forme ci-dessus). `400` + Cause/Où/À faire si le rôle `backups` manque ou si l'export échoue | **oui 2026-10-14** |
+| POST | `/api/v1/backups/fetch-latest` | `{host, port, user}` : copie la sauvegarde la plus récente du VPS puis la vérifie. Sans confirmation ; `403` sur un serveur en lecture seule ou bloqué | **oui 2026-10-14** |
+| POST | `/api/v1/backups/verify` | Local. `{host, file}` : déchiffre et lit toute la copie (marque de fin, tables par base). Nom de fichier imposé `dump-AAAAMMJJTHHMMSSZ.sql.gz.enc` | **oui 2026-10-14** |
+| POST | `/api/v1/backups/drill` | CHANGE `restore-drill`. `{host, port, user, file, confirm}` : chaque base applicative importée dans une base jetable `restore_check_<hex>` du VPS, tables comptées puis base supprimée. → copie avec `drill` | **oui 2026-10-14** |
+| POST | `/api/v1/backups/restore-platform` | CHANGE `restore-platform`. `{host, port, user, file, platformId, foreignKeyChecks, confirm}` : remplace `app_<id>` par la base de la sauvegarde (via `platform-restore` : sauvegarde de l'existant, retour arrière si échec). `400` si la base n'est pas dans la sauvegarde. → `{status, id, risk, report[]}` | **oui 2026-10-14** |
 
 ## POST `/api/v1/discover`
 
