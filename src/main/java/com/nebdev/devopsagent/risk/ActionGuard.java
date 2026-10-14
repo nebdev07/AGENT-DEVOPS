@@ -23,7 +23,9 @@ public class ActionGuard {
             "deploy-app",
             "deploy-platform",
             "restore-platform",
-            "sql-write-platform"
+            "sql-write-platform",
+            "run-backup",
+            "restore-drill"
     );
 
     public void assertAllowed(RiskLevel level, String action) {

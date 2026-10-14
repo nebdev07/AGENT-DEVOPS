@@ -303,8 +303,9 @@ public final class StackCatalog {
                 "Filet après compromission ou erreur.",
                 "Sans copie hors-site, une compromission ou un disque perdu emporte tout. "
                         + "Un snapshot chez le même hébergeur ne suffit pas si le compte ou la machine part.",
-                "Dump MariaDB chiffré sur le VPS, copie vers le poste opérateur (state/backups/), "
-                        + "preuve locale de déchiffrement. Passphrase dans state/backup.key (hors git).",
+                "Dump MariaDB chiffré sur le VPS chaque nuit (minuteur systemd, 14 conservés), copie vers le poste "
+                        + "opérateur (state/backups/<serveur>/), lecture complète du dump. Passphrase dans "
+                        + "state/backup.key (hors git) et sur le VPS (root seul).",
                 true,
                 false,
                 StackComponent.PolicyImpact.POLICY_BREAK,
@@ -316,7 +317,8 @@ public final class StackCatalog {
                                 "encrypted-dump",
                                 "Dump chiffré",
                                 "Un dump en clair volé = toutes les données métier. Le chiffrement se fait avant de quitter le VPS.",
-                                "mysqldump via docker exec si MariaDB tourne, gzip, openssl AES-256-CBC, plaintext effacé.",
+                                "mariadb-dump de toutes les bases via docker exec, refusé s’il est incomplet, gzip, "
+                                        + "openssl AES-256-CBC, plaintext effacé. Minuteur quotidien vers 02:30.",
                                 true,
                                 StackComponent.PolicyImpact.WARNING,
                                 "Sans dump chiffré, une copie hors-site serait lisible si interceptée."
@@ -325,7 +327,7 @@ public final class StackCatalog {
                                 "offsite",
                                 "Copie hors-site",
                                 "Le pirate qui a le VPS a aussi les backups locaux. Il faut une copie ailleurs.",
-                                "L’agent télécharge le .enc vers state/backups/ sur le poste opérateur.",
+                                "L’agent télécharge le .enc (SFTP, SHA-256 contrôlé) vers state/backups/<serveur>/ sur le poste opérateur.",
                                 true,
                                 StackComponent.PolicyImpact.POLICY_BREAK,
                                 "Backup seulement sur le VPS = plus de filet si la machine est prise."
@@ -334,7 +336,8 @@ public final class StackCatalog {
                                 "restore-proof",
                                 "Preuve de restauration",
                                 "Un backup qui ne restaure pas n’existe pas. On le saurait trop tard, après l’incident.",
-                                "Déchiffrement local avec la même passphrase ; vérifie gzip/sql. Pas de restore complet encore.",
+                                "Copie déchiffrée et lue en entier (marque de fin, tables par base) ; exercice de restauration "
+                                        + "à la demande dans une base jetable du VPS (bande Sauvegardes).",
                                 true,
                                 StackComponent.PolicyImpact.WARNING,
                                 "Sans test de restore, on découvre un backup mort le jour J."

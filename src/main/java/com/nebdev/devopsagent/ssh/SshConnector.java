@@ -71,6 +71,7 @@ public class SshConnector {
                 client.addHostKeyVerifier(new StoredFingerprintVerifier(trustedHostStore));
             }
             client.setConnectTimeout(ssh.getTimeoutSeconds() * 1000);
+            client.setTimeout(Math.max(120, ssh.getTimeoutSeconds()) * 1000);
             client.connect(target.host(), target.port());
             KeyProvider keys = ssh.getPassphrase() == null || ssh.getPassphrase().isBlank()
                     ? client.loadKeys(ssh.getPrivateKeyPath())
@@ -88,6 +89,34 @@ public class SshConnector {
                 for (Map.Entry<String, Path> e : files.entrySet()) {
                     sftp.put(new FileSystemFile(e.getValue().toFile()), remoteDir + "/" + e.getKey());
                 }
+            }
+        } catch (IOException e) {
+            rethrow(e, target, false);
+            throw e;
+        }
+    }
+
+    /** Télécharge un fichier distant lisible par l’utilisateur SSH (SFTP, clé de l’agent). */
+    public void downloadFile(SshTarget target, String remotePath, Path localFile) throws IOException {
+        DevopsProperties.Ssh ssh = properties.getSsh();
+        if (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank()) {
+            throw new IllegalStateException("DEVOPS_SSH_KEY est vide. Renseigner .env (chemin de la clé privée).");
+        }
+        try (SSHClient client = new SSHClient()) {
+            if (ssh.isTrustUnknown()) {
+                client.addHostKeyVerifier(new PromiscuousVerifier());
+            } else {
+                client.addHostKeyVerifier(new StoredFingerprintVerifier(trustedHostStore));
+            }
+            client.setConnectTimeout(ssh.getTimeoutSeconds() * 1000);
+            client.setTimeout(Math.max(120, ssh.getTimeoutSeconds()) * 1000);
+            client.connect(target.host(), target.port());
+            KeyProvider keys = ssh.getPassphrase() == null || ssh.getPassphrase().isBlank()
+                    ? client.loadKeys(ssh.getPrivateKeyPath())
+                    : client.loadKeys(ssh.getPrivateKeyPath(), ssh.getPassphrase());
+            client.authPublickey(target.user(), keys);
+            try (SFTPClient sftp = client.newSFTPClient()) {
+                sftp.get(remotePath, new FileSystemFile(localFile.toFile()));
             }
         } catch (IOException e) {
             rethrow(e, target, false);
@@ -124,6 +153,8 @@ public class SshConnector {
                 client.addHostKeyVerifier(new StoredFingerprintVerifier(trustedHostStore));
             }
             client.setConnectTimeout(timeout * 1000);
+            // Une connexion figée (sans RST) bloquait la lecture indéfiniment : silence > timeout = échec.
+            client.setTimeout(timeout * 1000);
             client.connect(target.host(), target.port());
             authenticator.authenticate(client);
 

@@ -17,7 +17,7 @@ public final class RoleScript {
 
     private static final Set<String> ALLOWED = Set.of(
             "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups", "app", "platform",
-            "platform-restore", "platform-sql");
+            "platform-restore", "platform-sql", "backup-drill");
     private static final Pattern SAFE_TOKEN = Pattern.compile("^[A-Za-z0-9._-]{0,80}$");
     private static final Map<String, String> FLAGS = new LinkedHashMap<>();
 
@@ -198,6 +198,26 @@ public final class RoleScript {
             case WRITE -> "write";
         };
         return "PLATFORM_ID=" + platform.id() + "\nSQL_DIR=" + remoteDir + "\nSQL_MODE=" + mode + "\n" + load("platform-sql");
+    }
+
+    /**
+     * Exercice de restauration : fichiers déjà envoyés dans {@code remoteDir}.
+     * @param expectedTables nom de fichier → (base, tables attendues)
+     */
+    public static String loadBackupDrill(String remoteDir, Map<String, Map.Entry<String, Integer>> expectedTables) {
+        if (remoteDir == null || !remoteDir.matches("^/tmp/autopilot-restore-drill-[a-z0-9-]{1,80}$")) {
+            throw new IllegalArgumentException("Dossier distant de l’exercice de restauration invalide.");
+        }
+        StringBuilder manifest = new StringBuilder();
+        for (Map.Entry<String, Map.Entry<String, Integer>> e : expectedTables.entrySet()) {
+            String file = e.getKey();
+            String db = e.getValue().getKey();
+            if (!SAFE_TOKEN.matcher(file).matches() || file.contains("..") || !db.matches("^[A-Za-z0-9_$-]{1,64}$")) {
+                throw new IllegalArgumentException("Nom de fichier ou de base invalide pour l’exercice : " + file + " / " + db);
+            }
+            manifest.append(file).append('\t').append(db).append('\t').append(e.getValue().getValue()).append('\n');
+        }
+        return "DRILL_DIR=" + remoteDir + "\nDRILL_MANIFEST_B64=" + b64(manifest.toString()) + "\n" + load("backup-drill");
     }
 
     private static String b64(String text) {

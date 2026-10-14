@@ -124,7 +124,7 @@ public final class InstallPlanBuilder {
             case "mariadb" -> "Conteneur MariaDB, réseau interne data, pas de port public. Mot de passe root hors git sur le VPS.";
             case "deploy" -> "Compte deploy : docker, pas sudo, clé de l’agent, SSH autorisé. Aucune app lancée.";
             case "redis" -> "Conteneur Redis, réseau data interne, requirepass, aucun port publié.";
-            case "backups" -> "Dump MariaDB chiffré sur le VPS, copie vers le poste opérateur, preuve de déchiffrement locale.";
+            case "backups" -> "Dump MariaDB chiffré sur le VPS (quotidien), copie vers le poste opérateur, contenu vérifié.";
             case "docker" -> dockerReadyReason(snap, selectedDetails);
             default -> "Absent. Install idempotente, versionnée, après confirmation.";
         };
@@ -298,13 +298,13 @@ public final class InstallPlanBuilder {
                 : wanted;
         List<String> out = new ArrayList<>();
         if (pick.contains("encrypted-dump")) {
-            out.add("Dump MariaDB (si conteneur) + chiffrement AES-256-CBC sur le VPS");
+            out.add("Dump MariaDB complet (si conteneur) + chiffrement AES-256-CBC sur le VPS, minuteur quotidien");
         }
         if (pick.contains("offsite")) {
-            out.add("Copie du .enc vers state/backups/ sur le poste opérateur");
+            out.add("Copie du .enc vers state/backups/<serveur>/ sur le poste opérateur (SHA-256 contrôlé)");
         }
         if (pick.contains("restore-proof")) {
-            out.add("Déchiffrement local minimal (preuve que la passphrase ouvre le dump)");
+            out.add("Lecture complète du dump déchiffré (marque de fin, tables par base)");
         }
         return out;
     }

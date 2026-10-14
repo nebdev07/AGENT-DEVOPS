@@ -171,6 +171,7 @@ function paint(snapshot, report, mode) {
   loadStack().then(loadPlan);
   loadApps();
   loadPlatforms();
+  loadBackups();
   return true;
 }
 
@@ -956,6 +957,314 @@ $("sshPort").addEventListener("input", refreshPwsh);
 $("sshHost").addEventListener("input", refreshPwsh);
 $("sshUser").addEventListener("input", refreshPwsh);
 $("sshPassword").addEventListener("input", () => $("sshPassword").classList.remove("need"));
+$("btnAudit").addEventListener("click", downloadAudit);
+$("btnBackupRun").addEventListener("click", runBackupNow);
+$("btnBackupFetch").addEventListener("click", fetchLatestBackup);
+$("btnBackupRefresh").addEventListener("click", loadBackups);
+
+function backupSay(msg, kind) {
+  const st = $("backupStatus");
+  st.hidden = !msg;
+  st.textContent = msg || "";
+  st.className = "app-form-status" + (kind ? " " + kind : "");
+}
+
+function backupHost() {
+  return journey.snapshot?.host || $("sshHost").value.trim();
+}
+
+function backupTargetBody(extra) {
+  const t = target();
+  if (!t.host || !t.user) {
+    throw new Error("Cause : IP ou utilisateur SSH vide.\nOù : en haut de la console.\nÀ faire : remplis IP + utilisateur, Analyser, puis réessaie.");
+  }
+  return Object.assign({ host: t.host, port: t.port, user: t.user }, extra || {});
+}
+
+async function backupPost(path, body) {
+  const r = await fetch("/api/v1/backups/" + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+function backupLabel(name) {
+  const m = /^dump-(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/.exec(name || "");
+  if (!m) return name;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+  return d.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function backupCheckText(b) {
+  const c = b.check;
+  if (!c) return { tone: "unknown", text: "contenu non vérifié" };
+  if (!c.ok) return { tone: "alert", text: "inutilisable : " + c.problem };
+  if (c.noDatabase) return { tone: "ok", text: "lisible · pas de MariaDB sur le serveur à cette date" };
+  const dbs = Object.keys(c.databases || {}).filter((d) => !["mysql", "information_schema", "performance_schema", "sys"].includes(d));
+  return { tone: "ok", text: "complète · " + dbs.length + " base(s), " + c.applicationTables + " table(s) : " + (dbs.join(", ") || "—") };
+}
+
+function renderBackups(list) {
+  const box = $("backupList");
+  box.innerHTML = "";
+  if (!list.length) {
+    box.innerHTML = "<p class=\"hint\">Aucune copie sur ce poste pour ce serveur. Clique <strong>Copier la dernière</strong> (ou <strong>Sauvegarder maintenant</strong>).</p>";
+    return;
+  }
+  const allPlatforms = (journey.platforms || []).map((p) => p.id);
+  list.forEach((b, i) => {
+    const inBackup = Object.keys(b.check?.databases || {});
+    const platforms = allPlatforms.filter((id) => inBackup.includes("app_" + id.replace(/-/g, "_")));
+    const row = document.createElement("div");
+    const check = backupCheckText(b);
+    row.className = "backup-row tone-" + check.tone;
+    const drill = b.drill
+      ? (b.drill.ok ? "Exercice réussi le " : "Exercice ÉCHOUÉ le ")
+        + new Date(b.drill.drilledAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })
+        + " · " + (b.drill.lines || []).join(" · ")
+      : "Exercice de restauration : jamais fait";
+    row.innerHTML = "<div class=\"backup-main\"><strong>" + esc(backupLabel(b.file)) + "</strong>"
+      + " <span class=\"hint\">" + esc(humanBytes(b.sizeBytes)) + (i === 0 ? " · la plus récente" : "") + "</span>"
+      + "<p class=\"backup-check\">" + esc(check.text) + "</p>"
+      + "<p class=\"hint backup-drill" + (b.drill && !b.drill.ok ? " bad" : "") + "\">" + esc(drill) + "</p></div>";
+    const actions = document.createElement("div");
+    actions.className = "backup-row-actions";
+    const btnVerify = document.createElement("button");
+    btnVerify.type = "button";
+    btnVerify.className = "ghost";
+    btnVerify.textContent = "Vérifier";
+    btnVerify.addEventListener("click", () => verifyBackup(b.file));
+    const btnDrill = document.createElement("button");
+    btnDrill.type = "button";
+    btnDrill.textContent = "Exercice de restauration";
+    btnDrill.disabled = !!(b.check && !b.check.ok);
+    btnDrill.addEventListener("click", () => drillBackup(b.file));
+    actions.append(btnVerify, btnDrill);
+    if (platforms.length && b.check?.ok) {
+      const sel = document.createElement("select");
+      sel.setAttribute("aria-label", "Plateforme à restaurer");
+      platforms.forEach((id) => {
+        const o = document.createElement("option");
+        o.value = id;
+        o.textContent = id;
+        sel.appendChild(o);
+      });
+      const btnRestore = document.createElement("button");
+      btnRestore.type = "button";
+      btnRestore.className = "ghost danger";
+      btnRestore.textContent = "Restaurer la base";
+      btnRestore.addEventListener("click", () => restoreFromBackup(b.file, sel.value));
+      actions.append(sel, btnRestore);
+    }
+    row.appendChild(actions);
+    box.appendChild(row);
+  });
+}
+
+async function loadBackups() {
+  const host = backupHost();
+  if (!host) {
+    renderBackups([]);
+    return;
+  }
+  try {
+    const r = await fetch("/api/v1/backups?host=" + encodeURIComponent(host));
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    renderBackups(j.backups || []);
+  } catch (e) {
+    backupSay(e.message, "err");
+  }
+}
+
+function backupOutcome(b, action) {
+  const check = backupCheckText(b);
+  return action + " : " + backupLabel(b.file) + " (" + humanBytes(b.sizeBytes) + ").\n" + check.text;
+}
+
+async function runBackupNow() {
+  let body;
+  try {
+    body = backupTargetBody({ confirm: true });
+  } catch (e) {
+    backupSay(e.message, "err");
+    return;
+  }
+  const ok = await showConfirmPlan({
+    title: "Sauvegarder maintenant",
+    detail: "Sauvegarde immédiate de MariaDB sur " + body.user + "@" + body.host + ".",
+    actions: [
+      "Export complet de MariaDB sur le VPS, contrôle de la marque de fin",
+      "Chiffrement AES-256 sur le VPS, 14 fichiers gardés",
+      "Copie sur ce poste (SHA-256 contrôlé), puis lecture complète du fichier",
+    ],
+  });
+  if (!ok) return;
+  backupSay("");
+  showBusy({ risk: "CHANGE", title: "Sauvegarde en cours", detail: "Export, chiffrement puis copie sur ce poste.",
+    steps: ["Export MariaDB", "Copie sur ce poste", "Vérification"], currentStep: 0 });
+  try {
+    const b = await backupPost("run", body);
+    hideBusy();
+    const good = b.check?.ok;
+    backupSay(backupOutcome(b, "Sauvegardé"), good ? "ok" : "err");
+    showResult({ ok: good, kicker: good ? "CHANGE · réussi" : "CHANGE · à vérifier",
+      title: good ? "Sauvegarde faite et lisible" : "Sauvegarde copiée mais illisible",
+      detail: backupOutcome(b, "Fichier"),
+      next: good ? "Fais un Exercice de restauration pour prouver qu’elle se réimporte." : "Lis le problème, corrige, puis Sauvegarder maintenant." });
+  } catch (e) {
+    hideBusy();
+    backupSay(e.message, "err");
+    showResult({ ok: false, kicker: "CHANGE · échec", title: "Sauvegarde interrompue", detail: e.message,
+      next: "Lis Cause / Où / À faire. Les anciennes sauvegardes ne sont pas touchées." });
+  }
+  loadBackups();
+}
+
+async function fetchLatestBackup() {
+  let body;
+  try {
+    body = backupTargetBody();
+  } catch (e) {
+    backupSay(e.message, "err");
+    return;
+  }
+  backupSay("Copie de la dernière sauvegarde du VPS…");
+  showBusy({ risk: "READ", title: "Copie de la dernière sauvegarde", detail: "Téléchargement SFTP puis lecture complète." });
+  try {
+    const b = await backupPost("fetch-latest", body);
+    hideBusy();
+    backupSay(backupOutcome(b, "Copiée"), b.check?.ok ? "ok" : "err");
+  } catch (e) {
+    hideBusy();
+    backupSay(e.message, "err");
+  }
+  loadBackups();
+}
+
+async function verifyBackup(file) {
+  backupSay("Lecture complète de " + backupLabel(file) + "…");
+  try {
+    const b = await backupPost("verify", { host: backupHost(), file });
+    backupSay(backupOutcome(b, "Vérifiée"), b.check?.ok ? "ok" : "err");
+  } catch (e) {
+    backupSay(e.message, "err");
+  }
+  loadBackups();
+}
+
+async function drillBackup(file) {
+  let body;
+  try {
+    body = backupTargetBody({ confirm: true, file });
+  } catch (e) {
+    backupSay(e.message, "err");
+    return;
+  }
+  const ok = await showConfirmPlan({
+    title: "Exercice de restauration",
+    detail: "Prouver que la sauvegarde du " + backupLabel(file) + " se réimporte, sur " + body.user + "@" + body.host + ".",
+    actions: [
+      "Extraction locale de chaque base applicative de la sauvegarde",
+      "Envoi SFTP vers un dossier temporaire du VPS",
+      "Import dans une base jetable restore_check_…, comptage des tables",
+      "Suppression de la base jetable et du dossier temporaire (même en cas d’échec)",
+    ],
+    warnings: ["Tes bases en service ne sont pas modifiées. L’import consomme du CPU et du disque pendant quelques instants."],
+  });
+  if (!ok) return;
+  backupSay("");
+  showBusy({ risk: "CHANGE", title: "Exercice de restauration", detail: "Import dans une base jetable du VPS.",
+    steps: ["Extraction", "Envoi", "Import et comptage", "Nettoyage"], currentStep: 0 });
+  try {
+    const b = await backupPost("drill", body);
+    hideBusy();
+    const good = !!b.drill?.ok;
+    const lines = (b.drill?.lines || []).join("\n");
+    backupSay((good ? "Exercice réussi.\n" : "Exercice échoué.\n") + lines, good ? "ok" : "err");
+    showResult({ ok: good, kicker: good ? "CHANGE · réussi" : "CHANGE · échec",
+      title: good ? "La sauvegarde se restaure" : "La sauvegarde ne se restaure pas entièrement",
+      detail: lines, next: good ? "Preuve enregistrée à côté de la copie (bande Sauvegardes)." : "Ne compte pas sur cette sauvegarde : lis l’écart, puis Sauvegarder maintenant." });
+  } catch (e) {
+    hideBusy();
+    backupSay(e.message, "err");
+    showResult({ ok: false, kicker: "CHANGE · échec", title: "Exercice interrompu", detail: e.message,
+      next: "Lis Cause / Où / À faire. La base jetable est supprimée par le VPS." });
+  }
+  loadBackups();
+}
+
+async function restoreFromBackup(file, platformId) {
+  let body;
+  try {
+    body = backupTargetBody({ confirm: true, file, platformId, foreignKeyChecks: true });
+  } catch (e) {
+    backupSay(e.message, "err");
+    return;
+  }
+  const ok = await showConfirmPlan({
+    kicker: "CHANGE · données de production",
+    title: "Restaurer « " + platformId + " »",
+    detail: "Remplacer la base de « " + platformId + " » par celle de la sauvegarde du " + backupLabel(file) + ", sur " + body.user + "@" + body.host + ".",
+    actions: [
+      "Extraction locale de la base app_" + platformId.replace(/-/g, "_") + " depuis la sauvegarde",
+      "Envoi SFTP vers le VPS",
+      "Arrêt des services, sauvegarde de la base actuelle, import, redémarrage",
+      "En cas d’échec d’import : retour automatique à la base actuelle",
+    ],
+    warnings: ["Les données écrites depuis cette sauvegarde seront perdues (elles restent dans la sauvegarde « before-restore » du VPS)."],
+  });
+  if (!ok) return;
+  backupSay("");
+  showBusy({ risk: "CHANGE", title: "Restauration de « " + platformId + " »", detail: "Ne ferme pas la page.",
+    steps: ["Extraction", "Envoi", "Sauvegarde de l’existant", "Import", "Redémarrage"], currentStep: 0 });
+  try {
+    const j = await backupPost("restore-platform", body);
+    hideBusy();
+    const report = (j.report || []).join("\n");
+    backupSay("Restauré.\n" + report, "ok");
+    showResult({ ok: true, kicker: "CHANGE · réussi", title: "Base de " + platformId + " restaurée", detail: report,
+      next: "Recharge le site de la plateforme pour contrôler." });
+  } catch (e) {
+    hideBusy();
+    backupSay(e.message, "err");
+    showResult({ ok: false, kicker: "CHANGE · échec", title: "Restauration interrompue", detail: e.message,
+      next: "Lis Cause / Où / À faire. La base précédente reste sauvegardée sur le VPS." });
+  }
+}
+
+async function downloadAudit() {
+  const host = journey.snapshot?.host || $("sshHost").value.trim();
+  const box = $("auditSummary");
+  box.hidden = false;
+  if (!host) {
+    box.textContent = "Analyse d’abord un serveur.";
+    return;
+  }
+  const q = "host=" + encodeURIComponent(host);
+  const res = await fetch("/api/v1/audit?" + q);
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    box.textContent = j.error || "Rapport impossible.";
+    return;
+  }
+  const counts = { CRITIQUE: 0, ELEVE: 0, MOYEN: 0, FAIBLE: 0 };
+  (j.findings || []).forEach((f) => { counts[f.severity] = (counts[f.severity] || 0) + 1; });
+  box.textContent = "Note " + j.grade + " (" + j.score + "/100) · " + counts.CRITIQUE + " critique(s), "
+    + counts.ELEVE + " élevé(s), " + counts.MOYEN + " moyen(s), " + counts.FAIBLE + " faible(s). "
+    + "Fichier HTML téléchargé : ouvre-le puis Imprimer › PDF pour l’envoyer.";
+  const client = $("auditClient").value.trim();
+  const a = document.createElement("a");
+  a.href = "/api/v1/audit/report?" + q + (client ? "&client=" + encodeURIComponent(client) : "");
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 function esc(text) {
   return String(text || "")

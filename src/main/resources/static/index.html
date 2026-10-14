@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app35" />
+  <link rel="stylesheet" href="/console.css?v=app37" />
 </head>
 <body>
   <div class="bg"></div>
@@ -383,6 +383,30 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
         </li>
 
         <li class="step">
+          <h3>7c. Rapport d’audit pour un client</h3>
+          <p>Bande <strong>Rapport</strong> (mode expert), après une analyse. Facultatif : le nom du client à afficher. <strong>Rapport d’audit client</strong> télécharge une page HTML ; ouvre-la puis <strong>Imprimer › PDF</strong> pour l’envoyer.</p>
+          <ul>
+            <li>Le rapport se fait <strong>sur la dernière analyse</strong> : aucune connexion, rien n’est modifié. Analyse d’abord pour un rapport à jour.</li>
+            <li>Note de A à E sur 100 : chaque constat retire des points selon sa gravité (critique, élevé, moyen, faible). Un seul constat critique plafonne la note à D.</li>
+            <li>Pour chaque constat : ce qui a été observé, le risque, ce qu’il faut faire. Les points forts sont listés à part.</li>
+          </ul>
+        </li>
+
+        <li class="step">
+          <h3>7d. Sauvegardes et exercice de restauration</h3>
+          <p>Installe d’abord <strong>Backups chiffrés</strong> (Installations). Le VPS sauvegarde alors MariaDB chaque nuit vers 02:30 : toutes les bases, fichier chiffré, 14 gardés dans <code>/opt/vps-autopilot/backups</code>. Bande <strong>Sauvegardes</strong> (mode expert) :</p>
+          <ul>
+            <li><strong>Sauvegarder maintenant</strong> (à confirmer) : sauvegarde immédiate, copie sur ce poste, lecture complète.</li>
+            <li><strong>Copier la dernière</strong> : amène sur ce poste la sauvegarde de la nuit (dans <code>state/backups/&lt;serveur&gt;/</code>) et la vérifie. Refusé sur un serveur en lecture seule.</li>
+            <li><strong>Vérifier</strong> : déchiffre et lit toute la copie. « Complète » = la fin du dump est présente ; le nombre de tables par base est affiché. « Inutilisable » = ne compte pas dessus.</li>
+            <li><strong>Exercice de restauration</strong> (à confirmer) : chaque base de la sauvegarde est importée dans une base jetable du VPS, ses tables sont comptées puis la base jetable est supprimée. Tes bases ne sont pas touchées. Fais-le au moins une fois par mois : une sauvegarde qui ne se restaure pas n’existe pas.</li>
+            <li><strong>Restaurer la base</strong> (à confirmer) : n’apparaît que si la base de la plateforme est dans la sauvegarde. La base actuelle est d’abord sauvegardée sur le VPS ; si l’import échoue, elle revient automatiquement.</li>
+            <li>La clé de chiffrement est <code>state/backup.key</code> sur ce poste (et sur le VPS, lisible par root seul). <strong>Sans elle, aucune sauvegarde ne s’ouvre</strong> : garde-en une copie en lieu sûr.</li>
+            <li>Pas encore couvert : les fichiers déposés par les utilisateurs (volume fichiers d’une plateforme). Pour eux, « Restaurer les données » avec ta propre archive.</li>
+          </ul>
+        </li>
+
+        <li class="step">
           <h3>8. Couleurs du tableau</h3>
           <ul>
             <li><strong>Vert doux</strong> — présent / sain</li>
@@ -390,7 +414,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li><strong>Ambre</strong> — inconnu</li>
             <li><strong>Rouge doux</strong> — à surveiller (SSH trop ouvert, pare-feu inactif, disque plein)</li>
           </ul>
-          <p class="hint">Le tableau est découpé en bandes : <strong>État du serveur</strong>, <strong>Logiciels</strong>, <strong>Applications et plateformes</strong>, <strong>Pile et installations</strong>, <strong>Rapport</strong>. Filet à gauche, teintes calmes.</p>
+          <p class="hint">Le tableau est découpé en bandes : <strong>État du serveur</strong>, <strong>Logiciels</strong>, <strong>Applications et plateformes</strong>, <strong>Pile et installations</strong>, <strong>Rapport</strong>, <strong>Sauvegardes</strong>. Filet à gauche, teintes calmes.</p>
         </li>
 
         <li class="step">
@@ -700,6 +724,29 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
           <article class="card report">
             <p class="kicker">Rapport</p>
             <pre id="report">—</pre>
+            <div class="audit-row">
+              <label class="field">Client (facultatif)
+                <input id="auditClient" type="text" autocomplete="off" placeholder="nom affiché sur le rapport" />
+              </label>
+              <button id="btnAudit" type="button">Rapport d’audit client</button>
+            </div>
+            <p id="auditSummary" class="hint" hidden></p>
+          </article>
+        </div>
+
+        <div class="band band-backups">
+          <p class="band-label">Sauvegardes</p>
+          <article class="card" id="backupsCard">
+            <p class="kicker">Sauvegardes · ce VPS</p>
+            <h2>Une sauvegarde ne compte que si elle se restaure</h2>
+            <p class="hint">Le VPS sauvegarde MariaDB chaque nuit (fichier chiffré, 14 gardés). <strong>Copier la dernière</strong> l’amène sur ce poste et la lit en entier. <strong>Exercice</strong> la réimporte dans une base jetable du VPS puis l’efface : tes bases ne sont pas touchées. <strong>Restaurer</strong> remplace la base d’une plateforme (l’actuelle est d’abord sauvegardée).</p>
+            <div class="backup-actions">
+              <button id="btnBackupRun" type="button">Sauvegarder maintenant</button>
+              <button id="btnBackupFetch" type="button" class="ghost">Copier la dernière</button>
+              <button id="btnBackupRefresh" type="button" class="ghost">Actualiser</button>
+            </div>
+            <p id="backupStatus" class="app-form-status" hidden></p>
+            <div id="backupList" class="backup-list"></div>
           </article>
         </div>
       </div>
@@ -765,6 +812,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app35"></script>
+  <script src="/console.js?v=app37"></script>
 </body>
 </html>
