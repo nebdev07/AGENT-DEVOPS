@@ -138,8 +138,74 @@ public class DiscoveryParser {
                 ssh,
                 firewall,
                 remoteUser,
-                List.copyOf(warnings)
+                List.copyOf(warnings),
+                parseHygiene(sections.get("HYGIENE"), sections.getOrDefault("SIGNALS", ""))
         );
+    }
+
+    private static final Pattern APT_CHECK = Pattern.compile("^(\\d+);(\\d+)$");
+    private static final Pattern BACKUP_FILE = Pattern.compile("^(\\d+) (\\d+) (\\S+\\.enc)$");
+
+    /** {@code null} si la section est absente (analyse faite avant l’ajout de la section). */
+    static ServerSnapshot.Hygiene parseHygiene(String body, String signalsBody) {
+        if (body == null) {
+            return null;
+        }
+        Integer pending = null;
+        Integer security = null;
+        boolean reboot = false;
+        Boolean auto = null;
+        Long uptime = null;
+        Boolean timer = null;
+        List<ServerSnapshot.BackupFile> backups = new ArrayList<>();
+        for (String line : lines(body)) {
+            String t = line.trim();
+            int eq = t.indexOf('=');
+            String key = eq > 0 ? t.substring(0, eq) : t;
+            String value = eq > 0 ? t.substring(eq + 1).trim() : "";
+            switch (key) {
+                case "APT_CHECK" -> {
+                    Matcher m = APT_CHECK.matcher(value);
+                    if (m.matches()) {
+                        pending = Integer.parseInt(m.group(1));
+                        security = Integer.parseInt(m.group(2));
+                    }
+                }
+                case "APT_UPGRADABLE" -> pending = parseIntOrNull(value);
+                case "REBOOT_REQUIRED" -> reboot = true;
+                case "AUTO_UPDATES" -> auto = "on".equals(value);
+                case "UPTIME" -> {
+                    Integer u = parseIntOrNull(value);
+                    uptime = u == null ? null : u.longValue();
+                }
+                case "BACKUP_TIMER" -> timer = "on".equals(value);
+                case "BACKUP_FILE" -> {
+                    Matcher m = BACKUP_FILE.matcher(value);
+                    if (m.matches()) {
+                        backups.add(new ServerSnapshot.BackupFile(
+                                m.group(3), Long.parseLong(m.group(1)), Long.parseLong(m.group(2))));
+                    }
+                }
+                default -> {
+                }
+            }
+        }
+        List<String> signals = new ArrayList<>();
+        for (String line : lines(signalsBody)) {
+            if (!line.isBlank()) {
+                signals.add(line.trim());
+            }
+        }
+        return new ServerSnapshot.Hygiene(pending, security, reboot, auto, uptime, timer,
+                List.copyOf(backups), List.copyOf(signals));
+    }
+
+    private static Integer parseIntOrNull(String value) {
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     static Map<String, String> splitSections(String raw) {

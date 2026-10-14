@@ -115,8 +115,10 @@ else
 fi
 
 section BACKUPS
-if $SUDO test -f /opt/vps-autopilot/backups/.vps-autopilot-backups 2>/dev/null \
-    || test -f /opt/vps-autopilot/backups/.vps-autopilot-backups 2>/dev/null; then
+# L’ancien rôle (avant ADR-041) posait le marqueur sans script fiable : sans le script, à réinstaller.
+if { $SUDO test -f /opt/vps-autopilot/backups/.vps-autopilot-backups 2>/dev/null \
+      || test -f /opt/vps-autopilot/backups/.vps-autopilot-backups 2>/dev/null; } \
+    && test -f /usr/local/bin/vps-autopilot-backup 2>/dev/null; then
   echo PRESENT
   $SUDO ls -1 /opt/vps-autopilot/backups/*.enc 2>/dev/null | tail -n 3 \
     || ls -1 /opt/vps-autopilot/backups/*.enc 2>/dev/null | tail -n 3 \
@@ -195,6 +197,32 @@ fi
 if ps -eo comm= 2>/dev/null | grep -Eiq 'xmrig|minerd|kinsing|kdevtmpfsi|cryptonight'; then
   echo MINER_PROCESS
 fi
+
+section HYGIENE
+if [ -x /usr/lib/update-notifier/apt-check ]; then
+  echo "APT_CHECK=$(/usr/lib/update-notifier/apt-check 2>&1 | tail -n 1)"
+elif command -v apt-get >/dev/null 2>&1; then
+  echo "APT_UPGRADABLE=$(apt-get -s upgrade 2>/dev/null | grep -c '^Inst ' || true)"
+fi
+if [ -f /var/run/reboot-required ]; then
+  echo REBOOT_REQUIRED
+fi
+if [ -f /etc/apt/apt.conf.d/20auto-upgrades ] \
+    && grep -Eq 'Unattended-Upgrade "1"' /etc/apt/apt.conf.d/20auto-upgrades 2>/dev/null \
+    && command -v unattended-upgrade >/dev/null 2>&1; then
+  echo AUTO_UPDATES=on
+elif command -v apt-get >/dev/null 2>&1; then
+  echo AUTO_UPDATES=off
+fi
+echo "UPTIME=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
+if systemctl is-enabled vps-autopilot-backup.timer >/dev/null 2>&1; then
+  echo BACKUP_TIMER=on
+else
+  echo BACKUP_TIMER=off
+fi
+for f in $($SUDO ls -1t /opt/vps-autopilot/backups/ 2>/dev/null | grep '\.enc$' | head -n 5); do
+  echo "BACKUP_FILE=$($SUDO stat -c '%Y %s' "/opt/vps-autopilot/backups/$f" 2>/dev/null) $f"
+done
 
 section WHO
 whoami 2>/dev/null || true

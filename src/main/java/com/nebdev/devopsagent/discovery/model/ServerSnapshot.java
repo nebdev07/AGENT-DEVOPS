@@ -37,8 +37,27 @@ public record ServerSnapshot(
         SshDaemonInfo ssh,
         FirewallInfo firewall,
         String remoteUser,
-        List<String> warnings
+        List<String> warnings,
+        Hygiene hygiene
 ) {
+    /**
+     * Hygiène de l’hôte pour l’audit (BIZ-04). Champs {@code null} = non mesuré (analyse antérieure, autre OS).
+     * @param signals jetons bruts de la section SIGNALS (PHP_PRESENT, MINER_PROCESS…)
+     */
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public record Hygiene(
+            Integer pendingUpdates,
+            Integer securityUpdates,
+            Boolean rebootRequired,
+            Boolean autoUpdates,
+            Long uptimeSeconds,
+            Boolean backupTimer,
+            List<BackupFile> backupFiles,
+            List<String> signals
+    ) {}
+
+    public record BackupFile(String name, long modifiedEpochSeconds, long sizeBytes) {}
+
     public record CpuInfo(int vcpus, String model) {}
 
     public record MemoryInfo(long totalBytes, long availableBytes) {}

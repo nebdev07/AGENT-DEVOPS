@@ -103,6 +103,39 @@ class DiscoveryParserTest {
     }
 
     @Test
+    void hygieneSectionIsParsed() {
+        String raw = """
+                ###SIGNALS###
+                APACHE_PRESENT
+                ###HYGIENE###
+                APT_CHECK=12;3
+                REBOOT_REQUIRED
+                AUTO_UPDATES=off
+                UPTIME=86400
+                BACKUP_TIMER=on
+                BACKUP_FILE=1791900000 524288 dump-20261013T020000Z.sql.gz.enc
+                BACKUP_FILE=garbage
+                ###WHO###
+                root
+                """;
+        ServerSnapshot.Hygiene h = parser.parse(raw, "ssh:198.51.100.20", "198.51.100.20").hygiene();
+        assertThat(h.pendingUpdates()).isEqualTo(12);
+        assertThat(h.securityUpdates()).isEqualTo(3);
+        assertThat(h.rebootRequired()).isTrue();
+        assertThat(h.autoUpdates()).isFalse();
+        assertThat(h.uptimeSeconds()).isEqualTo(86400L);
+        assertThat(h.backupTimer()).isTrue();
+        assertThat(h.backupFiles()).containsExactly(
+                new ServerSnapshot.BackupFile("dump-20261013T020000Z.sql.gz.enc", 1791900000L, 524288L));
+        assertThat(h.signals()).containsExactly("APACHE_PRESENT");
+    }
+
+    @Test
+    void hygieneIsNullForOlderDiscoveries() {
+        assertThat(parser.parse("###WHO###\nroot\n", "fixture", "lab").hygiene()).isNull();
+    }
+
+    @Test
     void minerAndPhpSignalsBecomeWarnings() {
         String raw = """
                 ###SIGNALS###
