@@ -157,6 +157,11 @@ public class DiscoveryParser {
         Boolean auto = null;
         Long uptime = null;
         Boolean timer = null;
+        Boolean drillTimer = null;
+        String drillAt = null;
+        String drillDump = "";
+        boolean drillOk = false;
+        List<String> drillLines = new ArrayList<>();
         List<ServerSnapshot.BackupFile> backups = new ArrayList<>();
         for (String line : lines(body)) {
             String t = line.trim();
@@ -179,6 +184,12 @@ public class DiscoveryParser {
                     uptime = u == null ? null : u.longValue();
                 }
                 case "BACKUP_TIMER" -> timer = "on".equals(value);
+                case "DRILL_TIMER" -> drillTimer = "on".equals(value);
+                case "AUTO_DRILL_AT" -> drillAt = value;
+                case "AUTO_DRILL_OK" -> drillOk = "1".equals(value);
+                case "AUTO_DRILL_DUMP" -> drillDump = value;
+                case "AUTO_DRILL_DB", "AUTO_DRILL_VOL", "AUTO_DRILL_PROBLEM" ->
+                        drillLines.add(key.substring("AUTO_".length()) + "=" + value);
                 case "BACKUP_FILE" -> {
                     Matcher m = BACKUP_FILE.matcher(value);
                     if (m.matches()) {
@@ -196,8 +207,10 @@ public class DiscoveryParser {
                 signals.add(line.trim());
             }
         }
+        ServerSnapshot.AutoDrill autoDrill = drillAt == null ? null
+                : new ServerSnapshot.AutoDrill(drillAt, drillOk, drillDump, List.copyOf(drillLines));
         return new ServerSnapshot.Hygiene(pending, security, reboot, auto, uptime, timer,
-                List.copyOf(backups), List.copyOf(signals));
+                List.copyOf(backups), List.copyOf(signals), drillTimer, autoDrill);
     }
 
     private static Integer parseIntOrNull(String value) {

@@ -125,7 +125,8 @@ public final class InstallPlanBuilder {
             case "deploy" -> "Compte deploy : docker, pas sudo, clé de l’agent, SSH autorisé. Aucune app lancée.";
             case "redis" -> "Conteneur Redis, réseau data interne, requirepass, aucun port publié.";
             case "backups" -> "Dump MariaDB et fichiers des volumes chiffrés sur le VPS (quotidien), copie vers le poste "
-                    + "opérateur, contenu vérifié. Un script d’avant les fichiers des volumes est réinstallé.";
+                    + "opérateur, contenu vérifié ; exercice de restauration automatique chaque mois (et tout de suite). "
+                    + "Un script d’avant les fichiers des volumes ou sans exercice automatique est réinstallé.";
             case "docker" -> dockerReadyReason(snap, selectedDetails);
             default -> "Absent. Install idempotente, versionnée, après confirmation.";
         };
@@ -300,7 +301,8 @@ public final class InstallPlanBuilder {
         List<String> out = new ArrayList<>();
         if (pick.contains("encrypted-dump")) {
             out.add("Dump MariaDB complet (si conteneur) + archive des volumes de fichiers, chiffrement AES-256-CBC "
-                    + "sur le VPS, minuteur quotidien");
+                    + "sur le VPS, minuteur quotidien ; exercice de restauration mensuel automatique "
+                    + "(bases et volumes jetables, puis supprimés)");
         }
         if (pick.contains("offsite")) {
             out.add("Copie du .enc vers state/backups/<serveur>/ sur le poste opérateur (SHA-256 contrôlé)");

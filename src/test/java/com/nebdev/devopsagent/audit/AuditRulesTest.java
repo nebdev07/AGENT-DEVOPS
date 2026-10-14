@@ -64,6 +64,36 @@ class AuditRulesTest {
         assertThat(r.facts().publicPorts()).isEqualTo("22, 443");
     }
 
+    private static AuditReport withDrill(Boolean drillTimer, ServerSnapshot.AutoDrill drill) {
+        BackupFile fresh = new BackupFile("dump.sql.gz.enc", NOW.minusSeconds(6 * 3600).getEpochSecond(), 5_000_000);
+        Hygiene h = new Hygiene(0, 0, false, true, 1000L, true, List.of(fresh), List.of(), drillTimer, drill);
+        return AuditRules.evaluate(snap("ubuntu", "24.04", "no", "no", "active", "active",
+                List.of(new ListeningPort("tcp", "0.0.0.0", 22)), h, true, true, 30));
+    }
+
+    @Test
+    void automaticRestoreDrillIsJudged() {
+        assertThat(ids(withDrill(null, null))).doesNotContain("restore-drill-missing");
+
+        assertThat(ids(withDrill(true, null))).containsExactly("restore-drill-missing");
+
+        AuditReport old = withDrill(true, new ServerSnapshot.AutoDrill("2026-08-01T04:00:00Z", true, "d", List.of()));
+        assertThat(old.findings().get(0).title()).contains("73 jours");
+
+        AuditReport recent = withDrill(true, new ServerSnapshot.AutoDrill("2026-10-01T04:00:00Z", true, "d",
+                List.of("DRILL_DB=app_arc:25:25")));
+        assertThat(recent.findings()).isEmpty();
+        assertThat(recent.strengths()).anyMatch(s -> s.contains("restaurée avec succès le 1 octobre 2026"));
+
+        AuditReport failed = withDrill(true, new ServerSnapshot.AutoDrill("2026-10-01T04:00:00Z", false, "d",
+                List.of("DRILL_DB=app_arc:25:24")));
+        assertThat(failed.findings()).singleElement().satisfies(f -> {
+            assertThat(f.id()).isEqualTo("restore-drill-failed");
+            assertThat(f.severity()).isEqualTo(Severity.ELEVE);
+            assertThat(f.observed()).contains("app_arc:25:24");
+        });
+    }
+
     @Test
     void typicalHandMadeServerIsRankedAndSortedBySeverity() {
         AuditReport r = AuditRules.evaluate(snap("ubuntu", "20.04", "yes", "yes", "inactive", "absent",

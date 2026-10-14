@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,6 +35,34 @@ class BackupServiceTest {
         service = new BackupService(props, new ActionGuard(),
                 new ForbiddenTargetGuard(List.of("198.51.100.7"), List.of("198.51.100.30")),
                 null, null, null);
+    }
+
+    @Test
+    void purgeKeepsRecentCopiesAndTheLastDrilledOne() throws Exception {
+        List<BackupService.PurgeCandidate> c = new ArrayList<>();
+        for (int day = 1; day <= 14; day++) {
+            c.add(new BackupService.PurgeCandidate(String.format("dump-202610%02dT023000Z.sql.gz.enc", day), day == 2));
+        }
+        List<String> removed = BackupService.purgePlan(c, 10);
+        assertThat(removed).containsExactlyInAnyOrder(
+                "dump-20261001T023000Z.sql.gz.enc", "dump-20261003T023000Z.sql.gz.enc",
+                "dump-20261004T023000Z.sql.gz.enc");
+        assertThat(BackupService.purgePlan(c.subList(0, 5), 10)).isEmpty();
+
+        Path dir = state.resolve("backups").resolve("198.51.100.20");
+        Files.createDirectories(dir);
+        for (int day = 1; day <= 12; day++) {
+            String dump = String.format("dump-202610%02dT023000Z.sql.gz.enc", day);
+            Files.writeString(dir.resolve(dump), "x");
+            Files.writeString(dir.resolve(dump + ".json"), day == 1 ? "{\"drill\":{\"ok\":true}}" : "{}");
+            Files.writeString(dir.resolve(BackupService.filesNameFor(dump)), "x");
+        }
+        assertThat(service.purgeLocal("198.51.100.20")).containsExactly("dump-20261002T023000Z.sql.gz.enc");
+        assertThat(dir.resolve("dump-20261002T023000Z.sql.gz.enc")).doesNotExist();
+        assertThat(dir.resolve("dump-20261002T023000Z.sql.gz.enc.json")).doesNotExist();
+        assertThat(dir.resolve("files-20261002T023000Z.tar.gz.enc")).doesNotExist();
+        assertThat(dir.resolve("dump-20261001T023000Z.sql.gz.enc")).exists();
+        assertThat(dir.resolve("files-20261001T023000Z.tar.gz.enc")).exists();
     }
 
     @Test

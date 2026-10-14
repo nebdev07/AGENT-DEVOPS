@@ -40,6 +40,8 @@ import java.util.stream.Stream;
 public class BackupService {
 
     static final int BACKUP_TIMEOUT_SECONDS = 1800;
+    /** Copies gardées sur ce poste par serveur (BIZ-12), en plus de la dernière restaurée avec succès. */
+    static final int LOCAL_KEEP = 10;
     static final Pattern FILE_NAME = Pattern.compile("^dump-\\d{8}T\\d{6}Z\\.sql\\.gz\\.enc$");
     static final Pattern FILES_ARCHIVE_NAME = Pattern.compile("^files-\\d{8}T\\d{6}Z\\.tar\\.gz\\.enc$");
     private static final Pattern READY = Pattern.compile("(?m)^BACKUP_READY=(\\S+)\\s*$");
@@ -186,7 +188,59 @@ public class BackupService {
             Matcher fsha = FILES_SHA.matcher(raw);
             copyToLocal(target, filesPath, fsha.find() ? fsha.group(1).toLowerCase(Locale.ROOT) : "", FILES_ARCHIVE_NAME);
         }
-        return verify(target.host(), dump.getFileName().toString());
+        LocalBackup copied = verify(target.host(), dump.getFileName().toString());
+        purgeLocal(target.host());
+        return copied;
+    }
+
+    // ---------------------------------------------------------------- purge des copies locales (BIZ-12)
+
+    /** Une copie locale vue par la purge : nom du dump et succès de son dernier exercice. */
+    record PurgeCandidate(String file, boolean drillOk) {}
+
+    /**
+     * Copies à supprimer : on garde les {@code keep} plus récentes et, en plus, la plus récente dont l’exercice
+     * de restauration a réussi (la dernière preuve de restauration n’est jamais effacée).
+     */
+    static List<String> purgePlan(List<PurgeCandidate> candidates, int keep) {
+        List<PurgeCandidate> sorted = candidates.stream()
+                .sorted(Comparator.comparing(PurgeCandidate::file).reversed())
+                .toList();
+        String lastDrilled = sorted.stream().filter(PurgeCandidate::drillOk).map(PurgeCandidate::file)
+                .findFirst().orElse(null);
+        List<String> out = new ArrayList<>();
+        for (int i = keep; i < sorted.size(); i++) {
+            String f = sorted.get(i).file();
+            if (!f.equals(lastDrilled)) {
+                out.add(f);
+            }
+        }
+        return out;
+    }
+
+    /** Supprime les copies locales anciennes du serveur (dump, archive des fichiers, fiches json). */
+    public List<String> purgeLocal(String host) throws IOException {
+        Path dir = hostDirIfExists(host);
+        if (dir == null) {
+            return List.of();
+        }
+        List<PurgeCandidate> candidates = new ArrayList<>();
+        try (Stream<Path> files = Files.list(dir)) {
+            for (Path p : files.filter(f -> FILE_NAME.matcher(f.getFileName().toString()).matches()).toList()) {
+                Object drill = readMeta(p).get("drill");
+                boolean ok = drill instanceof Map<?, ?> d && Boolean.TRUE.equals(d.get("ok"));
+                candidates.add(new PurgeCandidate(p.getFileName().toString(), ok));
+            }
+        }
+        List<String> removed = purgePlan(candidates, LOCAL_KEEP);
+        for (String name : removed) {
+            Path dump = dir.resolve(name);
+            Path files = dir.resolve(filesNameFor(name));
+            for (Path p : List.of(dump, metaPath(dump), files, metaPath(files))) {
+                Files.deleteIfExists(p);
+            }
+        }
+        return removed;
     }
 
     /** {@code dump-<horodatage>.sql.gz.enc} → {@code files-<horodatage>.tar.gz.enc}. */

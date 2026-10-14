@@ -12,6 +12,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -33,6 +35,10 @@ public final class AuditRules {
     static final Map<Integer, Exposed> SENSITIVE_PORTS = new LinkedHashMap<>();
     /** Une sauvegarde plus petite est presque toujours un dump vide ou un message d’erreur chiffré. */
     static final long SUSPICIOUS_BACKUP_BYTES = 1024;
+    /** Exercice mensuel + marge (minuteur décalé, VPS éteint le 1er). */
+    static final long DRILL_MAX_AGE_DAYS = 40;
+    private static final DateTimeFormatter DRILL_DATE = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.FRENCH)
+            .withZone(ZoneOffset.UTC);
 
     record Exposed(String service, Severity severity) {}
 
@@ -291,6 +297,41 @@ public final class AuditRules {
         if (!suspicious && ageHours <= 48) {
             strengths.add("Sauvegarde chiffrée de moins de 48 h présente.");
         }
+        restoreDrill(h, at, out, strengths);
+    }
+
+    /** Exercice de restauration automatique (BIZ-12). Rien n’est dit si l’analyse ne sait pas encore le lire. */
+    static void restoreDrill(Hygiene h, Instant at, List<Finding> out, List<String> strengths) {
+        if (h.drillTimer() == null) {
+            return;
+        }
+        ServerSnapshot.AutoDrill d = h.autoDrill();
+        Instant when = null;
+        if (d != null) {
+            try {
+                when = Instant.parse(d.at());
+            } catch (DateTimeParseException ignored) {
+                // date illisible : traité comme absent
+            }
+        }
+        if (d != null && when != null && !d.ok()) {
+            out.add(new Finding("restore-drill-failed", Severity.ELEVE, "Sauvegardes",
+                    "Le dernier exercice de restauration a échoué",
+                    "Exercice automatique du " + DRILL_DATE.format(when) + " : " + String.join(" · ", d.lines()) + ".",
+                    "La sauvegarde existe peut-être, mais rien ne prouve qu’elle se restaure.",
+                    "Relancer l’exercice depuis la console, lire l’écart, corriger la sauvegarde avant tout incident."));
+            return;
+        }
+        long days = when == null ? Long.MAX_VALUE : Duration.between(when, at).toDays();
+        if (days > DRILL_MAX_AGE_DAYS) {
+            out.add(new Finding("restore-drill-missing", Severity.FAIBLE, "Sauvegardes",
+                    when == null ? "Restauration jamais testée" : "Dernier exercice de restauration vieux de " + days + " jours",
+                    "Aucun exercice de restauration récent n’a été trouvé sur le serveur.",
+                    "Une sauvegarde jamais restaurée peut se révéler inutilisable le jour où on en a besoin.",
+                    "Programmer un exercice de restauration mensuel (base et fichiers restaurés à part, puis comptés)."));
+            return;
+        }
+        strengths.add("Dernière sauvegarde restaurée avec succès le " + DRILL_DATE.format(when) + " (exercice automatique).");
     }
 
     private static void resources(ServerSnapshot s, List<Finding> out) {

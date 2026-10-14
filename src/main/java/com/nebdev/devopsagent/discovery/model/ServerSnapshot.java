@@ -53,10 +53,24 @@ public record ServerSnapshot(
             Long uptimeSeconds,
             Boolean backupTimer,
             List<BackupFile> backupFiles,
-            List<String> signals
-    ) {}
+            List<String> signals,
+            Boolean drillTimer,
+            AutoDrill autoDrill
+    ) {
+        public Hygiene(Integer pendingUpdates, Integer securityUpdates, Boolean rebootRequired, Boolean autoUpdates,
+                       Long uptimeSeconds, Boolean backupTimer, List<BackupFile> backupFiles, List<String> signals) {
+            this(pendingUpdates, securityUpdates, rebootRequired, autoUpdates, uptimeSeconds, backupTimer,
+                    backupFiles, signals, null, null);
+        }
+    }
 
     public record BackupFile(String name, long modifiedEpochSeconds, long sizeBytes) {}
+
+    /**
+     * Dernier exercice de restauration automatique fait par le VPS (BIZ-12, {@code drill-last.txt}).
+     * @param lines DRILL_DB=base:attendu:obtenu, DRILL_VOL=volume:attendu:obtenu, DRILL_PROBLEM=…
+     */
+    public record AutoDrill(String at, boolean ok, String dump, List<String> lines) {}
 
     public record CpuInfo(int vcpus, String model) {}
 

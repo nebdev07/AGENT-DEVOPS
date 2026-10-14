@@ -117,9 +117,11 @@ fi
 section BACKUPS
 # L’ancien rôle (avant ADR-041) posait le marqueur sans script fiable : sans le script, à réinstaller.
 # Script d’avant BIZ-11 (sans les volumes de fichiers) : à réinstaller aussi. Sans droit de lecture, pas de contrôle.
+# Sans l’exercice automatique (BIZ-12) : à réinstaller aussi.
 backup_script_current() {
   if [ -n "$SUDO" ] || [ -r /usr/local/bin/vps-autopilot-backup ]; then
-    $SUDO grep -q '^# vps-autopilot-backup v2' /usr/local/bin/vps-autopilot-backup 2>/dev/null
+    $SUDO grep -q '^# vps-autopilot-backup v2' /usr/local/bin/vps-autopilot-backup 2>/dev/null \
+      && $SUDO grep -q '^# vps-autopilot-backup-drill v1' /usr/local/bin/vps-autopilot-backup-drill 2>/dev/null
   else
     return 0
   fi
@@ -228,6 +230,13 @@ if systemctl is-enabled vps-autopilot-backup.timer >/dev/null 2>&1; then
 else
   echo BACKUP_TIMER=off
 fi
+if systemctl is-enabled vps-autopilot-backup-drill.timer >/dev/null 2>&1; then
+  echo DRILL_TIMER=on
+else
+  echo DRILL_TIMER=off
+fi
+$SUDO cat /opt/vps-autopilot/backups/drill-last.txt 2>/dev/null \
+  | grep -E '^DRILL_(AT|OK|DUMP|DB|VOL|PROBLEM)=' | head -n 60 | sed 's/^/AUTO_/' || true
 for f in $($SUDO ls -1t /opt/vps-autopilot/backups/ 2>/dev/null | grep '\.enc$' | head -n 5); do
   echo "BACKUP_FILE=$($SUDO stat -c '%Y %s' "/opt/vps-autopilot/backups/$f" 2>/dev/null) $f"
 done

@@ -319,7 +319,8 @@ public final class StackCatalog {
                                 "Un dump en clair volé = toutes les données métier. Le chiffrement se fait avant de quitter le VPS.",
                                 "mariadb-dump de toutes les bases via docker exec, refusé s’il est incomplet, gzip, "
                                         + "openssl AES-256-CBC, plaintext effacé ; archive tar chiffrée en flux des volumes "
-                                        + "de fichiers (/app/data). Minuteur quotidien vers 02:30.",
+                                        + "de fichiers (/app/data). Minuteur quotidien vers 02:30 ; exercice de "
+                                        + "restauration automatique le 1er du mois vers 04:00.",
                                 true,
                                 StackComponent.PolicyImpact.WARNING,
                                 "Sans dump chiffré, une copie hors-site serait lisible si interceptée."

@@ -4,6 +4,7 @@ import com.nebdev.devopsagent.discovery.model.ServerSnapshot;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -128,6 +129,29 @@ class DiscoveryParserTest {
         assertThat(h.backupFiles()).containsExactly(
                 new ServerSnapshot.BackupFile("dump-20261013T020000Z.sql.gz.enc", 1791900000L, 524288L));
         assertThat(h.signals()).containsExactly("APACHE_PRESENT");
+        assertThat(h.drillTimer()).isNull();
+        assertThat(h.autoDrill()).isNull();
+    }
+
+    @Test
+    void automaticRestoreDrillIsParsed() {
+        String raw = """
+                ###HYGIENE###
+                BACKUP_TIMER=on
+                DRILL_TIMER=on
+                AUTO_DRILL_AT=2026-10-01T04:12:00Z
+                AUTO_DRILL_DUMP=dump-20261001T023000Z.sql.gz.enc
+                AUTO_DRILL_DB=app_arc:25:25
+                AUTO_DRILL_VOL=plat_arc_uploads:6:6
+                AUTO_DRILL_OK=1
+                ###WHO###
+                root
+                """;
+        ServerSnapshot.Hygiene h = parser.parse(raw, "ssh:198.51.100.20", "198.51.100.20").hygiene();
+        assertThat(h.drillTimer()).isTrue();
+        assertThat(h.autoDrill()).isEqualTo(new ServerSnapshot.AutoDrill("2026-10-01T04:12:00Z", true,
+                "dump-20261001T023000Z.sql.gz.enc",
+                List.of("DRILL_DB=app_arc:25:25", "DRILL_VOL=plat_arc_uploads:6:6")));
     }
 
     @Test
