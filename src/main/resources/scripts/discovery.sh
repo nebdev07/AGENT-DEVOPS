@@ -237,6 +237,16 @@ else
 fi
 $SUDO cat /opt/vps-autopilot/backups/drill-last.txt 2>/dev/null \
   | grep -E '^DRILL_(AT|OK|DUMP|DB|VOL|PROBLEM)=' | head -n 60 | sed 's/^/AUTO_/' || true
+# Alertes e-mail du VPS (BIZ-15) : réglées si la configuration et le relais d’échec de la sauvegarde existent.
+if [ -n "$SUDO" ] || [ "$(id -u)" -eq 0 ]; then
+  if $SUDO test -s /opt/vps-autopilot/notify.env 2>/dev/null \
+      && $SUDO test -f /etc/systemd/system/vps-autopilot-backup.service.d/notify.conf; then
+    echo NOTIFY=on
+  else
+    echo NOTIFY=off
+  fi
+  $SUDO cat /opt/vps-autopilot/notify-last.txt 2>/dev/null | grep -E '^NOTIFY_LAST_(AT|KIND|OK)=' || true
+fi
 for f in $($SUDO ls -1t /opt/vps-autopilot/backups/ 2>/dev/null | grep '\.enc$' | head -n 5); do
   echo "BACKUP_FILE=$($SUDO stat -c '%Y %s' "/opt/vps-autopilot/backups/$f" 2>/dev/null) $f"
 done

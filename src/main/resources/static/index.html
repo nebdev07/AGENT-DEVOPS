@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app39" />
+  <link rel="stylesheet" href="/console.css?v=app40" />
 </head>
 <body>
   <div class="bg"></div>
@@ -433,6 +433,20 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li><strong>Attestation de retrait</strong> signée, remise au client.</li>
           </ol>
           <p class="hint">Les sauvegardes, l’exercice mensuel, la garde en ligne et les sites restent sur le serveur et continuent de tourner sans l’agent : ils appartiennent au client.</p>
+          <p class="hint">Alertes e-mail : si le compte SMTP était le tien, <strong>Retirer les alertes</strong> (bande Sauvegardes) avant de partir, ou laisse le client poser son propre compte.</p>
+        </li>
+
+        <li class="step">
+          <h3>7g. Alertes e-mail du serveur</h3>
+          <p>Bande <strong>Sauvegardes</strong>, panneau <strong>Alertes e-mail</strong>. Le VPS envoie lui-même ses messages, même si ce poste est éteint.</p>
+          <ul>
+            <li><strong>Quand</strong> : la sauvegarde de nuit échoue, l’exercice de restauration mensuel échoue (avec le détail tables / fichiers), et, si la case est cochée, un résumé après chaque exercice réussi (une preuve par mois pour le client).</li>
+            <li><strong>Compte SMTP</strong> : celui d’une boîte d’envoi (hébergeur mail, Brevo, Gmail avec mot de passe d’application…). 465 = SSL, 587 = STARTTLS. « Aucun » n’est accepté que pour un relais sur le serveur lui-même (127.0.0.1).</li>
+            <li><strong>Enregistrer et envoyer un essai</strong> (à confirmer) pose les réglages et envoie tout de suite un message d’essai ; le résultat (parti ou réponse du serveur SMTP) s’affiche. <strong>Envoyer un essai</strong> rejoue l’envoi seul.</li>
+            <li><strong>Mot de passe</strong> : écrit sur le VPS seulement (<code>/opt/vps-autopilot/notify.env</code>, 600, root), jamais sur ce poste, jamais réaffiché, jamais dans le journal. Laisser le champ vide garde celui déjà posé.</li>
+            <li>L’analyse affiche l’état (actives, dernier envoi) et le rapport d’audit le juge : pas d’alerte = constat faible, dernier envoi en échec = constat moyen.</li>
+            <li>Limite : un serveur éteint ou injoignable ne peut rien envoyer. Pas de supervision 24/7.</li>
+          </ul>
         </li>
 
         <li class="step">
@@ -810,6 +824,59 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <p id="backupStatus" class="app-form-status" hidden></p>
             <p id="autoDrill" class="backup-check" hidden></p>
             <div id="backupList" class="backup-list"></div>
+            <div id="notifyBox">
+            <p class="kicker" style="margin-top:1.1rem">Alertes e-mail · envoyées par le VPS lui-même</p>
+            <p class="hint">
+              Le serveur écrit seul, même si ce poste est éteint : <strong>alerte si la sauvegarde de nuit ou l’exercice de restauration échoue</strong>,
+              et (option) un résumé après chaque exercice mensuel réussi. Mets le client et toi en destinataires.
+              Le mot de passe SMTP part directement sur le VPS (fichier 600, root) : <strong>jamais enregistré sur ce poste, jamais réaffiché, jamais dans le journal</strong>.
+            </p>
+            <p id="notifyState" class="backup-check" hidden></p>
+            <div class="row2 app-fields">
+              <label class="field">Serveur SMTP
+                <input id="notifyHost" type="text" autocomplete="off" spellcheck="false" placeholder="smtp.exemple.com" />
+              </label>
+              <label class="field">Port et chiffrement
+                <select id="notifyTls">
+                  <option value="ssl" data-port="465">465 · SSL</option>
+                  <option value="starttls" data-port="587">587 · STARTTLS</option>
+                  <option value="none" data-port="25">25 · aucun (relais local 127.0.0.1)</option>
+                </select>
+              </label>
+            </div>
+            <div class="row2 app-fields">
+              <label class="field">Identifiant SMTP
+                <input id="notifyUser" type="text" autocomplete="off" spellcheck="false" placeholder="alertes@exemple.com" />
+              </label>
+              <label class="field">Mot de passe SMTP
+                <input id="notifyPass" type="password" autocomplete="new-password" spellcheck="false" placeholder="vide = garder celui posé" />
+              </label>
+            </div>
+            <div class="row2 app-fields">
+              <label class="field">Expéditeur
+                <input id="notifyFrom" type="email" autocomplete="off" spellcheck="false" placeholder="alertes@exemple.com" />
+              </label>
+              <label class="field">Destinataires (1 à 5, séparés par des virgules)
+                <input id="notifyTo" type="text" autocomplete="off" spellcheck="false" placeholder="client@exemple.com, moi@exemple.com" />
+              </label>
+            </div>
+            <div class="row2 app-fields">
+              <label class="field">Nom du serveur dans les messages
+                <input id="notifyLabel" type="text" autocomplete="off" maxlength="60" placeholder="ex. Production client" />
+              </label>
+              <label class="field plat-keep restore-fk">
+                <input id="notifyMonthly" type="checkbox" checked />
+                Résumé après chaque exercice mensuel réussi
+              </label>
+            </div>
+            <div class="app-form-actions">
+              <button id="btnNotifySave" type="button">Enregistrer et envoyer un essai</button>
+              <button id="btnNotifyTest" type="button" class="ghost">Envoyer un essai</button>
+              <button id="btnNotifyLoad" type="button" class="ghost">Lire les réglages du VPS</button>
+              <button id="btnNotifyRemove" type="button" class="ghost danger">Retirer les alertes</button>
+            </div>
+            <p id="notifyStatus" class="app-form-status" hidden></p>
+            </div>
           </article>
         </div>
 
@@ -890,6 +957,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app39"></script>
+  <script src="/console.js?v=app40"></script>
 </body>
 </html>

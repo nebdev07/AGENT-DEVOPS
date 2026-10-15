@@ -17,7 +17,7 @@ public final class RoleScript {
 
     private static final Set<String> ALLOWED = Set.of(
             "security", "docker", "traefik", "mariadb", "deploy", "redis", "backups", "app", "platform",
-            "platform-restore", "platform-sql", "backup-drill", "platform-secret");
+            "platform-restore", "platform-sql", "backup-drill", "platform-secret", "notify");
     private static final Pattern SAFE_TOKEN = Pattern.compile("^[A-Za-z0-9._-]{0,80}$");
     private static final Map<String, String> FLAGS = new LinkedHashMap<>();
 
@@ -280,6 +280,34 @@ public final class RoleScript {
             prefix.append("SECRET_VALUE_B64=").append(b64(value)).append('\n');
         }
         return prefix + load("platform-secret");
+    }
+
+    /**
+     * Alertes e-mail du VPS. Mot de passe et nom affiché en base64 dans le script envoyé sur l’entrée standard ;
+     * {@code settings} n’est lu que pour {@code SET}.
+     */
+    public static String loadNotify(Notifications.Mode mode, Notifications.Settings settings) {
+        StringBuilder prefix = new StringBuilder();
+        prefix.append("NOTIFY_MODE=").append(mode.script()).append('\n');
+        boolean writes = switch (mode) {
+            case SET -> true;
+            case TEST, STATUS, REMOVE -> false;
+        };
+        if (writes) {
+            if (settings == null) {
+                throw new IllegalArgumentException("Réglages des alertes manquants.");
+            }
+            prefix.append("NOTIFY_HOST=").append(settings.host()).append('\n');
+            prefix.append("NOTIFY_PORT=").append(settings.port()).append('\n');
+            prefix.append("NOTIFY_TLS=").append(settings.tls().script()).append('\n');
+            prefix.append("NOTIFY_USER=").append(settings.user()).append('\n');
+            prefix.append("NOTIFY_PASS_B64=").append(b64(settings.password())).append('\n');
+            prefix.append("NOTIFY_FROM=").append(settings.from()).append('\n');
+            prefix.append("NOTIFY_TO=").append(String.join(",", settings.to())).append('\n');
+            prefix.append("NOTIFY_LABEL_B64=").append(b64(settings.label())).append('\n');
+            prefix.append("NOTIFY_MONTHLY=").append(settings.monthly() ? "1" : "0").append('\n');
+        }
+        return prefix + load("notify");
     }
 
     private static String b64(String text) {

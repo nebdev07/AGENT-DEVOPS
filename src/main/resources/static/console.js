@@ -1119,6 +1119,7 @@ function renderAutoDrill() {
 async function loadBackups() {
   loadJournal();
   renderAutoDrill();
+  renderNotifyState();
   const host = backupHost();
   if (!host) {
     renderBackups([]);
@@ -2704,6 +2705,178 @@ if ($("btnSecretSet")) {
   $("btnSecretSet").addEventListener("click", () => changeSecret(false));
   $("btnSecretRemove").addEventListener("click", () => changeSecret(true));
   $("btnSecretList").addEventListener("click", listSecrets);
+}
+
+function notifySay(msg, kind) {
+  const st = $("notifyStatus");
+  st.hidden = !msg;
+  st.textContent = msg || "";
+  st.className = "app-form-status" + (kind ? " " + kind : "");
+}
+
+const NOTIFY_KIND = { test: "essai", failure: "alerte d’échec", "drill-ok": "résumé d’exercice" };
+
+function notifyWhen(iso) {
+  return iso ? new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "";
+}
+
+/** État lu par l’analyse (hygiene.alerts) : null = analyse trop ancienne pour le savoir. */
+function renderNotifyState() {
+  const box = $("notifyState");
+  const a = journey.snapshot?.hygiene?.alerts;
+  if (!a) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  if (!a.on) {
+    box.className = "backup-check bad";
+    box.textContent = "Alertes e-mail : non configurées sur ce VPS · personne n’est prévenu si une sauvegarde échoue.";
+    return;
+  }
+  const last = a.lastAt
+    ? " · dernier envoi (" + (NOTIFY_KIND[a.lastKind] || a.lastKind) + ") le " + notifyWhen(a.lastAt)
+      + (a.lastOk ? " : parti" : " : ÉCHEC")
+    : " · aucun envoi encore";
+  box.className = "backup-check" + (a.lastOk === false ? " bad" : "");
+  box.textContent = "Alertes e-mail : actives" + last + ".";
+}
+
+function notifyOutcomeText(o) {
+  const s = o.status || {};
+  const to = (s.to || []).join(", ");
+  if (o.action === "REMOVED") return "Alertes retirées du VPS.";
+  const head = o.action === "CONFIGURED" ? "Réglages posés sur le VPS (destinataires : " + to + ").\n" : "";
+  return head + (o.testOk
+    ? "Message d’essai envoyé : vérifie la boîte de réception (et les indésirables)."
+    : "Le message d’essai n’est pas parti : " + (o.error || "erreur inconnue")
+      + "\nÀ faire : vérifie serveur, port, identifiant, mot de passe et que l’expéditeur est autorisé par le compte.");
+}
+
+async function notifyPost(path, extra, busyTitle) {
+  const t = target();
+  if (!t.host || !t.user) {
+    notifySay("Cause : IP ou utilisateur SSH vide.\nÀ faire : remplis IP + utilisateur en haut, Analyser.", "err");
+    return null;
+  }
+  showBusy({ risk: "CHANGE", title: busyTitle, detail: t.user + "@" + t.host });
+  try {
+    const r = await fetch("/api/v1/notify" + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...extra, host: t.host, port: t.port, user: t.user, confirm: true }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    return j.outcome || {};
+  } catch (e) {
+    notifySay(e.message, "err");
+    return null;
+  } finally {
+    hideBusy();
+    loadJournal();
+  }
+}
+
+async function saveNotify() {
+  const t = target();
+  const opt = $("notifyTls").selectedOptions[0];
+  const body = {
+    smtpHost: $("notifyHost").value.trim(),
+    smtpPort: Number(opt?.dataset.port) || 465,
+    tls: $("notifyTls").value,
+    smtpUser: $("notifyUser").value.trim(),
+    smtpPassword: $("notifyPass").value,
+    from: $("notifyFrom").value.trim(),
+    to: $("notifyTo").value.trim(),
+    label: $("notifyLabel").value.trim(),
+    monthly: $("notifyMonthly").checked,
+  };
+  if (!body.smtpHost || !body.from || !body.to) {
+    notifySay("Remplis au moins le serveur SMTP, l’expéditeur et les destinataires.", "err");
+    return;
+  }
+  if (/[\r\n]/.test(body.smtpPassword)) {
+    notifySay("Le mot de passe ne peut pas contenir de retour à la ligne.", "err");
+    return;
+  }
+  if (!window.confirm("CHANGE sur " + t.user + "@" + t.host + " :\nposer les alertes e-mail (" + body.smtpHost + ", vers "
+    + body.to + ") et envoyer un message d’essai.\nAucun service n’est redémarré.\n\nContinuer ?")) {
+    return;
+  }
+  const o = await notifyPost("", body, "Pose des alertes e-mail");
+  $("notifyPass").value = "";
+  if (!o) return;
+  notifySay(notifyOutcomeText(o), o.testOk ? "ok" : "err");
+  applyNotifyStatus(o.status);
+}
+
+async function testNotify() {
+  const t = target();
+  if (!window.confirm("Envoyer un message d’essai depuis " + t.host + " ?")) return;
+  const o = await notifyPost("/test", {}, "Message d’essai");
+  if (!o) return;
+  notifySay(notifyOutcomeText(o), o.testOk ? "ok" : "err");
+  applyNotifyStatus(o.status);
+}
+
+async function removeNotify() {
+  const t = target();
+  if (!window.confirm("CHANGE sur " + t.user + "@" + t.host + " :\nretirer les alertes e-mail (réglages et mot de passe effacés du VPS).\n\nContinuer ?")) {
+    return;
+  }
+  const o = await notifyPost("/remove", {}, "Retrait des alertes");
+  if (!o) return;
+  notifySay(notifyOutcomeText(o), "ok");
+  applyNotifyStatus(o.status);
+}
+
+function applyNotifyStatus(s) {
+  if (!s) return;
+  if (journey.snapshot?.hygiene) {
+    journey.snapshot.hygiene.alerts = { on: s.on, lastAt: s.lastAt, lastKind: s.lastKind, lastOk: s.lastOk };
+    renderNotifyState();
+  }
+  if (!s.on) return;
+  $("notifyHost").value = s.host || "";
+  const tls = s.tls || "ssl";
+  $("notifyTls").value = tls;
+  const opt = $("notifyTls").selectedOptions[0];
+  if (opt && s.port) opt.dataset.port = String(s.port);
+  $("notifyUser").value = s.user || "";
+  $("notifyPass").placeholder = s.passwordSet ? "posé sur le VPS · vide = garder" : "vide = garder celui posé";
+  $("notifyFrom").value = s.from || "";
+  $("notifyTo").value = (s.to || []).join(", ");
+  $("notifyLabel").value = s.label || "";
+  $("notifyMonthly").checked = !!s.monthly;
+}
+
+async function loadNotify() {
+  const t = target();
+  if (!t.host || !t.user) {
+    notifySay("Remplis IP + utilisateur en haut.", "err");
+    return;
+  }
+  notifySay("Lecture des réglages sur le VPS…");
+  try {
+    const q = new URLSearchParams({ host: t.host, port: String(t.port), user: t.user });
+    const r = await fetch("/api/v1/notify?" + q);
+    const s = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(s.error || r.statusText);
+    applyNotifyStatus(s);
+    notifySay(s.on
+      ? "Alertes actives vers " + (s.to || []).join(", ") + (s.lastError ? "\nDernière erreur : " + s.lastError : "")
+      : "Aucune alerte configurée sur ce VPS.", s.on && s.lastOk !== false ? "ok" : "err");
+  } catch (e) {
+    notifySay(e.message, "err");
+  }
+}
+
+if ($("btnNotifySave")) {
+  $("btnNotifySave").addEventListener("click", saveNotify);
+  $("btnNotifyTest").addEventListener("click", testNotify);
+  $("btnNotifyLoad").addEventListener("click", loadNotify);
+  $("btnNotifyRemove").addEventListener("click", removeNotify);
 }
 
 function sqlSay(msg, kind) {

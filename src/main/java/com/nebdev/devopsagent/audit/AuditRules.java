@@ -298,6 +298,32 @@ public final class AuditRules {
             strengths.add("Sauvegarde chiffrée de moins de 48 h présente.");
         }
         restoreDrill(h, at, out, strengths);
+        alerts(h, out, strengths);
+    }
+
+    /** Alertes e-mail du VPS (BIZ-15). Rien n’est dit si l’analyse ne sait pas encore les lire. */
+    static void alerts(Hygiene h, List<Finding> out, List<String> strengths) {
+        ServerSnapshot.Notify n = h.alerts();
+        if (n == null || !Boolean.TRUE.equals(h.backupTimer())) {
+            return;
+        }
+        if (!n.on()) {
+            out.add(new Finding("alerts-missing", Severity.FAIBLE, "Sauvegardes",
+                    "Personne n’est prévenu si une sauvegarde échoue",
+                    "Les sauvegardes et exercices automatiques n’envoient aucune alerte en cas d’échec.",
+                    "Une sauvegarde peut échouer plusieurs nuits de suite sans que personne ne le sache.",
+                    "Configurer les alertes e-mail du serveur (client et prestataire en destinataires)."));
+            return;
+        }
+        if (Boolean.FALSE.equals(n.lastOk())) {
+            out.add(new Finding("alerts-failing", Severity.MOYEN, "Sauvegardes",
+                    "Le dernier envoi d’alerte a échoué",
+                    "Le serveur n’a pas pu envoyer son dernier message (" + n.lastAt() + ").",
+                    "Un échec de sauvegarde passerait inaperçu.",
+                    "Vérifier le compte SMTP (mot de passe, expéditeur autorisé) puis envoyer un message d’essai."));
+            return;
+        }
+        strengths.add("Alerte e-mail automatique en cas d’échec de sauvegarde ou d’exercice de restauration.");
     }
 
     /** Exercice de restauration automatique (BIZ-12). Rien n’est dit si l’analyse ne sait pas encore le lire. */

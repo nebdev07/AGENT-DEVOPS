@@ -94,6 +94,31 @@ class AuditRulesTest {
         });
     }
 
+    private static AuditReport withAlerts(ServerSnapshot.Notify notify) {
+        BackupFile fresh = new BackupFile("dump.sql.gz.enc", NOW.minusSeconds(6 * 3600).getEpochSecond(), 5_000_000);
+        Hygiene h = new Hygiene(0, 0, false, true, 1000L, true, List.of(fresh), List.of(), null, null, notify);
+        return AuditRules.evaluate(snap("ubuntu", "24.04", "no", "no", "active", "active",
+                List.of(new ListeningPort("tcp", "0.0.0.0", 22)), h, true, true, 30));
+    }
+
+    @Test
+    void emailAlertsAreJudged() {
+        assertThat(ids(withAlerts(null))).isEmpty();
+
+        assertThat(withAlerts(new ServerSnapshot.Notify(false, null, null, null)).findings()).singleElement()
+                .satisfies(f -> {
+                    assertThat(f.id()).isEqualTo("alerts-missing");
+                    assertThat(f.severity()).isEqualTo(Severity.FAIBLE);
+                });
+
+        assertThat(withAlerts(new ServerSnapshot.Notify(true, "2026-10-15T09:00:00Z", "failure", false)).findings())
+                .singleElement().satisfies(f -> assertThat(f.id()).isEqualTo("alerts-failing"));
+
+        AuditReport ok = withAlerts(new ServerSnapshot.Notify(true, "2026-10-15T09:00:00Z", "test", true));
+        assertThat(ok.findings()).isEmpty();
+        assertThat(ok.strengths()).anyMatch(s -> s.contains("Alerte e-mail automatique"));
+    }
+
     @Test
     void typicalHandMadeServerIsRankedAndSortedBySeverity() {
         AuditReport r = AuditRules.evaluate(snap("ubuntu", "20.04", "yes", "yes", "inactive", "absent",

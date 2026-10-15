@@ -55,14 +55,28 @@ public record ServerSnapshot(
             List<BackupFile> backupFiles,
             List<String> signals,
             Boolean drillTimer,
-            AutoDrill autoDrill
+            AutoDrill autoDrill,
+            Notify alerts
     ) {
         public Hygiene(Integer pendingUpdates, Integer securityUpdates, Boolean rebootRequired, Boolean autoUpdates,
                        Long uptimeSeconds, Boolean backupTimer, List<BackupFile> backupFiles, List<String> signals) {
             this(pendingUpdates, securityUpdates, rebootRequired, autoUpdates, uptimeSeconds, backupTimer,
-                    backupFiles, signals, null, null);
+                    backupFiles, signals, null, null, null);
+        }
+
+        public Hygiene(Integer pendingUpdates, Integer securityUpdates, Boolean rebootRequired, Boolean autoUpdates,
+                       Long uptimeSeconds, Boolean backupTimer, List<BackupFile> backupFiles, List<String> signals,
+                       Boolean drillTimer, AutoDrill autoDrill) {
+            this(pendingUpdates, securityUpdates, rebootRequired, autoUpdates, uptimeSeconds, backupTimer,
+                    backupFiles, signals, drillTimer, autoDrill, null);
         }
     }
+
+    /**
+     * Alertes e-mail envoyées par le VPS (BIZ-15). {@code lastOk} null = aucun envoi encore.
+     * @param lastKind test, failure ou drill-ok
+     */
+    public record Notify(boolean on, String lastAt, String lastKind, Boolean lastOk) {}
 
     public record BackupFile(String name, long modifiedEpochSeconds, long sizeBytes) {}
 

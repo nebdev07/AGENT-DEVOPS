@@ -152,6 +152,26 @@ class DiscoveryParserTest {
         assertThat(h.autoDrill()).isEqualTo(new ServerSnapshot.AutoDrill("2026-10-01T04:12:00Z", true,
                 "dump-20261001T023000Z.sql.gz.enc",
                 List.of("DRILL_DB=app_arc:25:25", "DRILL_VOL=plat_arc_uploads:6:6")));
+        assertThat(h.alerts()).isNull();
+    }
+
+    @Test
+    void emailAlertsStateIsParsed() {
+        String raw = """
+                ###HYGIENE###
+                BACKUP_TIMER=on
+                NOTIFY=on
+                NOTIFY_LAST_AT=2026-10-15T09:00:00Z
+                NOTIFY_LAST_KIND=failure
+                NOTIFY_LAST_OK=0
+                ###WHO###
+                root
+                """;
+        ServerSnapshot.Hygiene h = parser.parse(raw, "ssh:198.51.100.20", "198.51.100.20").hygiene();
+        assertThat(h.alerts()).isEqualTo(new ServerSnapshot.Notify(true, "2026-10-15T09:00:00Z", "failure", false));
+
+        ServerSnapshot.Hygiene off = parser.parse("###HYGIENE###\nNOTIFY=off\n###WHO###\nroot\n", "f", "lab").hygiene();
+        assertThat(off.alerts()).isEqualTo(new ServerSnapshot.Notify(false, null, null, null));
     }
 
     @Test
