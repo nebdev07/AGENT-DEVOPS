@@ -13,7 +13,7 @@
 
     <groupId>com.nebdev</groupId>
     <artifactId>devops-agent</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <name>VPS Autopilot</name>
     <description>Agent DevOps — discovery read-only puis provisioning contrôlé</description>
 

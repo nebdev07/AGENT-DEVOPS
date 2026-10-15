@@ -21,6 +21,15 @@ class RoleScriptTest {
     }
 
     @Test
+    void appRedeployChecksOutTheFetchedCommit() {
+        String script = RoleScript.load("app");
+        assertThat(script).contains("fetch --depth 1 origin \"$APP_REF\"")
+                .contains("checkout -f FETCH_HEAD")
+                .doesNotContain("checkout -f \"$APP_REF\"")
+                .contains("APP_COMMIT=");
+    }
+
+    @Test
     void traefikRoleIsVersionedAndUnix() {
         String script = RoleScript.load("traefik");
         assertThat(script).doesNotContain("\r");

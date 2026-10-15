@@ -101,8 +101,17 @@ $SUDO mkdir -p "$ROOT"
 $SUDO chown deploy:deploy "$ROOT"
 
 if [ -d "$SRC/.git" ]; then
-  git_as_deploy -C "$SRC" fetch --depth 1 origin "$APP_REF" || git_as_deploy -C "$SRC" fetch --depth 1 origin
-  git_as_deploy -C "$SRC" checkout -f "$APP_REF" || git_as_deploy -C "$SRC" checkout -f FETCH_HEAD
+  # Mise à jour : la branche locale n’avance pas avec fetch, seul FETCH_HEAD porte le dernier commit de la référence.
+  FETCH_LOG="$(mktemp)"
+  if ! git_as_deploy -C "$SRC" fetch --depth 1 origin "$APP_REF" >"$FETCH_LOG" 2>&1; then
+    echo GIT_CLONE_FAILED
+    tail -n 20 "$FETCH_LOG" || true
+    rm -f "$FETCH_LOG"
+    exit 1
+  fi
+  git_as_deploy -C "$SRC" checkout -f FETCH_HEAD >>"$FETCH_LOG" 2>&1
+  rm -f "$FETCH_LOG"
+  echo "APP_COMMIT=$(git_as_deploy -C "$SRC" rev-parse --short HEAD)"
 else
   $SUDO rm -rf "$SRC"
   CLONE_LOG="$(mktemp)"
@@ -116,6 +125,7 @@ else
     git_as_deploy -C "$SRC" checkout "$APP_REF" || true
   fi
   rm -f "$CLONE_LOG"
+  echo "APP_COMMIT=$(git_as_deploy -C "$SRC" rev-parse --short HEAD)"
 fi
 
 if [ -n "${APP_SCAFFOLD_B64:-}" ]; then
