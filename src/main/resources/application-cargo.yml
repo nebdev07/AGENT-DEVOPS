@@ -1,4 +1,6 @@
 server.port: 8080
+# Conteneur derrière Traefik : écoute sur le réseau Docker ; CargoModeFilter n’ouvre que la preuve et la santé.
+server.address: 0.0.0.0
 
 devops:
   state-dir: /tmp/vps-autopilot-cargo

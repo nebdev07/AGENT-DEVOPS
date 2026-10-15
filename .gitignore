@@ -28,3 +28,6 @@ infrastructure/lab/keys/
 # OS
 Thumbs.db
 .DS_Store
+
+# Paquets de livraison (scripts/release.ps1)
+dist/

@@ -1,4 +1,6 @@
 server.port: 8088
+# Console sans authentification : joignable depuis ce poste seulement (ADR-045). SERVER_ADDRESS pour changer.
+server.address: ${SERVER_ADDRESS:127.0.0.1}
 
 spring:
   config:

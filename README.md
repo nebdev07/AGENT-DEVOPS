@@ -12,7 +12,9 @@ Avec Docker : `powershell -File scripts/lab-up.ps1` puis `.env` vers `127.0.0.1:
 Avec le VPS-2 : `.env` vers l’IP publique.
 ```
 
-Les installations (Docker, Traefik, MariaDB, compte deploy, une app Git) passent par **l’agent** (plan + confirmation). Backups : plus tard.
+Les installations (Docker, Traefik, MariaDB, compte deploy, une app Git) passent par **l’agent** (plan + confirmation). ~~Backups : plus tard.~~ Sauvegardes chiffrées, exercice de restauration mensuel et alertes e-mail : livrés (ADR-041, ADR-044).
+
+**Installer une version (sans Maven ni sources) :** dézipper `vps-autopilot-<version>.zip` (construit par `scripts/release.ps1`), lancer `start.cmd`, suivre `LISEZMOI.txt`. Console : `http://127.0.0.1:8088` (ce poste seulement). Versions, mise à jour, instance publique : `.docs/deploiement.md`.
 
 **Reprendre le projet :** `.docs/documentation.md` (parcours) — puis `.docs/`. Règles agent : `.cursor/rules.md`.
 

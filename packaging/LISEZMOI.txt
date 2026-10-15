@@ -1,0 +1,42 @@
+VPS Autopilot - console de l'opérateur
+=======================================
+
+La console tourne sur CE poste et n'est joignable que depuis lui : http://127.0.0.1:8088
+Elle n'a pas de mot de passe : ne l'expose jamais sur un réseau (voir SERVER_ADDRESS plus bas).
+
+1. Prérequis
+   - Java 21 ou plus (Temurin : https://adoptium.net). Vérifier : java -version
+   - Une clé SSH dédiée à l'agent, par exemple :
+       ssh-keygen -t ed25519 -f "%USERPROFILE%\.ssh\vps-autopilot" -C vps-autopilot
+
+2. Première installation
+   - Dézipper ce dossier où tu veux (ex. C:\vps-autopilot).
+   - Lancer start.cmd (Windows) ou sh start.sh (Linux, macOS).
+     Au premier lancement, .env est créé depuis .env.example : y renseigner
+       DEVOPS_SSH_KEY=C:\Users\<toi>\.ssh\vps-autopilot
+     puis relancer.
+   - Ouvrir http://127.0.0.1:8088 et suivre l'Aide (bouton en haut de la console).
+   - Facultatif : copier state\agent-local.example.yml en state\agent-local.yml pour bloquer
+     des serveurs (aucune action) ou les mettre en lecture seule.
+
+3. Ce qu'il faut sauvegarder sur ce poste (et ne jamais partager)
+   - state\backup.key      : clé de chiffrement des sauvegardes. Perdue = sauvegardes illisibles.
+   - state\                : serveurs connus, intentions, journal des interventions, copies de sauvegardes.
+   - .env et la clé SSH    : accès de l'agent aux serveurs.
+
+4. Mise à jour
+   - Arrêter la console (Ctrl+C dans sa fenêtre).
+   - Remplacer vps-autopilot.jar (et les scripts start.*) par ceux de la nouvelle version.
+   - Ne pas toucher à .env ni à state\. Relancer start.cmd.
+   - Après la mise à jour : Analyser chaque serveur ; si un rôle est proposé « à installer »,
+     son script serveur a changé (lire le changelog avant de réinstaller en production).
+   - Retour arrière : remettre l'ancien vps-autopilot.jar.
+
+5. Réglages par variables d'environnement (ou dans .env)
+   - SERVER_PORT     : port de la console (8088 par défaut).
+   - SERVER_ADDRESS  : 127.0.0.1 par défaut. Ne pas ouvrir à d'autres adresses : la console
+                       n'a pas d'authentification et peut modifier des serveurs.
+   - DEVOPS_SSH_TRUST_UNKNOWN=false : garder false (l'empreinte d'un serveur se valide dans la console).
+
+6. Vérifier que tout marche
+   - http://127.0.0.1:8088/api/v1/health doit répondre "status":"UP" et la version installée.
