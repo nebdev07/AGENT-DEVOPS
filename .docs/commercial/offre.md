@@ -20,7 +20,7 @@ Nous opérons votre serveur avec un outil d'automatisation qui suit toujours la 
 
 1. **Audit** — analyse du serveur en lecture seule (rien n'est modifié). Vous recevez un rapport noté de A à E : risques classés par gravité, ce que nous avons observé, ce que cela peut coûter, ce qu'il faut faire.
 2. **Mise en ligne** — sécurisation (pare-feu, accès SSH par clé, blocage des attaques par force brute), conteneurs isolés, HTTPS automatique, déploiement de vos applications depuis votre dépôt Git, reprise de vos données, sauvegardes chiffrées quotidiennes.
-3. **Maintenance** — sauvegardes vérifiées chaque jour, **exercice de restauration chaque mois** (nous prouvons que la sauvegarde se réimporte), mises à jour de sécurité, déploiements à la demande, rapport mensuel.
+3. **Maintenance** — sauvegardes vérifiées chaque jour, **exercice de restauration chaque mois** (nous prouvons que la sauvegarde se réimporte), mises à jour de sécurité, déploiements à la demande, rapport mensuel. **Vous êtes prévenu par e-mail** si une sauvegarde ou un exercice échoue, et vous recevez chaque mois la preuve de l'exercice réussi.
 
 ## Nos engagements
 

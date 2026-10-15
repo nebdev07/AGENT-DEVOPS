@@ -1,7 +1,7 @@
 # État actuel — VPS Autopilot
 
 > Distinguer spécifié vs implémenté.  
-> Dernière mise à jour : 2026-10-14
+> Dernière mise à jour : 2026-10-15
 
 ## Spécifié
 
@@ -42,6 +42,8 @@ V9 : auth + sessions ; chaque utilisateur ses paramètres ; cockpit en ligne seu
 - **Exercice de restauration automatique (2026-10-14, BIZ-12, ADR-041 amendement 2)** : le VPS refait seul l'exercice le 1er de chaque mois (et à l'installation) sur sa dernière sauvegarde, bases et volumes jetables supprimés ; résultat dans `drill-last.txt`, lu par l'analyse, affiché dans la bande Sauvegardes et jugé par l'audit (échec = élevé, > 40 jours = faible). Copies du poste purgées après chaque copie (10 + la dernière restaurée avec succès). Lab : 25/25 tables, 1/1 fichier. ~~ARC : pas encore (script v1, `BIZ-14`)~~ ARC : actif depuis le 2026-10-15 (46/46 tables, 39/39 fichiers, prochain exercice le 1er novembre). Non couvert : base PostgreSQL d'Umami.
 - **Journal des actions (2026-10-14, BIZ-06, ADR-042)** : chaque action de la console (analyse, installation, déploiement, sauvegarde, exercice, restauration, SQL, secrets, rapport) est écrite dans `state/journal/<serveur>.jsonl` avec date, compte Windows, utilisateur SSH, résultat et message d'échec. Bande **Journal** (mode expert), export HTML / CSV. Jamais recopiés : SQL, mots de passe, valeurs de secrets. Limite : une action faite à la main en SSH n'y figure pas.
 - **Secrets d'exécution (2026-10-14, BIZ-05, ADR-043)** : panneau sous la console SQL ; une variable écrite directement dans `svc-<service>.local.env` sur le VPS (600 `deploy`), service recréé, valeur jamais sur le poste ni à l'écran ni dans le journal ; liste des noms seulement. Testé sur le lab (valeur avec caractères spéciaux reçue à l'identique). Non couvert : apps 1:1, secrets de build.
+- **Alertes e-mail du VPS (2026-10-15, BIZ-15, ADR-044)** : le serveur envoie lui-même (curl SMTP) une alerte si la sauvegarde ou l'exercice échoue, et un résumé après chaque exercice mensuel réussi (option) ; 1 à 5 destinataires. Panneau dans la bande Sauvegardes (enregistrer + essai, essai, lire, retirer), Aide 7g ; état lu par l'analyse, jugé par l'audit. Mot de passe SMTP sur le VPS seulement (600 root). Testé sur le lab avec une boîte locale (3 types de message, panne réelle simulée). **Pas posé** sur ARC ni chez un client (il faut un compte SMTP). Limites : serveur éteint = aucun message (`BIZ-16`), pas de SMS / WhatsApp.
+- **Version 1.0.0 livrable (2026-10-15, ADR-045)** : console limitée à `127.0.0.1` (avant : toutes les interfaces), version dans `/api/v1/health`, paquet `dist/vps-autopilot-1.0.0.zip` par `scripts/release.ps1` (jar + démarrage Windows / Linux + `LISEZMOI.txt`), tag `v1.0.0`. Installation à blanc testée sur ce poste. Instance publique cargo : voir `deploiement.md`.
 - **Fin de mission (2026-10-14, BIZ-07)** : procédure de retrait des accès `commercial/retrait-acces.md` + Aide 7f. **Écrite, jamais exécutée** sur un serveur client.
 - Bootstrap clé : mot de passe OVH ponctuel → `~/.ssh/authorized_keys` (ADR-016).
 - Clé dédiée `~\.ssh\vps-autopilot` (hors git). `.env` local sans hôte (saisi dans l’UI).

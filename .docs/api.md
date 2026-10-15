@@ -3,12 +3,12 @@
 > Dernière mise à jour : 2026-10-14 (audit, sauvegardes)  
 > Implémenté : V0–V3 partiel + V7-01/02/04/05 (plateformes + Git privé). Base : `http://127.0.0.1:8088`
 
-Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `cargo` (image Docker) : `/` + `GET /api/v1/health` seulement ; le reste → `403` (ADR-030).
+Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Depuis 1.0.0 la console n'écoute que sur `127.0.0.1` (`SERVER_ADDRESS`, ADR-045). Profil `cargo` (image Docker) : `/` + `GET /api/v1/health` seulement ; le reste → `403` (ADR-030).
 
 | Méthode | Chemin | Rôle | Implémenté |
 |---|---|---|---|
 | GET | `/` | UI : accueil `#home`, aide `#help`, cockpit `#cockpit` | oui |
-| GET | `/api/v1/health` | Liveness (`role` = `operator` ou `cargo`) | oui |
+| GET | `/api/v1/health` | Liveness (`role` = `operator` ou `cargo`, `version` depuis 1.0.0) | oui |
 | GET | `/api/v1/runtime` | Mode `ssh` ou `lab-fixture`, host, fixture | oui |
 | GET | `/api/v1/state` | Dernier `InfrastructureState` (`204` si vide) | oui |
 | GET | `/api/v1/servers` | Mes serveurs : serveurs déjà analysés (nom, hôte, port, utilisateur, OS, date, `readOnly`), plus récent d'abord. Jamais de secret (`state/known-servers.json`) | oui |
@@ -40,6 +40,10 @@ Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Profil `c
 | GET | `/api/v1/platforms/secrets?id=&host=&port=&user=` | READ (ADR-043). Noms des variables posées par service dans `svc-*.local.env` sur le VPS, **jamais les valeurs** : `{id, names:{service:[NOM…]}}` | **oui 2026-10-14** |
 | POST | `/api/v1/platforms/secrets` | CHANGE `set-platform-secret` (ADR-043). `{id, service, name, value, restart, host, port, user, confirm}` : pose ou remplace `NOM='valeur'` dans `svc-<service>.local.env` (600 `deploy`), puis recrée le service si `restart` (défaut oui). → `{status, risk, outcome:{platformId, service, name, action: SECRET_ADDED\|SECRET_REPLACED, restart: RESTARTED\|RESTART_FAILED\|RESTART_SKIPPED\|RESTART_SKIPPED_NOT_DEPLOYED}}`. La valeur n'est jamais renvoyée ni journalisée. `400` : nom invalide, apostrophe ou retour à la ligne dans la valeur, plateforme pas encore déployée | **oui 2026-10-14** |
 | POST | `/api/v1/platforms/secrets/remove` | CHANGE `set-platform-secret`. Même corps sans `value` : retire la ligne. `action: SECRET_REMOVED\|SECRET_ABSENT` | **oui 2026-10-14** |
+| GET | `/api/v1/notify?host&port&user` | READ. État des alertes e-mail du VPS : `{on, host, port, tls, user, passwordSet, from, to[], label, monthly, lastAt, lastKind, lastOk, lastError}` — jamais le mot de passe (ADR-044) | **oui 2026-10-15** |
+| POST | `/api/v1/notify` | CHANGE `configure-notify`. `{host, port, user, confirm, smtpHost, smtpPort, tls: ssl\|starttls\|none, smtpUser, smtpPassword (vide = garder), from, to: "a@x, b@y" (1–5), label, monthly}` → pose les réglages + message d'essai : `outcome {action: CONFIGURED, testOk, error, status}` | **oui 2026-10-15** |
+| POST | `/api/v1/notify/test` | CHANGE `test-notify`. `{host, port, user, confirm}` → message d'essai : `outcome {action: TESTED, testOk, error, status}` | **oui 2026-10-15** |
+| POST | `/api/v1/notify/remove` | CHANGE `configure-notify`. Retire réglages, scripts et drop-ins : `outcome {action: REMOVED}` | **oui 2026-10-15** |
 | GET | `/api/v1/journal?host=&limit=` | Local (ADR-042). Actions journalisées pour ce serveur, les plus récentes d'abord (`limit` 1–1000, défaut 100) : `{host, key, entries:[{at, operator, host, user, method, path, action, risk: READ\|LOCAL\|CHANGE, outcome: OK\|ECHEC, status, durationMs, details{}, error}], journals[]}`. Sans `host` : réglages du poste (`_poste`) | **oui 2026-10-14** |
 | GET | `/api/v1/journal/export?host=&format=html\|csv&client=` | Local. Tout le journal du serveur en pièce jointe `journal-<serveur>-<aaaammjj>.html` (imprimable, nom du client facultatif) ou `.csv` (`;`, BOM UTF-8) | **oui 2026-10-14** |
 | GET | `/api/v1/audit?host=` | READ, sans connexion (dernière analyse enregistrée). `{host, hostname, capturedAt, os, score, grade, findings:[{id, severity: CRITIQUE\|ELEVE\|MOYEN\|FAIBLE, category, title, observed, risk, recommendation}], strengths[], facts}`. `400` si aucune analyse SSH réelle | **oui 2026-10-14** |

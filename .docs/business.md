@@ -29,6 +29,15 @@ L'agent transforme des jours de travail manuel en heures. On vend **ce résultat
 | Rapport d'audit client : note A–E, constats classés, recommandations, HTML imprimable en PDF (BIZ-04) | Lab : rapport C 62/100, puis A 91/100 après correction |
 | Sauvegardes MariaDB réelles : quotidiennes, chiffrées, copiées sur le poste, contenu vérifié, exercice de restauration, restauration d'une plateforme depuis une sauvegarde (BIZ-03, ADR-041) | Lab : dump 4 Mo, exercice 25/25 tables ; exercice mensuel automatique sur le serveur (BIZ-12) |
 
+### Ajouts du 2026-10-15
+
+| Capacité | Preuve |
+|---|---|
+| Alertes e-mail envoyées par le serveur au client et à l'opérateur : échec de sauvegarde ou d'exercice, résumé mensuel de l'exercice réussi (BIZ-15, ADR-044) | Lab : panne simulée → alerte reçue par les 2 destinataires ; résumé 25/25 tables |
+| Version 1.0.0 installable sans les sources (zip, démarrage Windows / Linux, notice), console limitée au poste (ADR-045) | Installation à blanc sur le poste |
+
+Pour l'offre **Veille** : poser les alertes avec un compte SMTP du prestataire ou du client, destinataires = client + opérateur. Toujours **pas** de supervision 24/7 : un serveur éteint n'envoie rien (BIZ-16).
+
 ## Ce qui n'est pas encore vendable (spécifié ou absent)
 
 ~~Restauration complète depuis les sauvegardes de l'agent~~ (livrée 2026-10-14 pour les bases MariaDB), ~~rapport client exportable~~ (livré 2026-10-14), sauvegardes hors-site autres que le poste opérateur (BIZ-09), ~~**sauvegarde des fichiers déposés par les utilisateurs (volumes `/app/data`) : non couverte par les sauvegardes de l'agent** (BIZ-11)~~ (livrée 2026-10-14 ; restauration depuis la console pour les plateformes, pas encore pour les apps 1:1), comptes multi-opérateurs (V9), installation de l'agent par un tiers, déploiement sans internet côté serveur. Voir `BIZ-*` dans le backlog.

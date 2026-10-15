@@ -525,3 +525,33 @@
   4. `GET /api/v1/platforms/secrets` (READ) liste les **noms** posés par service, jamais les valeurs.
   5. `svc-<service>.local.env` est lu en dernier par Compose : il prime sur une variable de même nom de la fiche.
 - **Conséquence** : panneau « Secrets d'exécution » sous la console SQL, Aide 7b. Non couvert : apps 1:1 (une app = un conteneur) ; secrets de build (figés dans l'image). Les secrets déjà dans l'intention y restent tant que l'opérateur ne les retire pas de la fiche.
+
+---
+
+## ADR-044 - Alertes e-mail envoyées par le VPS lui-même
+
+- **Date** : 2026-10-15
+- **Statut** : Accepted (implémenté, testé sur le lab) — `BIZ-15`
+- **Contexte** : les sauvegardes quotidiennes et l'exercice mensuel tournent seuls sur le serveur (ADR-041), mais un échec n'était vu qu'à la prochaine analyse de l'opérateur. Le poste d'exploitation est souvent éteint : il ne peut pas surveiller. Le client n'apprenait rien hors des rapports remis à la main.
+- **Décision** :
+  1. C'est le **VPS** qui envoie, avec `curl` (SMTP / SMTPS, présent sur Ubuntu et Debian) : aucun paquet ni service ajouté, aucune dépendance au poste.
+  2. Rôle `notify` (CHANGE `configure-notify` ; essai : `test-notify`) : réglages dans `/opt/vps-autopilot/notify.env` (600, root ; mot de passe en base64), scripts `vps-autopilot-notify`, `-notify-unit`, `-notify-drill`, gabarit systemd `vps-autopilot-notify-failure@.service`.
+  3. Déclencheurs posés par **drop-in** systemd, sans toucher au rôle `backups` (une réinstallation des sauvegardes les garde) : `OnFailure=` sur la sauvegarde et l'exercice ; `ExecStartPost=-` sur l'exercice réussi (résumé mensuel, option ; un échec d'envoi ne marque pas l'exercice en échec).
+  4. Le mot de passe SMTP passe par le script sur l'entrée standard (base64), puis par un fichier de configuration `curl -K` dans un dossier temporaire 700 : jamais en argument de commande, jamais sur le poste, jamais renvoyé, jamais journalisé. Champ vide = garder celui posé.
+  5. Chiffrement obligatoire (SSL 465 ou STARTTLS) ; « aucun » accepté seulement vers `127.0.0.1` / `localhost`.
+  6. L'analyse lit `NOTIFY=on|off` et le dernier envoi ; l'audit juge : sauvegardes programmées sans alerte = `alerts-missing` (faible), dernier envoi en échec = `alerts-failing` (moyen), sinon point fort.
+- **Conséquence** : panneau « Alertes e-mail » dans la bande Sauvegardes, Aide 7g. Limites : un serveur éteint ou injoignable n'envoie rien (pas de supervision 24/7, pas d'alerte « sauvegarde absente ») ; pas de SMS / WhatsApp / Telegram.
+
+---
+
+## ADR-045 - Version livrable 1.0.0 : console limitée au poste, paquet zip
+
+- **Date** : 2026-10-15
+- **Statut** : Accepted (implémenté)
+- **Contexte** : l'agent se lançait depuis les sources (`mvn spring-boot:run`) et la console, sans authentification, écoutait sur **toutes** les interfaces (aucun `server.address`) : un autre appareil du réseau local pouvait lancer des CHANGE. La documentation disait `127.0.0.1` sans que la configuration l'impose. Pas de version ni de paquet.
+- **Décision** :
+  1. `server.address` = `127.0.0.1` par défaut (`SERVER_ADDRESS` pour changer, déconseillé). Le profil `cargo` (conteneur derrière Traefik) écoute sur `0.0.0.0`, `CargoModeFilter` n'y ouvre que la preuve et la santé (ADR-030).
+  2. Version **1.0.0** (`pom.xml`), exposée par `GET /api/v1/health` (`build-info` Spring Boot) ; tag Git `v1.0.0`.
+  3. Paquet `scripts/release.ps1` → `dist/vps-autopilot-<version>.zip` + `.sha256` : `vps-autopilot.jar`, `start.cmd` / `start.ps1` / `start.sh` (vérifient Java 21, créent `.env` au premier lancement), `LISEZMOI.txt` (installation, sauvegarde de `state/` et de `backup.key`, mise à jour, retour arrière), `.env.example`, `state/agent-local.example.yml`.
+  4. Dockerfile de l'instance cargo indépendant du numéro de version.
+- **Conséquence** : installation sans Maven ni sources. Mise à jour = remplacer le jar, garder `.env` et `state/`. Toujours un outil mono-opérateur sans authentification (V9 / ADR-031 pour un cockpit en ligne).
