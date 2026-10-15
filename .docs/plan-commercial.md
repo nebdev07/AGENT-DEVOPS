@@ -68,4 +68,4 @@
 | D2 | Fait | `commercial/offre.md` |
 | D3 | Fait (relecture juridique à faire) | `commercial/devis-modele.md`, `commercial/mandat-intervention.md` |
 
-Découvert en route : `BIZ-11` (fichiers des volumes non sauvegardés — **fait 2026-10-14**), `BIZ-12` (exercice automatique, purge locale — **fait 2026-10-14**), `BIZ-13` (ARC sans sauvegarde de l'agent — **fait 2026-10-14**), `BIZ-14` (ARC à passer au script v2 pour ses fichiers).
+Découvert en route : `BIZ-11` (fichiers des volumes non sauvegardés — **fait 2026-10-14**), `BIZ-12` (exercice automatique, purge locale — **fait 2026-10-14**), `BIZ-13` (ARC sans sauvegarde de l'agent — **fait 2026-10-14**), `BIZ-14` (ARC à passer au script v2 pour ses fichiers — **fait 2026-10-15**).

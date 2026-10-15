@@ -1,7 +1,11 @@
 # Changelog — VPS Autopilot
 
 > Ne jamais effacer une entrée.  
-> Dernière mise à jour : 2026-10-14
+> Dernière mise à jour : 2026-10-15
+
+## 2026-10-15
+
+- **ARC `213.156.134.92` passé au script de sauvegarde v2 (BIZ-14)**, accord explicite de l'opérateur. Rôle `backups` réinstallé (45 s) : base + volume `plat_arc_uploads` (9,9 Mo), minuteur d'exercice mensuel (prochain : 1er novembre). Premier exercice automatique : `app_arc` 46/46 tables, `plat_arc_uploads` 39/39 fichiers. Copie sur le poste vérifiée (dump 0,7 Mo + fichiers 8,5 Mo). Aucun conteneur redémarré, aucune base `restore_check_*` ni dossier temporaire restant, anciennes sauvegardes gardées, site en ligne. Volume `arc_umami_db` (statistiques Umami, PostgreSQL) non couvert : hors périmètre du rôle (MariaDB + volumes de plateforme).
 
 ## 2026-10-14
 
