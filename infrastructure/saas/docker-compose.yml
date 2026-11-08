@@ -25,7 +25,8 @@ services:
 
   control-plane:
     build:
-      context: ../..
+      # Racine du dépôt (local : ../.. ; prod bascule : AUTOPILOT_BUILD_CONTEXT=/opt/vps-autopilot/saas-src).
+      context: ${AUTOPILOT_BUILD_CONTEXT:-../..}
       dockerfile: infrastructure/saas/Dockerfile
     image: vps-autopilot-saas:local
     restart: unless-stopped

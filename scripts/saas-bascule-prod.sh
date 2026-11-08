@@ -59,6 +59,7 @@ if [[ ! -f "$SAAS/.env" ]]; then
 AUTOPILOT_PUBLIC_URL=https://autopilot.inovne.com
 AUTOPILOT_TRAEFIK_HOST=autopilot.inovne.com
 AUTOPILOT_BOOTSTRAP_ADMIN_EMAIL=nebdev07@gmail.com
+AUTOPILOT_BUILD_CONTEXT=$SRC_CACHE
 AUTOPILOT_DB_OWNER_PASSWORD=$(openssl rand -hex 24)
 AUTOPILOT_DB_PASSWORD=$(openssl rand -hex 24)
 AUTOPILOT_MASTER_KEY=$(openssl rand -base64 32)
@@ -75,10 +76,18 @@ AUTOPILOT_MIGRATION_APPLY=false
 EOF
   chmod 600 "$SAAS/.env"
   echo "    Secrets prod générés dans $SAAS/.env"
+else
+  # Met à jour le contexte de build si l'ancien .env n'en a pas.
+  grep -q '^AUTOPILOT_BUILD_CONTEXT=' "$SAAS/.env" || echo "AUTOPILOT_BUILD_CONTEXT=$SRC_CACHE" >> "$SAAS/.env"
+  sed -i "s|^AUTOPILOT_BUILD_CONTEXT=.*|AUTOPILOT_BUILD_CONTEXT=$SRC_CACHE|" "$SAAS/.env"
 fi
 
-cd "$SAAS"
-COMPOSE=(docker compose -f docker-compose.yml -f compose.prod.yml --env-file .env)
+# Compose depuis le clone (context Dockerfile correct) ; secrets/clés depuis $SAAS.
+cd "$SRC_CACHE/infrastructure/saas"
+ln -sfn "$SAAS/.env" .env
+ln -sfn "$SAAS/runner.key" runner.key
+ln -sfn "$SAAS/runner.pub" runner.pub
+COMPOSE=(docker compose -f docker-compose.yml -f compose.prod.yml --env-file "$SAAS/.env")
 
 echo "==> 4. Build"
 "${COMPOSE[@]}" build control-plane
@@ -95,7 +104,7 @@ run_cp_once() {
   local name=$2
   docker rm -f "$name" >/dev/null 2>&1 || true
   # Réseau interne seul + traefik.enable=false : ne pas voler autopilot.inovne.com pendant la migration.
-  docker compose -f docker-compose.yml -f compose.prod.yml --env-file .env run -d \
+  docker compose -f docker-compose.yml -f compose.prod.yml --env-file "$SAAS/.env" run -d \
     --name "$name" \
     --network vps-autopilot-saas_internal \
     -p 127.0.0.1:18080:8080 \
