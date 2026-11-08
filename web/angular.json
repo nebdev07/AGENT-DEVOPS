@@ -68,7 +68,15 @@
                 }
               ],
               "outputHashing": "all",
-              "baseHref": "/app/"
+              "baseHref": "/app/",
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": true
+              }
             },
             "development": {
               "optimization": false,

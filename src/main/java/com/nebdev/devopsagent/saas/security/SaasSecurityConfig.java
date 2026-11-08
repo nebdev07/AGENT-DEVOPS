@@ -52,9 +52,19 @@ public class SaasSecurityConfig {
                         .contentTypeOptions(c -> {})
                         .referrerPolicy(r -> r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
                         .httpStrictTransportSecurity(t -> t.includeSubDomains(true).maxAgeInSeconds(31536000))
+                        // 'unsafe-inline' script : Angular prod met le CSS en media=print + onload=media=all ;
+                        // sans ça le navigateur refuse l'onload et la feuille ne s'applique qu'à l'impression.
+                        // Fonts Google : index.html + optimisation fonts du build.
                         .contentSecurityPolicy(c -> c.policyDirectives(
-                                "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
-                                        + "script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")))
+                                "default-src 'self'; "
+                                        + "img-src 'self' data:; "
+                                        + "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                                        + "font-src 'self' https://fonts.gstatic.com data:; "
+                                        + "script-src 'self' 'unsafe-inline'; "
+                                        + "connect-src 'self'; "
+                                        + "frame-ancestors 'none'; "
+                                        + "base-uri 'self'; "
+                                        + "form-action 'self'")))
                 .addFilterBefore(new BearerAuthFilter(auth, tokens, properties), UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) -> error(res, mapper, 401, "auth_required"))
