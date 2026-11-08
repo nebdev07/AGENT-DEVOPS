@@ -50,8 +50,10 @@ chmod +x "$SAAS/saas-bascule-prod.sh" "$SAAS/postgres-init.sh" 2>/dev/null || tr
 if [[ ! -f "$SAAS/runner.key" ]]; then
   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$SAAS/runner.key"
   openssl pkey -in "$SAAS/runner.key" -pubout -out "$SAAS/runner.pub"
-  chmod 600 "$SAAS/runner.key"
 fi
+# Conteneur runner = uid 10001 (app) : sans ça, « Clé privée du runner illisible ».
+chown 10001:10001 "$SAAS/runner.key" 2>/dev/null || true
+chmod 400 "$SAAS/runner.key"
 
 if [[ ! -f "$SAAS/.env" ]]; then
   PUB=$(cat "$SAAS/runner.pub")
