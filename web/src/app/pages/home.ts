@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 import { Auth } from '../core/api';
 import { I18n, TPipe } from '../core/i18n';
 
-/** Accueil public : marque + méthode, sans forcer la connexion. */
+/** Accueil public — même composition / tokens que la console (langage platform). */
 @Component({
   selector: 'ap-home',
   imports: [RouterLink, TPipe],
@@ -15,8 +15,9 @@ import { I18n, TPipe } from '../core/i18n';
           <strong>{{ 'app.title' | t }}</strong>
         </a>
         <nav class="site-nav" aria-label="Principal">
-          <a href="#method">{{ 'home.navMethod' | t }}</a>
           <a href="#solutions">{{ 'home.navSolutions' | t }}</a>
+          <a href="#method">{{ 'home.navMethod' | t }}</a>
+          <a href="#capabilities">{{ 'home.navCapabilities' | t }}</a>
           @if (auth.token()) {
             <a class="nav-cta" routerLink="/servers">{{ 'home.openConsole' | t }}</a>
           } @else {
@@ -29,73 +30,119 @@ import { I18n, TPipe } from '../core/i18n';
         </select>
       </header>
 
-      <section class="hero" aria-labelledby="brandHero">
-        <div class="hero-plane" aria-hidden="true"></div>
-        <div class="hero-copy rise">
+      <section class="hero landing-hero rise" aria-labelledby="brandHero">
+        <div class="hero-copy">
           <h1 id="brandHero" class="brand-signal">{{ 'app.title' | t }}</h1>
           <p class="hero-tagline">{{ 'home.tagline' | t }}</p>
           <p class="lede">{{ 'home.lede' | t }}</p>
           <div class="hero-actions">
             @if (auth.token()) {
               <a class="btn" routerLink="/servers">{{ 'home.openConsole' | t }}</a>
+              <a class="btn ghost" href="#solutions">{{ 'home.seeSolutions' | t }}</a>
             } @else {
               <a class="btn" routerLink="/login">{{ 'auth.login' | t }}</a>
-              <a class="btn ghost" routerLink="/register">{{ 'auth.register' | t }}</a>
+              <a class="btn ghost" href="#solutions">{{ 'home.seeSolutions' | t }}</a>
             }
           </div>
         </div>
-        <div class="hero-visual rise d2" aria-hidden="true">
-          <div class="visual-panel">
-            <div class="visual-bar"><span></span><span></span><span></span></div>
-            <div class="visual-row"><em></em><i></i></div>
-            <div class="visual-row"><em></em><i class="ok"></i></div>
-            <div class="visual-row"><em></em><i class="warn"></i></div>
-            <div class="visual-grade">A</div>
-          </div>
-        </div>
-      </section>
-
-      <section id="method" class="band method" aria-labelledby="methodTitle">
-        <h2 id="methodTitle">{{ 'home.methodTitle' | t }}</h2>
-        <p class="band-lede">{{ 'home.methodLede' | t }}</p>
-        <ol class="method-steps">
+        <ol class="hero-steps" [attr.aria-label]="'home.navMethod' | t">
           <li>
-            <span>01</span>
-            <strong>{{ 'home.step1Title' | t }}</strong>
-            <em>{{ 'home.step1Body' | t }}</em>
+            <span>{{ 'home.heroStep1K' | t }}</span>
+            <strong>{{ 'home.heroStep1T' | t }}</strong>
+            <em>{{ 'home.heroStep1E' | t }}</em>
           </li>
           <li>
-            <span>02</span>
-            <strong>{{ 'home.step2Title' | t }}</strong>
-            <em>{{ 'home.step2Body' | t }}</em>
+            <span>{{ 'home.heroStep2K' | t }}</span>
+            <strong>{{ 'home.heroStep2T' | t }}</strong>
+            <em>{{ 'home.heroStep2E' | t }}</em>
           </li>
           <li>
-            <span>03</span>
-            <strong>{{ 'home.step3Title' | t }}</strong>
-            <em>{{ 'home.step3Body' | t }}</em>
+            <span>{{ 'home.heroStep3K' | t }}</span>
+            <strong>{{ 'home.heroStep3T' | t }}</strong>
+            <em>{{ 'home.heroStep3E' | t }}</em>
           </li>
         </ol>
       </section>
 
-      <section id="solutions" class="band solutions" aria-labelledby="solutionsTitle">
-        <h2 id="solutionsTitle">{{ 'home.solutionsTitle' | t }}</h2>
-        <p class="band-lede">{{ 'home.solutionsLede' | t }}</p>
+      <section id="solutions" class="band" aria-labelledby="solutionsTitle">
+        <p class="kicker rise d2">{{ 'home.navSolutions' | t }}</p>
+        <h2 id="solutionsTitle" class="solutions-title rise d3">{{ 'home.solutionsTitle' | t }}</h2>
+        <p class="band-lede rise d4">{{ 'home.solutionsLede' | t }}</p>
         <div class="solutions-grid">
-          <article>
-            <span class="num">01</span>
+          <article class="solution rise d3">
+            <span class="solution-num">01</span>
             <h3>{{ 'home.sol1Title' | t }}</h3>
             <p>{{ 'home.sol1Body' | t }}</p>
           </article>
-          <article>
-            <span class="num">02</span>
+          <article class="solution rise d4">
+            <span class="solution-num">02</span>
             <h3>{{ 'home.sol2Title' | t }}</h3>
             <p>{{ 'home.sol2Body' | t }}</p>
           </article>
-          <article>
-            <span class="num">03</span>
+          <article class="solution rise d5">
+            <span class="solution-num">03</span>
             <h3>{{ 'home.sol3Title' | t }}</h3>
             <p>{{ 'home.sol3Body' | t }}</p>
           </article>
+        </div>
+      </section>
+
+      <section id="method" class="band" aria-labelledby="methodTitle">
+        <p class="kicker">{{ 'home.navMethod' | t }}</p>
+        <h2 id="methodTitle" class="solutions-title">{{ 'home.riskTitle' | t }}</h2>
+        <p class="band-lede">{{ 'home.riskLede' | t }}</p>
+        <div class="pillars">
+          <article class="pillar">
+            <i class="dot read" aria-hidden="true"></i>
+            <h3>{{ 'home.risk1Title' | t }}</h3>
+            <p>{{ 'home.risk1Body' | t }}</p>
+          </article>
+          <article class="pillar">
+            <i class="dot change" aria-hidden="true"></i>
+            <h3>{{ 'home.risk2Title' | t }}</h3>
+            <p>{{ 'home.risk2Body' | t }}</p>
+          </article>
+          <article class="pillar">
+            <i class="dot dest" aria-hidden="true"></i>
+            <h3>{{ 'home.risk3Title' | t }}</h3>
+            <p>{{ 'home.risk3Body' | t }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="capabilities" class="band" aria-labelledby="capTitle">
+        <p class="kicker">{{ 'home.navCapabilities' | t }}</p>
+        <h2 id="capTitle" class="solutions-title">{{ 'home.capTitle' | t }}</h2>
+        <p class="band-lede">{{ 'home.capLede' | t }}</p>
+        <div class="capabilities">
+          <article class="capability">
+            <span class="num">01</span>
+            <h3>{{ 'home.cap1Title' | t }}</h3>
+            <p>{{ 'home.cap1Body' | t }}</p>
+          </article>
+          <article class="capability">
+            <span class="num">02</span>
+            <h3>{{ 'home.cap2Title' | t }}</h3>
+            <p>{{ 'home.cap2Body' | t }}</p>
+          </article>
+          <article class="capability">
+            <span class="num">03</span>
+            <h3>{{ 'home.cap3Title' | t }}</h3>
+            <p>{{ 'home.cap3Body' | t }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="landing-cta" aria-labelledby="ctaTitle">
+        <h2 id="ctaTitle">{{ 'home.ctaTitle' | t }}</h2>
+        <p>{{ 'home.ctaLede' | t }}</p>
+        <div class="hero-actions">
+          @if (auth.token()) {
+            <a class="btn" routerLink="/servers">{{ 'home.openConsole' | t }}</a>
+          } @else {
+            <a class="btn" routerLink="/login">{{ 'auth.login' | t }}</a>
+            <a class="btn ghost" routerLink="/register">{{ 'auth.register' | t }}</a>
+          }
         </div>
       </section>
 
