@@ -57,6 +57,10 @@ public class SaasProperties {
         private int lockoutMinutes = 15;
         /** Personnel INOVNE : rôle effectif seulement avec MFA active (ne désactiver qu'en lab). */
         private boolean staffMfaRequired = true;
+        /** true : pas d'inscription immédiate ; demande validée par le super-admin, identifiants par e-mail. */
+        private boolean signupRequiresApproval = false;
+        public boolean isSignupRequiresApproval() { return signupRequiresApproval; }
+        public void setSignupRequiresApproval(boolean v) { this.signupRequiresApproval = v; }
         public boolean isStaffMfaRequired() { return staffMfaRequired; }
         public void setStaffMfaRequired(boolean v) { this.staffMfaRequired = v; }
         public int getSessionHours() { return sessionHours; }

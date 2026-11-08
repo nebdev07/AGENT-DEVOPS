@@ -8,6 +8,7 @@ import com.nebdev.devopsagent.saas.identity.UserAccount;
 import com.nebdev.devopsagent.saas.managed.ManagedService;
 import com.nebdev.devopsagent.saas.organization.Organization;
 import com.nebdev.devopsagent.saas.organization.OrganizationRepositories;
+import com.nebdev.devopsagent.saas.organization.SignupRequestService;
 import com.nebdev.devopsagent.saas.shared.Actor;
 import com.nebdev.devopsagent.saas.shared.ApiException;
 import com.nebdev.devopsagent.saas.shared.RlsContext;
@@ -54,10 +55,11 @@ public class AdminController {
     private final BillingService billing;
     private final AuditService audit;
     private final RlsContext rls;
+    private final SignupRequestService signupRequests;
 
     public AdminController(OrganizationRepositories.Organizations orgs, IdentityRepositories.Users users,
                            IdentityRepositories.Staff staff, ManagedService managed, BillingService billing,
-                           AuditService audit, RlsContext rls) {
+                           AuditService audit, RlsContext rls, SignupRequestService signupRequests) {
         this.orgs = orgs;
         this.users = users;
         this.staff = staff;
@@ -65,6 +67,7 @@ public class AdminController {
         this.billing = billing;
         this.audit = audit;
         this.rls = rls;
+        this.signupRequests = signupRequests;
     }
 
     public record NewStaff(@NotBlank String email, @NotBlank String role) {}
@@ -134,6 +137,30 @@ public class AdminController {
     @GetMapping("/support-accesses")
     public List<Map<String, Object>> myAccesses() {
         return managed.myAccesses();
+    }
+
+    @GetMapping("/signup-requests")
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> signupRequests() {
+        requireAdmin();
+        rls.enterPlatform();
+        return signupRequests.listPending();
+    }
+
+    @PostMapping("/signup-requests/{id}/approve")
+    @Transactional
+    public Map<String, Object> approveSignup(@PathVariable UUID id) {
+        Actor a = requireAdmin();
+        rls.enterPlatform();
+        return signupRequests.approve(id, a);
+    }
+
+    @PostMapping("/signup-requests/{id}/reject")
+    @Transactional
+    public Map<String, Object> rejectSignup(@PathVariable UUID id) {
+        Actor a = requireAdmin();
+        rls.enterPlatform();
+        return signupRequests.reject(id, a);
     }
 
     @GetMapping("/staff")

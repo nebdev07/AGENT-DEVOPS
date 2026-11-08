@@ -419,36 +419,46 @@ tbody tr:hover { background: rgba(230, 235, 242, 0.03); }
 .site-foot strong { font-family: var(--font-display); }
 
 /* ——— Auth ——— */
-.auth-shell {
-  min-height: 100vh;
+.auth-page { min-height: 100vh; display: flex; flex-direction: column; }
+.auth-body {
+  flex: 1;
   display: grid;
-  place-items: center;
-  padding: 2rem 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
+  gap: 1.25rem;
+  width: min(100%, var(--page));
+  margin: 0 auto;
+  padding: 1.5rem clamp(1rem, 2.5vw, 1.75rem) 2.5rem;
+  align-items: start;
 }
-.auth {
-  width: min(100%, 26rem);
-  margin: 0;
-  animation: rise 0.45s ease both;
+.auth-aside { margin: 0; position: sticky; top: 5rem; }
+.auth-aside h2 { font-size: 1.2rem; margin: 0.25rem 0 0.6rem; }
+.auth-aside .kicker { margin-bottom: 0.35rem; }
+.auth-bullets {
+  margin: 0.75rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
 }
-.auth .auth-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  text-decoration: none;
-  color: var(--text);
-  margin-bottom: 1rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-}
-.auth .auth-brand .mark {
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 3px;
-  background: linear-gradient(135deg, #b7e6dc, var(--accent));
-}
-.auth h1 { font-size: 1.45rem; border: none; padding: 0; }
+.auth-bullets li { margin-bottom: 0.35rem; }
+.auth.card { width: 100%; margin: 0; animation: rise 0.45s ease both; }
+.auth h1 { font-size: 1.45rem; border: none; padding: 0; margin-bottom: 0.35rem; }
+.auth-lede { margin: 0 0 1rem; }
 .auth button[type="submit"] { width: 100%; margin-top: 0.2rem; }
-.auth p { margin: 1rem 0 0; color: var(--muted); }
+.auth-foot { margin: 1rem 0 0; color: var(--muted); font-size: 0.95rem; }
+.site-nav .nav-back { padding: 0.4rem 0.75rem; font-size: 0.9rem; }
+textarea {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--inset);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+  min-height: 4.5rem;
+}
+@media (max-width: 860px) {
+  .auth-body { grid-template-columns: 1fr; }
+  .auth-aside { position: static; }
+}
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }

@@ -86,6 +86,29 @@ export class SecurityPage {
   template: `
     <h1>{{ 'nav.platform' | t }} <button class="secondary" (click)="load()">{{ 'common.refresh' | t }}</button></h1>
     <section class="card">
+      <h2>{{ 'plat.signups' | t }}</h2>
+      <table>
+        <thead><tr><th>{{ 'auth.email' | t }}</th><th>{{ 'auth.name' | t }}</th><th>{{ 'auth.org' | t }}</th><th>{{ 'common.created' | t }}</th><th></th></tr></thead>
+        <tbody>
+          @for (s of signups(); track s.id) {
+            <tr>
+              <td>{{ s.email }}</td>
+              <td>{{ s.displayName || '—' }}</td>
+              <td>{{ s.organizationName }}</td>
+              <td>{{ i18n.date(s.createdAt) }}</td>
+              <td class="inline">
+                <button type="button" (click)="approveSignup(s.id)">{{ 'plat.approve' | t }}</button>
+                <button type="button" class="danger" (click)="rejectSignup(s.id)">{{ 'plat.reject' | t }}</button>
+              </td>
+            </tr>
+          } @empty { <tr><td colspan="5" class="muted">{{ 'common.none' | t }}</td></tr> }
+        </tbody>
+      </table>
+      @if (signups().length) {
+        <p class="muted">{{ 'auth.noPasswordYet' | t }}</p>
+      }
+    </section>
+    <section class="card">
       <h2>{{ 'plat.orgs' | t }}</h2>
       <table>
         <thead><tr><th>{{ 'servers.name' | t }}</th><th>{{ 'billing.plan' | t }}</th><th>{{ 'common.status' | t }}</th><th>{{ 'nav.servers' | t }}</th><th>{{ 'nav.members' | t }}</th><th>{{ 'common.created' | t }}</th><th></th></tr></thead>
@@ -130,6 +153,7 @@ export class PlatformPage implements OnInit {
   protected readonly i18n = inject(I18n);
   orgs = signal<any[]>([]);
   staff = signal<any[]>([]);
+  signups = signal<any[]>([]);
   email = '';
   role = 'PLATFORM_OPERATOR';
 
@@ -138,6 +162,17 @@ export class PlatformPage implements OnInit {
   async load() {
     this.orgs.set(await this.api.rootGet('/admin/organizations'));
     this.staff.set(await this.api.rootGet('/admin/staff'));
+    this.signups.set(await this.api.rootGet('/admin/signup-requests'));
+  }
+
+  async approveSignup(id: string) {
+    await this.api.rootPost(`/admin/signup-requests/${id}/approve`, {});
+    await this.load();
+  }
+
+  async rejectSignup(id: string) {
+    await this.api.rootPost(`/admin/signup-requests/${id}/reject`, {});
+    await this.load();
   }
 
   async status(id: string, status: string) { await this.api.rootPost(`/admin/organizations/${id}/status`, { status }); await this.load(); }

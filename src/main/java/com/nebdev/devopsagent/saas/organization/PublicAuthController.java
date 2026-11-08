@@ -2,6 +2,8 @@ package com.nebdev.devopsagent.saas.organization;
 
 import com.nebdev.devopsagent.saas.identity.AuthService;
 import com.nebdev.devopsagent.saas.identity.MeController;
+import com.nebdev.devopsagent.saas.shared.ApiException;
+import com.nebdev.devopsagent.saas.shared.SaasProperties;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,10 +29,15 @@ public class PublicAuthController {
 
     private final AuthService auth;
     private final OrganizationService organizations;
+    private final SignupRequestService signupRequests;
+    private final SaasProperties properties;
 
-    public PublicAuthController(AuthService auth, OrganizationService organizations) {
+    public PublicAuthController(AuthService auth, OrganizationService organizations, SignupRequestService signupRequests,
+                                SaasProperties properties) {
         this.auth = auth;
         this.organizations = organizations;
+        this.signupRequests = signupRequests;
+        this.properties = properties;
     }
 
     public record RegisterRequest(@NotBlank @Email @Size(max = 254) String email,
@@ -59,8 +66,33 @@ public class PublicAuthController {
 
     public record AcceptInvitation(@NotBlank String token, @NotBlank String password, String displayName) {}
 
+    public record SignupRequestBody(@NotBlank @Email @Size(max = 254) String email,
+                                  @Size(max = 100) String displayName,
+                                  @NotBlank @Size(max = 120) String organizationName,
+                                  String locale, String timeZone,
+                                  @Size(max = 500) String message) {
+        @Override
+        public String toString() {
+            return "SignupRequestBody[" + email + "]";
+        }
+    }
+
+    @PostMapping("/signup-request")
+    public ResponseEntity<Map<String, Object>> signupRequest(@Valid @RequestBody SignupRequestBody r,
+                                                             HttpServletRequest http) {
+        String locale = r.locale() == null || r.locale().isBlank()
+                ? org.springframework.context.i18n.LocaleContextHolder.getLocale().getLanguage() : r.locale();
+        String tz = r.timeZone() == null || r.timeZone().isBlank() ? "UTC" : r.timeZone();
+        signupRequests.submit(r.email(), r.displayName(), r.organizationName(), locale, tz, "USD", r.message(),
+                http.getRemoteAddr(), http.getHeader("User-Agent"));
+        return ResponseEntity.accepted().body(Map.of("status", "accepted"));
+    }
+
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@Valid @RequestBody RegisterRequest r, HttpServletRequest http) {
+        if (properties.getAuth().isSignupRequiresApproval()) {
+            throw ApiException.badRequest("signup_requires_approval");
+        }
         OrganizationService.Registered reg = organizations.register(r.email(), r.password(), r.displayName(),
                 r.organizationName(), r.locale() == null || r.locale().isBlank()
                         ? org.springframework.context.i18n.LocaleContextHolder.getLocale().getLanguage() : r.locale(), r.timeZone(), r.currency(), http.getRemoteAddr(), http.getHeader("User-Agent"));

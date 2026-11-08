@@ -54,6 +54,7 @@ autopilot:
     lockout-minutes: 15
     # false seulement en lab / tests manuels (profils local|manual). Prod : laisser true.
     staff-mfa-required: ${AUTOPILOT_STAFF_MFA_REQUIRED:true}
+    signup-requires-approval: ${AUTOPILOT_SIGNUP_REQUIRES_APPROVAL:false}
   operations:
     approval-ttl-minutes: 60
     proposal-ttl-hours: 24
