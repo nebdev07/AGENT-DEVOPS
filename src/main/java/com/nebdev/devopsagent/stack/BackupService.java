@@ -126,6 +126,11 @@ public class BackupService {
 
     /** Phrase de chiffrement (32 hex), créée au premier usage dans {@code state/backup.key}. */
     public String passphrase() throws IOException {
+        // SaaS : phrase de passe propre à l'organisation (ADR-051), jamais celle du poste.
+        var scoped = com.nebdev.devopsagent.ssh.ExecutionScope.current();
+        if (scoped.isPresent() && scoped.get().backupPassphrase() != null) {
+            return scoped.get().backupPassphrase();
+        }
         Path keyFile = Path.of(properties.getStateDir()).resolve("backup.key");
         Files.createDirectories(keyFile.getParent());
         if (Files.isRegularFile(keyFile)) {

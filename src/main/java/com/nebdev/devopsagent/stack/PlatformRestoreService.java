@@ -65,7 +65,18 @@ public class PlatformRestoreService {
     ) throws IOException {
         actionGuard.assertConfirmedChange("restore-platform", confirmed);
         forbiddenTargetGuard.assertAllowed(target.host());
-        PlatformSpec platform = store.require(platformId);
+        return restoreResolved(store.require(platformId), target, sql, uploads, uploadsSubdir, foreignKeyChecks);
+    }
+
+    /** Cœur réutilisable (console locale et moteur SaaS). */
+    public RestoreResult restoreResolved(
+            PlatformSpec platform,
+            SshTarget target,
+            RestoreFile sql,
+            RestoreFile uploads,
+            String uploadsSubdir,
+            boolean foreignKeyChecks
+    ) throws IOException {
         if (sql == null && uploads == null) {
             throw new IllegalArgumentException(OperatorMessage.of(
                     "aucun fichier choisi.",

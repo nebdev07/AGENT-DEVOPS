@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Connexion â€” VPS Autopilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0d12; --panel: #141a22; --line: rgba(230,235,242,.1);
+      --text: #e6ebf2; --muted: #8d97a6; --accent: #8fcdc0; --accent-ink: #0c1614;
+      --font-display: "Sora", system-ui, sans-serif; --font-body: "Figtree", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; font-family: var(--font-body); color: var(--text);
+      background:
+        radial-gradient(800px 360px at 15% -10%, rgba(143,205,192,.08), transparent 55%),
+        radial-gradient(700px 320px at 100% 100%, rgba(138,160,184,.07), transparent 50%),
+        var(--bg);
+      display: grid; place-items: center; padding: 1.5rem;
+    }
+    .card {
+      width: min(100%, 30rem); padding: 2rem 1.75rem 1.75rem;
+      background: rgba(20,26,34,.92); border: 1px solid var(--line); border-radius: 1.1rem;
+      box-shadow: 0 24px 60px rgba(0,0,0,.35);
+    }
+    .brand { font-family: var(--font-display); font-weight: 800; font-size: 1.45rem; letter-spacing: -.03em; color: var(--accent); margin: 0 0 .35rem; }
+    h1 { font-family: var(--font-display); font-size: 1.55rem; margin: 0 0 .5rem; letter-spacing: -.03em; }
+    .muted { color: var(--muted); margin: 0 0 1.4rem; line-height: 1.5; font-size: .95rem; }
+    label { display: block; margin: .75rem 0 .35rem; font-weight: 600; font-size: .9rem; }
+    label:first-of-type { margin-top: 0; }
+    input {
+      width: 100%; padding: .7rem .75rem; border-radius: .55rem;
+      border: 1px solid var(--line); background: #0c1016; color: var(--text); font: inherit;
+    }
+    button {
+      width: 100%; margin-top: 1.1rem; padding: .75rem 1rem; border: 0; border-radius: .55rem; cursor: pointer;
+      background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600;
+    }
+    button:hover { filter: brightness(1.06); }
+    #msg { margin-top: 1rem; white-space: pre-wrap; font-size: .92rem; line-height: 1.45; }
+    .ok { color: var(--accent); } .err { color: #c98b8b; }
+    .back { display: inline-block; margin-top: 1.2rem; color: var(--muted); font-size: .9rem; }
+    .hint { margin-top: 1rem; font-size: .82rem; color: var(--muted); line-height: 1.45; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <p class="brand">VPS Autopilot</p>
+    <h1>Connexion</h1>
+    <p class="muted">E-mail et mot de passe. Ã€ la premiÃ¨re connexion, tu dois changer le mot de passe par dÃ©faut.</p>
+    <form id="form">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" required autocomplete="username" placeholder="nebdev07@gmail.com" value="nebdev07@gmail.com"/>
+      <label for="password">Mot de passe</label>
+      <input id="password" type="password" required autocomplete="current-password" placeholder="Mot de passe"/>
+      <button type="submit">Se connecter</button>
+    </form>
+    <p id="msg"></p>
+    <p class="hint">DÃ©faut usine : <code>VpsAutopilot!ChangeMe</code> (Ã  changer immÃ©diatement).</p>
+    <p style="margin-top:.85rem"><a class="back" href="/forgot-password.html" style="margin-top:0">Mot de passe oubliÃ© ?</a></p>
+    <a class="back" href="/index.html#home">â† Retour Ã  lâ€™accueil</a>
+  </main>
+  <script>
+    const msg = document.getElementById("msg");
+    const params = new URLSearchParams(location.search);
+    if (params.get("reason") === "expired") {
+      msg.className = "err";
+      msg.textContent = "Ta session a expirÃ©. Reconnecte-toi pour continuer.";
+    } else if (params.get("reason") === "required") {
+      msg.className = "err";
+      msg.textContent = "Connecte-toi pour accÃ©der Ã  cette page.";
+    }
+    function goAfterLogin(j) {
+      if (j.mustChangePassword) {
+        location.href = "/change-password.html";
+        return;
+      }
+      const next = params.get("next");
+      if (next && next.startsWith("/") && !next.startsWith("//")) {
+        location.href = next;
+        return;
+      }
+      location.href = "/index.html#cockpit";
+    }
+    if (params.get("token")) {
+      fetch("/api/v1/platform/auth/consume?token=" + encodeURIComponent(params.get("token")), { credentials: "same-origin" })
+        .then(r => r.json().then(j => ({ ok: r.ok, j })))
+        .then(({ ok, j }) => {
+          if (!ok) { msg.className = "err"; msg.textContent = j.error || "Lien invalide"; return; }
+          goAfterLogin(j);
+        });
+    }
+
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      msg.className = "";
+      msg.textContent = "Connexionâ€¦";
+      const body = {
+        email: document.getElementById("email").value.trim(),
+        password: document.getElementById("password").value
+      };
+      const r = await fetch("/api/v1/platform/auth/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        msg.className = "err";
+        msg.textContent = j.error || ("Erreur " + r.status);
+        return;
+      }
+      goAfterLogin(j);
+    });
+  </script>
+</body>
+</html>

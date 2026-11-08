@@ -1,4 +1,4 @@
-﻿# VPS Autopilot : construit le paquet de livraison dist\vps-autopilot-<version>.zip (+ .sha256).
+# VPS Autopilot : construit le paquet de livraison dist\vps-autopilot-<version>.zip (+ .sha256).
 # Usage : .\scripts\release.ps1 [-SkipTests]   (Java 21 et Maven dans le PATH, ou JAVA_HOME)
 param([switch]$SkipTests)
 $ErrorActionPreference = "Stop"

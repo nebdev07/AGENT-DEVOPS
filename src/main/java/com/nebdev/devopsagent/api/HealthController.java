@@ -23,13 +23,15 @@ public class HealthController {
 
     @GetMapping("/api/v1/health")
     public Map<String, String> health() {
-        boolean cargo = Arrays.asList(environment.getActiveProfiles()).contains("cargo");
+        var profiles = Arrays.asList(environment.getActiveProfiles());
+        String role = profiles.contains("cargo") ? "cargo"
+                : profiles.contains("platform") ? "platform" : "operator";
         return Map.of(
                 "status", "UP",
                 "product", "vps-autopilot",
                 "version", version,
-                "phase", "V0-discovery",
-                "role", cargo ? "cargo" : "operator"
+                "phase", profiles.contains("platform") ? "V9-platform" : "V0-discovery",
+                "role", role
         );
     }
 }

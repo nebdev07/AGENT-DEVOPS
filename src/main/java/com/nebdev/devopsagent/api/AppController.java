@@ -2,6 +2,8 @@ package com.nebdev.devopsagent.api;
 
 import com.nebdev.devopsagent.discovery.DiscoveryService;
 import com.nebdev.devopsagent.risk.UnsafeActionException;
+import com.nebdev.devopsagent.ssh.DeployBusyException;
+import com.nebdev.devopsagent.ssh.DeployLock;
 import com.nebdev.devopsagent.ssh.SshTarget;
 import com.nebdev.devopsagent.stack.AppDeployPlan;
 import com.nebdev.devopsagent.stack.AppDeployService;
@@ -22,10 +24,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/apps")
@@ -34,15 +38,18 @@ public class AppController {
     private final AppIntentStore appIntentStore;
     private final AppDeployService appDeployService;
     private final PublicDomainStore publicDomainStore;
+    private final DeployLock deployLock;
 
     public AppController(
             AppIntentStore appIntentStore,
             AppDeployService appDeployService,
-            PublicDomainStore publicDomainStore
+            PublicDomainStore publicDomainStore,
+            DeployLock deployLock
     ) {
         this.appIntentStore = appIntentStore;
         this.appDeployService = appDeployService;
         this.publicDomainStore = publicDomainStore;
+        this.deployLock = deployLock;
     }
 
     @GetMapping
@@ -146,19 +153,40 @@ public class AppController {
         }
         int port = body.port() == null ? 22 : body.port();
         boolean allowScaffold = body.allowScaffold() == null || Boolean.TRUE.equals(body.allowScaffold());
-        DiscoveryService.DiscoveryResult result = appDeployService.deploy(
-                body.id().trim(),
-                new SshTarget(body.host().trim(), port, body.user().trim()),
-                Boolean.TRUE.equals(body.confirm()),
-                allowScaffold
-        );
-        return Map.of(
-                "status", "ok",
-                "id", body.id().trim(),
-                "risk", "CHANGE",
-                "snapshot", result.snapshot(),
-                "report", result.report()
-        );
+        String appId = body.id().trim();
+        String host = body.host().trim();
+        String lockId = "app-" + Instant.now().toString().replace(":", "").replace(".", "")
+                + "-" + UUID.randomUUID().toString().substring(0, 8);
+        var conflict = deployLock.tryAcquire(host, lockId, "deploy-app", appId);
+        if (conflict.isPresent()) {
+            throw new DeployBusyException(conflict.get());
+        }
+        try {
+            DiscoveryService.DiscoveryResult result = appDeployService.deploy(
+                    appId,
+                    new SshTarget(host, port, body.user().trim()),
+                    Boolean.TRUE.equals(body.confirm()),
+                    allowScaffold
+            );
+            return Map.of(
+                    "status", "ok",
+                    "id", appId,
+                    "risk", "CHANGE",
+                    "snapshot", result.snapshot(),
+                    "report", result.report()
+            );
+        } finally {
+            deployLock.release(lockId);
+        }
+    }
+
+    @ExceptionHandler(DeployBusyException.class)
+    public ResponseEntity<Map<String, Object>> busy(DeployBusyException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", ex.getMessage());
+        body.put("code", "DEPLOY_BUSY");
+        body.put("active", ex.holder() == null ? Map.of() : ex.holder().toMap());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
     @ExceptionHandler(UnsafeActionException.class)

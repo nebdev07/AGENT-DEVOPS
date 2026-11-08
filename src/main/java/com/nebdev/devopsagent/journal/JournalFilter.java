@@ -30,11 +30,12 @@ public class JournalFilter extends OncePerRequestFilter {
 
     /** Champs de requête recopiés dans le journal. */
     static final List<String> REQUEST_FIELDS = List.of("id", "platformId", "service", "name", "component", "file", "repo",
-            "confirm", "rotate");
-    /** Champs de réponse recopiés dans le journal. */
-    static final List<String> RESPONSE_FIELDS = List.of("file", "risk");
-    private static final int MAX_VALUE = 200;
-    private static final int MAX_ERROR = 400;
+            "confirm", "rotate", "format", "client");
+    /** Champs de réponse recopiés dans le journal (jamais de corps SQL / secrets). */
+    static final List<String> RESPONSE_FIELDS = List.of(
+            "file", "risk", "jobId", "message", "note", "status", "removed", "id");
+    private static final int MAX_VALUE = 400;
+    private static final int MAX_ERROR = 600;
 
     private final JournalStore store;
     private final ObjectMapper json = new ObjectMapper();
@@ -86,8 +87,11 @@ public class JournalFilter extends OncePerRequestFilter {
                 for (String f : RESPONSE_FIELDS) {
                     put(details, f, text(answer, f));
                 }
+                enrichFromSnapshot(details, answer);
             }
             String error = ok ? null : clip(exception != null ? exception : text(answer, "error"), MAX_ERROR);
+            String summary = summarize(action.label(), details, ok, error);
+            details = JournalNarratives.withSummary(details, summary);
             store.append(new JournalEntry(
                     at.toString(),
                     System.getProperty("user.name", ""),
@@ -147,5 +151,60 @@ public class JournalFilter extends OncePerRequestFilter {
 
     private static String blankToEmpty(String v) {
         return v == null ? "" : v.strip();
+    }
+
+    /** Extrait des infos d’analyse (hostname, OS) sans recopier tout le snapshot. */
+    static void enrichFromSnapshot(Map<String, String> details, JsonNode answer) {
+        if (answer == null || !answer.isObject()) {
+            return;
+        }
+        JsonNode snap = answer.get("snapshot");
+        if (snap == null || !snap.isObject()) {
+            return;
+        }
+        put(details, "hostname", text(snap, "hostname"));
+        put(details, "os", text(snap, "osPretty"));
+        if (details.get("os") == null) {
+            put(details, "os", text(snap, "osId"));
+        }
+    }
+
+    static String summarize(String action, Map<String, String> details, boolean ok, String error) {
+        StringBuilder b = new StringBuilder();
+        if (details.get("message") != null) {
+            b.append(details.get("message"));
+        } else if (details.get("component") != null) {
+            b.append("Composant ").append(details.get("component"));
+        } else if (details.get("id") != null) {
+            b.append("Cible « ").append(details.get("id")).append(" »");
+        } else if (details.get("file") != null) {
+            b.append("Fichier ").append(details.get("file"));
+        } else if (details.get("hostname") != null || details.get("os") != null) {
+            if (details.get("hostname") != null) {
+                b.append(details.get("hostname"));
+            }
+            if (details.get("os") != null) {
+                if (!b.isEmpty()) {
+                    b.append(" · ");
+                }
+                b.append(details.get("os"));
+            }
+        } else if (action != null) {
+            b.append(action);
+        }
+        if (details.get("jobId") != null) {
+            if (!b.isEmpty()) {
+                b.append(" · ");
+            }
+            b.append("tâche ").append(details.get("jobId"));
+        }
+        if (!ok && error != null && !error.isBlank()) {
+            if (!b.isEmpty()) {
+                b.append(" — ");
+            }
+            String err = error.replace('\n', ' ');
+            b.append(err.length() > 160 ? err.substring(0, 157) + "…" : err);
+        }
+        return b.toString();
     }
 }

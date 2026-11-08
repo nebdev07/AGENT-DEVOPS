@@ -119,14 +119,30 @@ public final class RoleScript {
     }
 
     public static String loadPlatform(PlatformSpec declared, Map<String, String> gitKeysById, ServerProfile profile) {
+        return loadPlatform(declared, gitKeysById, profile, null);
+    }
+
+    /**
+     * @param onlyServiceId si non vide : ne cloner/builder que ce service ({@code PLATFORM_ONLY_SERVICE})
+     */
+    public static String loadPlatform(PlatformSpec declared, Map<String, String> gitKeysById, ServerProfile profile,
+                                      String onlyServiceId) {
         if (declared == null) {
             throw new IllegalArgumentException("Plateforme manquante.");
         }
         PlatformSpec platform = declared.resolved();
+        PlatformServiceSpec only = PlatformDeployPlanService.resolveOnly(platform, onlyServiceId);
+        boolean needDb = only != null ? only.needs().contains("mariadb") : PlatformCompose.needsDb(platform);
+        boolean needRedis = only != null ? only.needs().contains("redis") : PlatformCompose.needsRedis(platform);
         StringBuilder prefix = new StringBuilder();
         prefix.append("PLATFORM_ID=").append(platform.id()).append('\n');
-        prefix.append("PLATFORM_NEED_DB=").append(PlatformCompose.needsDb(platform) ? "1" : "0").append('\n');
-        prefix.append("PLATFORM_NEED_REDIS=").append(PlatformCompose.needsRedis(platform) ? "1" : "0").append('\n');
+        prefix.append("PLATFORM_NEED_DB=").append(needDb ? "1" : "0").append('\n');
+        prefix.append("PLATFORM_NEED_REDIS=").append(needRedis ? "1" : "0").append('\n');
+        // Purge src globale interdite en redeploy d’un seul service (ne pas effacer les autres clones).
+        prefix.append("PLATFORM_RETAIN_SOURCES=").append(only != null || platform.retainsSources() ? "1" : "0").append('\n');
+        if (only != null) {
+            prefix.append("PLATFORM_ONLY_SERVICE=").append(only.id()).append('\n');
+        }
         prefix.append("PLATFORM_COMPOSE_B64=").append(b64(PlatformCompose.yaml(platform, profile))).append('\n');
         prefix.append("PLATFORM_MANIFEST_B64=").append(b64(PlatformCompose.manifest(platform))).append('\n');
         prefix.append("PLATFORM_FILES_B64=").append(b64(PlatformFiles.bundle(platform))).append('\n');
@@ -287,11 +303,19 @@ public final class RoleScript {
      * {@code settings} n’est lu que pour {@code SET}.
      */
     public static String loadNotify(Notifications.Mode mode, Notifications.Settings settings) {
+        return loadNotify(mode, settings, null, null, null);
+    }
+
+    /**
+     * {@code MESSAGE} : sujet + corps (base64) envoyés via le binaire déjà posé sur le VPS (alertes configurées).
+     */
+    public static String loadNotify(Notifications.Mode mode, Notifications.Settings settings,
+                                    String messageKind, String subject, String body) {
         StringBuilder prefix = new StringBuilder();
         prefix.append("NOTIFY_MODE=").append(mode.script()).append('\n');
         boolean writes = switch (mode) {
             case SET -> true;
-            case TEST, STATUS, REMOVE -> false;
+            case TEST, STATUS, REMOVE, MESSAGE -> false;
         };
         if (writes) {
             if (settings == null) {
@@ -307,7 +331,20 @@ public final class RoleScript {
             prefix.append("NOTIFY_LABEL_B64=").append(b64(settings.label())).append('\n');
             prefix.append("NOTIFY_MONTHLY=").append(settings.monthly() ? "1" : "0").append('\n');
         }
+        if (mode == Notifications.Mode.MESSAGE) {
+            prefix.append("NOTIFY_KIND=").append(safeKind(messageKind)).append('\n');
+            prefix.append("NOTIFY_SUBJECT_B64=").append(b64(subject == null ? "" : subject)).append('\n');
+            prefix.append("NOTIFY_BODY_B64=").append(b64(body == null ? "" : body)).append('\n');
+        }
         return prefix + load("notify");
+    }
+
+    private static String safeKind(String kind) {
+        if (kind == null || kind.isBlank()) {
+            return "info";
+        }
+        String k = kind.strip().replaceAll("[^A-Za-z0-9._-]", "");
+        return k.isEmpty() ? "info" : k.substring(0, Math.min(40, k.length()));
     }
 
     private static String b64(String text) {

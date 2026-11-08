@@ -1,4 +1,4 @@
-﻿# VPS Autopilot : démarre la console sur http://127.0.0.1:8088 (Java 21 requis).
+# VPS Autopilot : démarre la console sur http://127.0.0.1:8088 (Java 21 requis).
 # Les réglages et l'état restent dans ce dossier : .env et state\ (à sauvegarder, jamais à partager).
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot

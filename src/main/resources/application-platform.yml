@@ -1,0 +1,16 @@
+# Profil platform (ADR-046) : cockpit multi-comptes derrière login ; exécuteur = cette instance.
+server.address: ${SERVER_ADDRESS:0.0.0.0}
+server.port: ${SERVER_PORT:8088}
+
+devops:
+  platform:
+    public-base-url: ${PLATFORM_PUBLIC_URL:http://127.0.0.1:8088}
+    bootstrap-email: ${PLATFORM_BOOTSTRAP_EMAIL:}
+    founder-email: ${PLATFORM_FOUNDER_EMAIL:nebdev07@gmail.com}
+    default-password: ${PLATFORM_DEFAULT_PASSWORD:}
+    force-default-password: ${PLATFORM_FORCE_DEFAULT_PASSWORD:false}
+    magic-link-minutes: 15
+    session-hours: 12
+    mail-dev-capture: ${PLATFORM_MAIL_DEV_CAPTURE:false}
+    cookie-secure: ${PLATFORM_COOKIE_SECURE:true}
+    cookie-name: VPSAP_SESSION

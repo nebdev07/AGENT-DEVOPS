@@ -1,7 +1,72 @@
 # Changelog — VPS Autopilot
 
 > Ne jamais effacer une entrée.  
-> Dernière mise à jour : 2026-10-15
+> Dernière mise à jour : 2026-11-08
+
+## 2026-11-08 (SaaS)
+
+> La première livraison SaaS est décrite plus bas, section « 2026-11-07 (SaaS) ».
+
+- **Parité deploy SaaS (fondations)** : Flyway `V3__deployment_spec.sql` ; package `saas.deployment` (CRUD fiches APP/PLATFORM) ; `OperationType.DEPLOY_PLATFORM` / `DEPLOY_APP` ; figement de la spec dans les paramètres d'opération ; `LocalEngineAdapter` branché sur le cœur `deployResolved` ; rate-limit `GET /api/v1/auth/consume` ; tests `SaasDeploymentTest`.
+- **UI Angular déploiements** : section fiches APP/PLATFORM sur la fiche serveur ; propose/approve via opérations existantes.
+- **Deploy keys Git SaaS** : Flyway `V4__git_credential.sql` ; API `/git-credentials` ; déchiffrement embedded + scellement runner ; `ExecutionRequest.gitDeployKeysBase64` / `RunnerContract.Job.gitKeys`.
+- **SQL plateforme SaaS** : `PLATFORM_SQL_READ` (auto) / `PLATFORM_SQL_WRITE` (approbation) ; `PlatformSqlService.runResolved` ; UI console SQL sur fiche serveur.
+- **Restore + secrets SaaS** : Flyway `V5__operation_staging.sql` ; staging chiffré one-shot (`/staging/restore`, `/staging/secrets`) ; `RESTORE_PLATFORM` / `SET_PLATFORM_SECRET` / `UNSET_PLATFORM_SECRET` ; contenu scellé pour runner distant ; valeur jamais dans les paramètres d’opération.
+- **Plan d'exécution validé (directive SaaS)** : A stabiliser platform → B parité moteur SaaS → C preuve bout-en-bout → D bascule prod (autorisation) → E modularisation Maven → F produit commercial → G extensions. Les phases 0–8 du draft d'audit du 2026-11-07 sont **obsolètes** (SaaS déjà livré en lab).
+- **Runner séparé (ADR-055)** : profil `runner` (même jar, sans base ni port), API interne `/api/v2/internal/runner` (réserver, battement, compte rendu ; seul le runner qui a réservé peut rendre compte, un seul compte rendu fait foi). Coffre **scellé** pour la clé publique du runner (RSA-OAEP + AES-GCM) : en mode remote, le control plane ne peut plus relire les clés SSH ; rescellement automatique des clés existantes au passage en remote.
+- **Correctif** : la proposition d'une opération déchiffrait la clé SSH pour vérifier qu'elle existe ; remplacé par une lecture de la clé publique (aucun déchiffrement hors exécution).
+- **Anti-SSRF (ADR-056)** : boucle locale, réseaux privés, lien local, métadonnées cloud refusés comme serveurs ; contrôle à l'enregistrement et avant chaque connexion (control plane et runner), connexion vers l'IP résolue ; liste d'interdiction configurable.
+- **MFA obligatoire pour le personnel INOVNE** (ADR-052 amendé) : rôle inactif sans MFA ; pages **Sécurité** (MFA, mot de passe) et **Back-office INOVNE** (organisations en métadonnées, personnel avec état MFA) dans l'application.
+- **Packaging** : `infrastructure/saas/` (Dockerfile web + API, compose PostgreSQL + control plane + runner, init du rôle applicatif avec mot de passe, `.env.example`). Syntaxe validée ; image jamais construite. `./Dockerfile` (profil platform) inchangé.
+- **Inscription par API** : langue du compte reprise de `Accept-Language` si absente.
+- **Tests** : 284 verts (+9). Essai réel sur le lab SSH local avec runner séparé : analyse, rotation de clé vérifiée sur le serveur, audit intact, e-mails reçus (MailHog local).
+- **Importeur `platform` → SaaS (ADR-057)** : essai à blanc par défaut (écrit puis annulé), hachages BCrypt repris, fail-closed pour les comptes limités à certains serveurs, idempotent. Testé ; jamais lancé sur les vraies données.
+- **Docker éprouvé** : image construite, pile compose lancée (base, control plane, runner sains), scénario lab rejoué dans les conteneurs, clés au format scellé en base. Correctifs trouvés ainsi : contrôle de santé du conteneur (`/dev/tcp` exige bash) ; un SMTP absent ou injoignable mettait la santé à DOWN (indicateur mail désactivé). `compose.lab.yml` (lab seulement).
+- **CI** : `.github/workflows/ci.yml` (tests, build Angular, build image) — écrite, jamais exécutée.
+- **Docs** : ADR-047 → ADR-057 inscrits dans `decisions.md` ; `current_state.md`, `saas/mise-en-route.md`, Aide § 10.
+
+## 2026-11-07
+
+- **UI typo (app61)** : police display **Syne** remplacée par **Sora** (Syne trop large / « étirée »). Graisses titres adoucies (700/600), letter-spacing moins agressif. Auth + admin alignés.
+- **UI largeur d’écran (app60)** : accueil / header / aide / activité élargis (`--page` 88rem, plus de colonne ~48rem centrée). Nav mobile en grille 3 colonnes + CTA pleine largeur ; boutons hero empilés sous 640px. Cartes login / forgot / change-password un peu plus larges (30rem).
+- **Go-live marque Inovne** : hostname public `autopilot.inovne.com` (sous-domaine), domaine de base intention `inovne.com`. App `vps-autopilot` sur lab `57.128.186.38` en profil **`platform` 2.0.0** (`PLATFORM_PUBLIC_URL`, cookie secure). Bourse retirée de `apps-intent` ; conteneur `app-my-bourse` arrêté. Dockerfile image : `PLATFORM_PUBLIC_URL=https://autopilot.inovne.com`. Script DNS LWS : `scripts/lws-add-autopilot-dns.ps1`.
+- **DNS + LE Inovne** : A `autopilot` → `57.128.186.38` (LWS) résolu sur 8.8.8.8 / 1.1.1.1 ; certificat Let’s Encrypt `CN=autopilot.inovne.com` (YR1). Traefik Host limité à Inovne (plus de combo sslip dans le même router ACME). Contrôles : health 200 platform, `/login.html` 200, discover anonyme 401.
+
+## 2026-11-02
+
+- **Stepper deploy — lisibilité** : phases ✓/→ plus visibles, libellé « Phase : … » + marqueur `[BUILD_START]` dans le détail ; détection `PLATFORM_DEPLOYED` / `ONLY_BUILT` / `SOURCES_RETAINED`. Pendant le build Docker l’étape « Build » reste active plusieurs minutes (normal). Cache `app59`.
+- **Stepper deploy figé sur l’étape 1** : la liste du plan CHANGE (5 actions) n’était jamais avancée pendant le poll ; `JOB_TAIL` restait sur `DB_GRANT` car le build Docker va dans un fichier temporaire. Correctifs : marqueur `BUILD_START`, `job-poll` privilégie les marqueurs métier, `progress` exposé sur `GET /jobs/{id}`, stepper à 3 phases (Clone → Build → Mise en ligne). Cache `app58`.
+- **Échec build Maven plus clair + modale Fermer** : hint `cannot find symbol` cite la classe cible (« `getIsDeletedParam()` absente de `MediasDto` ») ; popup résultat scrollable, détail Cause/Où/À faire en blocs, bouton Fermer sticky + clic fond. Limite message job 2000 car. Cache `app57`.
+- **Clone plateforme lab — Permission denied** : `/opt/vps-autopilot/platforms` était `700 root` → `deploy` ne pouvait pas créer `…/src/<service>` (message trompeur « clone impossible de dépôt »). Rôle `platform` : `chown/chmod` deploy sur `platforms` avant clone ; messages GIT_CLONE_FAILED avec service + URL + distinction droits vs Deploy key.
+- **Parcours guidé — étape active** : le surlignage teal du stepper suit l’étape **affichée** (carte), plus le premier trou du parcours (ex. Git non coché alors que Données / En ligne à l’écran). `journeyStepFlags` + probes `scripts/test-journey-active.mjs` / `scripts/probe-journey-active.mjs` (PASS). **Important** : relancer l’agent après MAJ static (`process-resources` / restart) — un process long conserve l’ancien `console.js`. Cache `app55`.
+- **Admin plateforme (UI)** : `admin.html` aligné sur la marque (Syne/Figtree, fond sombre, panneaux) — session, logout, tableaux comptes/assignations, sélecteur de compte pour les grants, grilles de permissions par rôle. Plus de page HTML « brut navigateur ».
+- **Messages d’échec build actionnables** : en cas de `BUILD_FAILED` plateforme, Cause / Où / À faire nomment le **service** (ex. `api`), le type (Maven / Next), un extrait (fichier:ligne, symbole manquant) et disent clairement : corriger le dépôt → pousser → cliquer **« Déployer api »**, pas « Tout déployer ». Marqueur distant `BUILD_FAILED_SERVICE=`. Cache `app53`.
+- **Verrou de déploiement + redeploy d’un service (V7-07)** : un seul CHANGE deploy à la fois par hôte (`DeployLock` ; apps sync + platforms async). Second lancement → `409` `DEPLOY_BUSY` + détail du job actif ; bandeau cockpit `GET /api/v1/deploy/active`. Plateforme : `service` optionnel sur `deploy-plan` / `deploy` → clone + `docker compose up -d --build <service>` seulement (`PLATFORM_ONLY_SERVICE` dans le rôle) ; UI « Tout déployer » + « Déployer &lt;service&gt; ». Amendement ADR-036 §10.
+- **Correctif modal « En cours » après échec build** : `pollLongJob` avalait `state=FAILED` (ex. `BUILD_FAILED` / ESLint) comme « Suivi réseau interrompu — on réessaie » jusqu’au délai ~45 min. L’échec métier ferme maintenant la fenêtre tout de suite. Cache `app52`.
+
+## 2026-10-21
+
+- **Sources sur le VPS — choix par plateforme** (`retainSources`) : défaut **garder** les clones sous `platforms/<id>/src` après le build (copie locale de secours). Option **ne pas garder** : purge de `src/` dès que les images tournent (`SOURCES_PURGED` ; compose, `svc-*.env` et images intactes ; re-clone au prochain Déployer). Case à cocher dans la bande Plateformes + ligne dans le plan de déploiement. Les deux options restent valides. Cache `app51`.
+- **UI composition accueil (app50)** : header cadré (`top-inner` ~52 rem), hero en un seul panneau (marque = H1, tagline, étapes Analyse/Plan/Preuve empilées — plus de trou central), pastille version via `/health` (`v2.0.0`). Cache `app50`.
+- **UI hero + session expirée** : accueil recentré (marque/titre moins étirés, colonnes resserrées). API 401 avec `code=SESSION_EXPIRED` ; toast + redirection `/login.html?reason=expired` (garde `fetch` + poll `/me` 60 s). Cache `app49`.
+- **UI — densité et lisibilité** : textes limités à une mesure de lecture (~42–52 rem), barre Activité en grille compacte, cockpit recentré (`max-width` page), rail sticky, kickers moins « étirés ». Cache `app48`.
+- **Activité : détail déploiement + pagination / date** : fin de déploiement journalisée avec résumé du type « Déployé 3 applications : frontoffice [www@sha], back-office […], backend […] », commits `CLONED=…`, URLs et détail services (`DeployActivity`). Menu Activité : filtre date UTC, pagination (`page` / `pageSize`), export HTML/CSV et mail respectent la date. API `GET /journal?date=&page=&pageSize=`, `MailRequest.date`. Cache `app47`.
+- **Rapports d’activité détaillés** : chaque action journalisée porte un `summary` + champs utiles (hostname/OS, jobId, message, services/URLs en fin de déploiement). UI Activité en chronologie (durée, SSH, opérateur). Export HTML chronologique et e-mail avec le détail de chaque ligne (plus seulement « action · ok »). Cache `app45`.
+- **Déploiement plateforme asynchrone + Activité + mail** : `POST /platforms/deploy` répond `202` + `jobId` ; le cockpit suit via `GET /platforms/jobs/{id}` (plus de faux « Failed to fetch » sur builds longs). Fin de tâche : entrée journal « terminé » + e-mail best-effort si alertes VPS configurées (`NOTIFY_MODE=message`). Menu **Activité** (`#activity`) : journal, export HTML/CSV, envoi rapport par e-mail (`POST /journal/mail`). Cache `app44`.
+- **Sessions « Mes serveurs » introuvables** : l’instance locale tournait sur `state-platform-smoke` (état de lab vide) au lieu de `state/` (où sont `known-servers.json`, analyses ARC/lab/DTSI, backups). Relancée avec `--devops.state-dir=./state`. Sur ARC `213.156.134.92` le compte SSH correct est **`agentuser`** (pas `ubuntu` — refusé en clé publique).
+- **Mot de passe oublié (local inclus)** : pages `/forgot-password.html` + `/reset-password.html`, API `POST /api/v1/platform/auth/forgot-password` et `/reset-password`. En local (`mailDevCapture=true`, défaut profil platform), le lien de reset s’affiche dans la page (pas de SMTP). Options : nouveau MDP, ou **remettre le défaut usine** `VpsAutopilot!ChangeMe` avec `mustChangePassword`. Sessions du compte invalidées. Flag optionnel `PLATFORM_FORCE_DEFAULT_PASSWORD` / `devops.platform.force-default-password` pour forcer le MDP fondateur au démarrage. Compte fondateur smoke remis au défaut usine.
+
+## 2026-10-17
+
+- **ADR-046 spécifié — plateforme multi-comptes (V9 MVP)** : profil Spring `platform` (cockpit derrière login), RBAC (permissions éditables par rôle), assignation serveur → compte, exécuteur = instance qui détient les clés SSH (jamais le navigateur). Rôles seed `SUPER_ADMIN` / `OPERATOR` / `VIEWER`. Lien magique. Console locale sans auth (profil défaut, 1.x) conservée. Cargo anonyme inchangé. Version cible **2.0.0**. Backlog `PLAT-01`…`PLAT-08` (P0). ADR-044 et ADR-045 consignés dans `decisions.md` (étaient seulement dans ce changelog). Amendements ADR-030 / ADR-031.
+- **Socle V9 implémenté (en cours de lab)** : package `platform` (Permission, stores JSON `state/platform/`, AccessControl, AuthService lien magique, bootstrap SUPER_ADMIN, filtres `PlatformAuthFilter` + `PlatformRbacFilter` + `RoutePermissions`, API `/api/v1/platform/*`, `login.html`, `admin.html`, Aide 7h, `application-platform.yml`). Liste « Mes serveurs » filtrée par grants. Tests unitaires AccessControl / Auth / RoutePermissions. **Reste** : essai bout en bout profil `platform` sur le lab, SMTP portail réel, journal avec identité compte (PLAT-07), tag 2.0.0.
+- **Correctif session platform** : le filtre d’auth s’exécutait avant `RequestContextFilter` et `AccessControl.bind` no-opait → 401 après un consume réussi. Bind sur `HttpServletRequest` + ordre `-100` / `-90`. Smoke local (port 8090) : login SUPER_ADMIN, création OPERATOR, grant lab, 401 sans session, 403 serveur non assigné / API admin, grant OK (notify lab ≠ 403).
+- **Accueil produit + fondateur SUPER_ADMIN** : landing hero (marque VPS Autopilot, solutions Audit / Mise en ligne / Maintenance, méthode READ/CHANGE/DESTRUCTIVE), polices Syne + Figtree, login.html aligné. Compte fondateur `nebdev07@gmail.com` assuré SUPER_ADMIN au démarrage (`devops.platform.founder-email` / `PLATFORM_FOUNDER_EMAIL`). Cache `app42`.
+- **Accueil public en profil platform** : le JS ne renvoie plus systématiquement vers `/login.html` ; seuls le cockpit (et les API) exigent une session. Aide + landing restent consultables sans compte. Cache `app43`.
+- **Version 2.0.0 — auth mot de passe prod** : login e-mail + mot de passe (BCrypt), mot de passe par défaut `VpsAutopilot!ChangeMe` (`PLATFORM_DEFAULT_PASSWORD`) pour le fondateur `nebdev07@gmail.com`, flag `mustChangePassword` → page `/change-password.html` obligatoire (API 403 `MUST_CHANGE_PASSWORD` tant que non changé). Lien magique conservé en lab. Santé `"version":"2.0.0"`, `"role":"platform"`. Docs déploiement mises à jour.
+
+  Smoke : login défaut → 403 sur admin → changement MDP → 200.
+- **Socle V9 implémenté (en cours, pas encore 2.0.0)** : package `platform` (Permission, stores JSON `state/platform/`, AccessControl, AuthService lien magique, bootstrap SUPER_ADMIN, filtres session + RBAC, `RoutePermissions`, APIs `/api/v1/platform/auth|accounts|roles|grants`, `login.html`, filtre « Mes serveurs » par grants, profil `application-platform.yml`, Aide 7h, cache `app41`). Tests : `AccessControlTest`, `AuthServiceTest`, `RoutePermissionsTest` OK. **Reste** : UI admin dans le cockpit, SMTP réel du lien magique, lab bout en bout, PLAT-07 journal compte, tag 2.0.0.
 
 ## 2026-10-15
 
@@ -153,6 +218,11 @@
 - ADR-023 : déploiements d’apps = module du même `devops-agent` (pas un second agent). Cerveau sur le poste opérateur ; executor déterministe ; apps = cargo.
 - Pile « Que doit installer l’agent ? » repliable (fermée par défaut) pour alléger le cockpit.
 - Rôle sécurité : drop-in SSH `00-vps-autopilot.conf` (OpenSSH, première valeur gagnante) pour que `PasswordAuthentication no` passe avant cloud-init `50-`. L’ancien `99-` est retiré. Le bouton Installer Sécurité reste tant que le mot de passe SSH est encore accepté.
+
+## 2026-11-07 (SaaS)
+
+- Correctifs sécurité profil platform S1–S7 (fail-closed, liens jamais renvoyés, plus de mot de passe usine, limitation des tentatives).
+- Profil `saas` : PostgreSQL + Flyway + RLS, organisations, rôles, opérations à plan haché et approbation expirante, coffre de clés SSH par serveur, audit chaîné, jetons d’API, Managed (accès support borné), facturation (quotas, webhooks signés), IA (conseil validé), API v2 OpenAPI, frontend Angular EN/FR. Voir `.docs/saas/mise-en-route.md`.
 
 ## 2026-09-07
 

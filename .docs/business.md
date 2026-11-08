@@ -110,9 +110,9 @@ Dans `.docs/commercial/` : `offre.md` (fiche client, sans nom de projet personne
 
 Une agence installe l'agent chez elle et gère ses propres serveurs. Le client garde ses clés SSH (risque faible pour nous). Prérequis : installation par un tiers sans le porteur, aide publique complète (ADR-022, ADR-027), support.
 
-### Étape 3 — Plateforme en ligne (V9, ADR-031)
+### Étape 3 — Plateforme en ligne (V9, ADR-031 / ADR-046)
 
-Comptes, sessions, paramètres par compte. Plus grand potentiel, plus grand risque : on détiendrait des accès root à des serveurs tiers. Ne démarre que si les étapes 1 et 2 prouvent la demande. La facturation reste un non-objectif de V9 jour 1 (ADR-031).
+Comptes, sessions, RBAC, paramètres et CHANGE par compte sur **ses** serveurs. Décidé 2026-10-17 : livrer le **MVP** (profil `platform`) sans attendre la licence (étape 2), car le service géré a déjà un client réel. Les clés SSH restent sur l’exécuteur (instance `platform`), pas dans le navigateur. Facturation = non-objectif jour 1. Détail : ADR-046, backlog `PLAT-*`.
 
 ## Risques et garde-fous
 

@@ -1,11 +1,14 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>VPS Autopilot</title>
-  <link rel="stylesheet" href="/console.css?v=app40" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/console.css?v=app61" />
 </head>
 <body>
   <div class="bg"></div>
@@ -13,56 +16,111 @@
   <div class="orb orb-b"></div>
 
   <header class="top">
-    <a class="brand" href="#home" data-view="home">
-      <span class="mark"></span>
-      <div>
+    <div class="top-inner">
+      <a class="brand" href="#home" data-view="home">
+        <span class="mark"></span>
         <strong>VPS Autopilot</strong>
-        <span class="sub">Agent DevOps · plan + confirmation</span>
+      </a>
+      <nav class="nav">
+        <a href="#home" data-view="home">Accueil</a>
+        <a href="#home-solutions" data-view="home">Solutions</a>
+        <a href="#help" data-view="help">Aide</a>
+        <a href="#activity" data-view="activity">Activité</a>
+        <a href="/login.html" id="navLogin">Connexion</a>
+        <a href="#cockpit" data-view="cockpit" class="nav-cta">Cockpit</a>
+      </nav>
+      <div class="top-meta">
+        <span id="modePill" class="pill">…</span>
+        <span id="phasePill" class="pill mute">…</span>
       </div>
-    </a>
-    <nav class="nav">
-      <a href="#home" data-view="home">Accueil</a>
-      <a href="#help" data-view="help">Aide</a>
-      <a href="#cockpit" data-view="cockpit" class="nav-cta">Cockpit</a>
-    </nav>
-    <div class="top-meta">
-      <span id="modePill" class="pill">…</span>
-      <span id="phasePill" class="pill mute">V0</span>
     </div>
   </header>
 
   <section id="view-home" class="view home">
-    <div class="hero">
-      <p class="kicker rise d1">Produit</p>
-      <h1 class="rise d2">Voir le serveur<br>avant de le toucher.</h1>
-      <p class="lede rise d3">
-        Tu fournis l’IP. L’agent lit le VPS, propose une pile, n’installe que ce que tu confirmes.
-        Chaque serveur a son propre état : déjà posé chez l’un, à installer chez l’autre.
-      </p>
-      <div class="hero-actions rise d4">
-        <a class="btn" href="#cockpit" data-view="cockpit">Ouvrir le cockpit</a>
-        <a class="btn ghost" href="#help" data-view="help">Aide utilisateur</a>
+    <div class="landing-hero rise d1">
+      <div class="landing-hero-copy">
+        <h1 class="brand-signal">VPS Autopilot</h1>
+        <p class="hero-tagline">Vos serveurs, sous contrôle.</p>
+        <p class="lede">
+          Analyser, sécuriser, déployer et sauvegarder — toujours avec un plan et votre accord.
+        </p>
+        <div class="hero-actions">
+          <a class="btn" href="#cockpit" data-view="cockpit">Ouvrir le cockpit</a>
+          <a class="btn ghost" href="#home-solutions" data-view="home">Voir les solutions</a>
+        </div>
       </div>
+      <ol class="hero-steps" aria-label="Méthode">
+        <li>
+          <span>Analyse</span>
+          <strong>Lecture seule</strong>
+          <em>OS · ports · hygiène</em>
+        </li>
+        <li>
+          <span>Plan</span>
+          <strong>CHANGE confirmé</strong>
+          <em>Rien sans votre OK</em>
+        </li>
+        <li>
+          <span>Preuve</span>
+          <strong>Sauvegarde restaurée</strong>
+          <em>Exercice mensuel</em>
+        </li>
+      </ol>
     </div>
 
-    <div class="pillars">
-      <article class="pillar rise d3">
-        <i class="dot read"></i>
-        <h3>READ</h3>
-        <p>OS, CPU, RAM, ports, logiciels. Automatique. Aucune écriture.</p>
-      </article>
-      <article class="pillar rise d4">
-        <i class="dot change"></i>
-        <h3>CHANGE</h3>
-        <p>Modifier : clé SSH, sécurité, Docker, Traefik, MariaDB, compte deploy, une app. Une plateforme (plusieurs services) se <em>déclare</em> d’abord sans SSH.</p>
-      </article>
-      <article class="pillar rise d5">
-        <i class="dot dest"></i>
-        <h3>DESTRUCTIVE</h3>
-        <p>Réinstall, rm, drop : refusés. Plus tard, confirmation + liste de ce qui part.</p>
-      </article>
-    </div>
+    <section id="home-solutions" class="solutions" aria-labelledby="solutionsTitle">
+      <p class="kicker rise d2">Solutions</p>
+      <h2 id="solutionsTitle" class="solutions-title rise d3">Trois offres, une méthode</h2>
+      <p class="solutions-lede rise d4">Même outil, même discipline : analyser → proposer → confirmer → exécuter → prouver.</p>
+      <div class="solutions-grid">
+        <article class="solution rise d3">
+          <span class="solution-num">01</span>
+          <h3>Audit</h3>
+          <p>Lecture seule de votre serveur. Rapport noté A–E : risques, preuves, recommandations. Aucune modification.</p>
+        </article>
+        <article class="solution rise d4">
+          <span class="solution-num">02</span>
+          <h3>Mise en ligne</h3>
+          <p>Sécurisation, conteneurs, HTTPS, déploiement depuis Git, reprise des données, sauvegardes chiffrées quotidiennes.</p>
+        </article>
+        <article class="solution rise d5">
+          <span class="solution-num">03</span>
+          <h3>Maintenance</h3>
+          <p>Sauvegardes vérifiées, exercice de restauration mensuel, alertes e-mail, déploiements à la demande, rapport.</p>
+        </article>
+      </div>
+    </section>
 
+    <section class="method" aria-labelledby="methodTitle">
+      <p class="kicker">Méthode</p>
+      <h2 id="methodTitle" class="solutions-title">Trois niveaux de risque</h2>
+      <div class="pillars">
+        <article class="pillar">
+          <i class="dot read"></i>
+          <h3>READ</h3>
+          <p>OS, CPU, RAM, ports, logiciels. Automatique. Aucune écriture.</p>
+        </article>
+        <article class="pillar">
+          <i class="dot change"></i>
+          <h3>CHANGE</h3>
+          <p>Sécurité, Docker, Traefik, base, déploiement, alertes. Plan affiché, confirmation obligatoire.</p>
+        </article>
+        <article class="pillar">
+          <i class="dot dest"></i>
+          <h3>DESTRUCTIVE</h3>
+          <p>Réinstall, suppression massive, drop : refusés. Jamais d’accès root libre à une IA.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="landing-cta">
+      <h2>Prêt à piloter un serveur ?</h2>
+      <p>Connexion sécurisée pour les comptes autorisés. Cockpit local pour l’opérateur mono-poste.</p>
+      <div class="hero-actions">
+        <a class="btn" href="/login.html">Se connecter</a>
+        <a class="btn ghost" href="#help" data-view="help">Lire l’aide</a>
+      </div>
+    </section>
   </section>
 
   <section id="view-help" class="view hidden">
@@ -71,7 +129,7 @@
       <h2 id="helpTitle">Tout faire, dans l’ordre, sans surprise</h2>
       <p class="lede">
         Tu colles l’IP de ton VPS. L’agent lit ce serveur, puis n’installe que ce que tu confirmes.
-        Aujourd’hui : <strong>un seul opérateur</strong> (toi), console en local. Plus tard (V9) : chacun sa session et ses paramètres.
+        Profil <code>platform</code> : comptes + RBAC (connexion). Profil défaut : un opérateur, console locale.
         Ce qui est déjà posé <em>sur cette machine</em> n’est pas reproposé. Un autre VPS reprend les mêmes traitements depuis le début.
       </p>
 
@@ -369,6 +427,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <li>DNS : <strong>sous-domaines</strong> (<code>api.</code> / <code>www.</code>) ou <strong>chemins</strong> sur un seul hôte (<code>/</code> + <code>/api</code> + <code>/admin</code>). En chemins, Traefik retire le préfixe : l’app écoute à la racine du conteneur.</li>
             <li>Variable de build typique : <code>NEXT_PUBLIC_API_URL</code> vers l’URL publique de l’API (sous-domaine <em>ou</em> <code>https://hote/api</code>).</li>
             <li><strong>Enregistrer</strong> reste local. <strong>Déployer</strong> ouvre un popup de plan, puis un CHANGE : clone de chaque Git, build, Traefik HTTPS, aucun port publié. Redis / MariaDB doivent déjà être installés si tu les as cochés sur un service.</li>
+            <li><strong>Code source sur le serveur</strong> (case à cocher) : <em>garder</em> (défaut) laisse les clones sous <code>platforms/…/src</code> comme copie de secours ; <em>ne pas garder</em> les efface après le build (images seules). Les deux options sont valides — à choisir par plateforme.</li>
             <li>Chaque service a besoin d’un <strong>Dockerfile</strong> (racine du dépôt ou sous-dossier) <em>ou</em> d’un <strong>modèle</strong> choisi dans la liste « Dockerfile » : Next.js, Node, Spring Boot (Java 11 / 17 / 21). L’agent écrit alors <code>Dockerfile.autopilot</code> sur le serveur, sans toucher au dépôt. <em>(Avant V7-06 : pas de modèle pour les plateformes.)</em></li>
             <li><strong>Garder le préfixe</strong> : à cocher quand l’app sait déjà qu’elle vit sous <code>/chemin</code> (Next <code>basePath</code>, Spring <code>context-path</code>). Sinon Traefik retire le préfixe.</li>
             <li><strong>Variables de build</strong> (une par ligne, <code>CLE=valeur</code>) : figées dans l’image, ex. <code>NEXT_PUBLIC_API_URL</code>. <strong>Variables d’exécution</strong> : lues au démarrage du conteneur, ex. <code>SPRING_PROFILES_ACTIVE</code>. <code>{{HOST}}</code> est remplacé par le nom d’hôte du service. Les secrets (mots de passe, tokens) s’affichent <code>********</code> : laisse-les ainsi pour garder la valeur enregistrée. Mieux : pose-les avec <strong>Secrets d’exécution</strong> (ligne suivante), ils ne sont alors jamais enregistrés sur ce poste.</li>
@@ -450,6 +509,19 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
         </li>
 
         <li class="step">
+          <h3>7h. Plateforme multi-comptes (profil <code>platform</code>)</h3>
+          <p>ADR-046 / V9. Lancer avec <code>--spring.profiles.active=platform</code> (et <code>PLATFORM_BOOTSTRAP_EMAIL</code> pour le premier super-admin).</p>
+          <ul>
+            <li><strong>Login</strong> : page <code>/login.html</code> — e-mail + mot de passe. Défaut usine : <code>VpsAutopilot!ChangeMe</code> (changé à la 1<sup>re</sup> connexion sur <code>/change-password.html</code>). Lien magique encore dispo en lab.</li>
+            <li><strong>Admin UI</strong> : page <a href="/admin.html">/admin.html</a> — comptes, permissions des rôles, assignations.</li>
+            <li><strong>Rôles</strong> : SUPER_ADMIN (toi), OPERATOR, VIEWER — permissions éditables.</li>
+            <li><strong>Assignation</strong> : rattacher un serveur à un compte ; sans ça, l’opérateur reçoit 403.</li>
+            <li><strong>Clés SSH</strong> : restent sur l’instance qui exécute (jamais dans le navigateur).</li>
+            <li>La console locale sans profil <code>platform</code> (1.x) reste sans login sur <code>127.0.0.1</code>.</li>
+          </ul>
+        </li>
+
+        <li class="step">
           <h3>8. Couleurs du tableau</h3>
           <ul>
             <li><strong>Vert doux</strong> — présent / sain</li>
@@ -463,14 +535,73 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
         <li class="step">
           <h3>9. Ce que l’agent ne fera pas</h3>
           <ul>
-            <li>Ouvrir le cockpit Installer/Déployer sur Internet <strong>sans</strong> login (cargo = preuve seulement ; plateforme multi-users = V9).</li>
+            <li>Ouvrir le cockpit Installer/Déployer sur Internet <strong>sans</strong> login (cargo = preuve seulement ; profil <code>platform</code> = login + RBAC, ADR-046).</li>
             <li>Cibler un serveur interdit ou déjà bloqué par l’agent.</li>
             <li>Installer Apache, PHP ou Nginx directement sur l’hôte.</li>
             <li>Lancer un shell root inventé par une IA.</li>
             <li>Afficher un faux serveur (4 vCPU « démo ») à la place du tien.</li>
           </ul>
         </li>
+
+        <li class="step" id="help-saas">
+          <h3>10. Édition SaaS (profil <code>saas</code>, application sous <code>/app/</code>)</h3>
+          <p>Version en ligne multi-organisations, distincte de cette console locale (guide : <code>.docs/saas/mise-en-route.md</code>).</p>
+          <ul>
+            <li><strong>Organisation</strong> : chaque client ne voit que ses serveurs, opérations et journaux (isolation vérifiée en base).</li>
+            <li><strong>Serveur</strong> : ajouter l’hôte → <em>Lire l’empreinte</em> → la comparer sur le serveur (<code>ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub</code>) → <em>J’ai vérifié</em> → <em>Générer une clé</em> → coller la clé publique dans <code>~/.ssh/authorized_keys</code> → <em>Analyser</em>.</li>
+            <li><strong>Modification</strong> : on propose, le plan exact s’affiche avec son empreinte, on approuve <em>ce</em> plan (validité limitée). Si le serveur a changé entre-temps, rien n’est exécuté (« plan_changed »).</li>
+            <li><strong>Rotation de clé</strong> : générer une nouvelle clé (en attente) puis l’opération « Rotation » : la nouvelle est posée, l’ancienne retirée du serveur.</li>
+            <li><strong>Adresses refusées</strong> : boucle locale, réseaux privés et adresses internes ne sont pas acceptés comme serveurs sur l’instance publique.</li>
+            <li><strong>Personnel INOVNE</strong> : rôle actif seulement avec la double authentification (menu <em>Sécurité</em>) ; accès à un client seulement si celui-ci l’accorde (<em>Managed &amp; support</em>), pour une durée limitée.</li>
+            <li><strong>Runner séparé</strong> : les clés SSH sont scellées pour le runner ; l’instance publique ne peut pas les relire.</li>
+          </ul>
+        </li>
       </ol>
+    </article>
+  </section>
+
+  <section id="view-activity" class="view activity-view hidden">
+    <article class="card activity-card">
+      <header class="activity-head">
+        <p class="kicker">Rapport d’activité</p>
+        <h1>Journal des interventions</h1>
+        <p class="lede">
+          Chronologie claire des actions sur un serveur — filtre par jour, export client ou envoi e-mail.
+        </p>
+      </header>
+      <div class="activity-toolbar">
+        <label class="field">Serveur
+          <select id="activityHost"></select>
+        </label>
+        <label class="field">Date (UTC)
+          <input id="activityDate" type="date" />
+        </label>
+        <label class="field">Par page
+          <select id="activityPageSize">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+          </select>
+        </label>
+        <label class="field">Nom client (export / mail)
+          <input id="activityClient" type="text" autocomplete="organization" placeholder="ex. ARC Nwanyo" />
+        </label>
+        <div class="backup-actions">
+          <button id="btnActivityRefresh" type="button" class="ghost">Actualiser</button>
+          <button id="btnActivityPrev" type="button" class="ghost">← Précédent</button>
+          <button id="btnActivityNext" type="button" class="ghost">Suivant →</button>
+          <button id="btnActivityHtml" type="button" class="ghost">Exporter HTML</button>
+          <button id="btnActivityCsv" type="button" class="ghost">Exporter CSV</button>
+          <button id="btnActivityMail" type="button">Envoyer par e-mail</button>
+        </div>
+      </div>
+      <p id="activityStatus" class="app-form-status" hidden></p>
+      <div class="activity-meta">
+        <p id="activitySummary" class="hint"></p>
+        <p id="activityPageInfo" class="hint"></p>
+      </div>
+      <div id="activityList" class="journal-list"></div>
+      <p class="hint">La date filtre aussi l’export et le mail. SQL et mots de passe n’apparaissent jamais ici.</p>
     </article>
   </section>
 
@@ -525,6 +656,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
       <button id="btnDiscover" type="button">Analyser le VPS</button>
       <button id="btnRailSetup" type="button" class="linkish rail-toggle">Options de connexion</button>
       <p id="statusLine" class="status">Prêt.</p>
+      <p id="deployLockBanner" class="deploy-lock-banner" hidden></p>
       <div class="legend rail-setup">
         <div><i class="dot read"></i> Vert — présent / sain</div>
         <div><i class="dot mute"></i> Gris — absent (pas encore installé)</div>
@@ -533,7 +665,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
       </div>
     </aside>
 
-    <section class="stage">
+    <section class="stage workspace">
       <div id="empty" class="empty">
         <p>Aucun tableau tant que le VPS n’est pas analysé.</p>
         <p class="hint">Renseigne IP, utilisateur, port — puis Analyser. Pas de données fictives.</p>
@@ -646,7 +778,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <div id="secPlatForm" data-jsec="platform">
             <p class="kicker">V7 · Git → images → Traefik</p>
             <h2>Déclarer une plateforme</h2>
-            <p class="hint">Un produit = plusieurs services (site, API, admin…). Enregistre d’abord, puis <strong>Déployer</strong> (CHANGE confirmé). Compose généré, aucun port public.</p>
+            <p class="hint">Un produit = plusieurs services (site, API, admin…). Enregistre d’abord, puis <strong>Tout déployer</strong> ou <strong>Déployer &lt;service&gt;</strong> (CHANGE confirmé). Un seul déploiement à la fois par serveur. Compose généré, aucun port public.</p>
             <p class="hint">Routage : <strong>sous-domaines</strong> (un DNS par service) ou <strong>chemins</strong> (un DNS, <code>/</code> / <code>/api</code> / <code>/admin</code>).</p>
             <div class="row2 app-fields">
               <label class="field">Identifiant plateforme (slug)
@@ -665,6 +797,11 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
             <label class="field">Adresses secondaires redirigées vers l'hôte (optionnel, chemins seulement)
               <input id="platAliases" type="text" value="" placeholder="www.mondomaine.org" autocomplete="off" />
             </label>
+            <label class="field plat-keep">
+              <input id="platRetainSources" type="checkbox" checked />
+              <span>Garder le code source sur le serveur après déploiement</span>
+            </label>
+            <p class="hint">Coché (défaut) : les clones restent sous <code>platforms/…/src</code> — utile comme copie locale de secours. Décoché : ils sont effacés dès que les images tournent (plus de sources ni <code>.git</code> sur le VPS ; au prochain déploiement l’agent re-clone). Les deux choix sont valides.</p>
             <p class="hint" id="platHostHint">Hôte d’un service si le champ est vide : <code>id.plateforme.domaine</code> — ou sslip si tu as analysé une IP.</p>
             <div id="platServices" class="plat-services"></div>
             <div class="app-form-actions">
@@ -890,6 +1027,7 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
               <button id="btnJournalRefresh" type="button" class="ghost">Actualiser</button>
               <button id="btnJournalHtml" type="button" class="ghost">Exporter (HTML)</button>
               <button id="btnJournalCsv" type="button" class="ghost">Exporter (CSV)</button>
+              <a class="btn ghost" href="#activity" data-view="activity">Ouvrir Activité</a>
             </div>
             <div id="journalList" class="journal-list"></div>
           </article>
@@ -957,6 +1095,6 @@ type $HOME\.ssh\vps-autopilot.pub | ssh ubuntu@IP "cat >> ~/.ssh/authorized_keys
     </div>
   </div>
 
-  <script src="/console.js?v=app40"></script>
+  <script src="/console.js?v=app59"></script>
 </body>
 </html>

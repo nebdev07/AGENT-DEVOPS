@@ -1,0 +1,20 @@
+# Runner séparé (ADR-055) : aucun port d'écoute, aucune base. Seul détenteur de la clé privée du coffre scellé.
+spring:
+  main:
+    web-application-type: none
+    banner-mode: off
+
+autopilot:
+  agent:
+    control-plane-url: ${AUTOPILOT_CONTROL_PLANE_URL:}
+    token: ${AUTOPILOT_RUNNER_TOKEN:}
+    private-key: ${AUTOPILOT_RUNNER_PRIVATE_KEY:}
+    private-key-file: ${AUTOPILOT_RUNNER_PRIVATE_KEY_FILE:}
+    id: ${AUTOPILOT_RUNNER_ID:}
+    threads: ${AUTOPILOT_RUNNER_THREADS:2}
+    poll-millis: 3000
+    heartbeat-millis: 60000
+    allow-insecure-http: ${AUTOPILOT_AGENT_ALLOW_INSECURE_HTTP:false}
+    # Anti-SSRF : réseaux privés / boucle locale refusés (true seulement en lab ou auto-hébergé).
+    allow-private-targets: ${AUTOPILOT_ALLOW_PRIVATE_TARGETS:false}
+    denied-targets: ${AUTOPILOT_DENIED_TARGETS:}

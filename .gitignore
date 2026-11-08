@@ -23,11 +23,21 @@ state/backup.key
 state/git-deploy
 state/git-deploy.pub
 state/git-deploy-keys/
+state/platform/
 infrastructure/lab/keys/
 
 # OS
 Thumbs.db
 .DS_Store
 
-# Paquets de livraison (scripts/release.ps1)
+# Artefacts locaux (2026-11-07)
 dist/
+node_modules/
+state-platform-smoke/
+web/node_modules/
+web/.angular/
+web/dist/
+.local/
+infrastructure/saas/.env
+infrastructure/saas/*.key
+saas-import-report.json

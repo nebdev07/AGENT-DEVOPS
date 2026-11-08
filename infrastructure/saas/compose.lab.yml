@@ -1,0 +1,15 @@
+# LAB SEULEMENT — jamais en production.
+#   docker compose -f docker-compose.yml -f compose.lab.yml --env-file .env up -d
+# - autorise les cibles privées (le lab SSH local est joint par host.docker.internal:2222, adresse privée) ;
+# - envoie les e-mails à un MailHog local (SMTP 1025, boîte sur http://localhost:8025).
+services:
+  control-plane:
+    environment:
+      AUTOPILOT_ALLOW_PRIVATE_TARGETS: "true"
+      SPRING_MAIL_HOST: host.docker.internal
+      SPRING_MAIL_PORT: "1025"
+    extra_hosts: ["host.docker.internal:host-gateway"]
+  runner:
+    environment:
+      AUTOPILOT_ALLOW_PRIVATE_TARGETS: "true"
+    extra_hosts: ["host.docker.internal:host-gateway"]

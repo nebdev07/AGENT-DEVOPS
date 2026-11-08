@@ -39,7 +39,7 @@ public class SshConnector {
 
     public String runStdinScript(String script, SshTarget target) throws IOException {
         DevopsProperties.Ssh ssh = properties.getSsh();
-        if (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank()) {
+        if (ExecutionScope.current().isEmpty() && (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank())) {
             throw new IllegalStateException("DEVOPS_SSH_KEY est vide. Renseigner .env (chemin de la clé privée).");
         }
         return runStdinScript(script, target, ssh.getTimeoutSeconds());
@@ -47,13 +47,11 @@ public class SshConnector {
 
     public String runStdinScript(String script, SshTarget target, int timeoutSeconds) throws IOException {
         DevopsProperties.Ssh ssh = properties.getSsh();
-        if (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank()) {
+        if (ExecutionScope.current().isEmpty() && (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank())) {
             throw new IllegalStateException("DEVOPS_SSH_KEY est vide. Renseigner .env (chemin de la clé privée).");
         }
         return execute(script, target, false, timeoutSeconds, client -> {
-            KeyProvider keys = ssh.getPassphrase() == null || ssh.getPassphrase().isBlank()
-                    ? client.loadKeys(ssh.getPrivateKeyPath())
-                    : client.loadKeys(ssh.getPrivateKeyPath(), ssh.getPassphrase());
+            KeyProvider keys = loadKeys(client, ssh);
             client.authPublickey(target.user(), keys);
         });
     }
@@ -64,21 +62,15 @@ public class SshConnector {
      */
     public void uploadFiles(SshTarget target, String remoteDir, Map<String, Path> files) throws IOException {
         DevopsProperties.Ssh ssh = properties.getSsh();
-        if (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank()) {
+        if (ExecutionScope.current().isEmpty() && (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank())) {
             throw new IllegalStateException("DEVOPS_SSH_KEY est vide. Renseigner .env (chemin de la clé privée).");
         }
         try (SSHClient client = new SSHClient()) {
-            if (ssh.isTrustUnknown()) {
-                client.addHostKeyVerifier(new PromiscuousVerifier());
-            } else {
-                client.addHostKeyVerifier(new StoredFingerprintVerifier(trustedHostStore));
-            }
+            addVerifier(client, ssh);
             client.setConnectTimeout(ssh.getTimeoutSeconds() * 1000);
             client.setTimeout(Math.max(120, ssh.getTimeoutSeconds()) * 1000);
             client.connect(target.host(), target.port());
-            KeyProvider keys = ssh.getPassphrase() == null || ssh.getPassphrase().isBlank()
-                    ? client.loadKeys(ssh.getPrivateKeyPath())
-                    : client.loadKeys(ssh.getPrivateKeyPath(), ssh.getPassphrase());
+            KeyProvider keys = loadKeys(client, ssh);
             client.authPublickey(target.user(), keys);
             try (Session session = client.startSession()) {
                 Session.Command cmd = session.exec("mkdir -p -m 700 '" + remoteDir + "'");
@@ -107,7 +99,7 @@ public class SshConnector {
      */
     public void downloadFile(SshTarget target, String remotePath, Path localFile) throws IOException {
         DevopsProperties.Ssh ssh = properties.getSsh();
-        if (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank()) {
+        if (ExecutionScope.current().isEmpty() && (ssh.getPrivateKeyPath() == null || ssh.getPrivateKeyPath().isBlank())) {
             throw new IllegalStateException("DEVOPS_SSH_KEY est vide. Renseigner .env (chemin de la clé privée).");
         }
         int stalled = 0;
@@ -140,17 +132,11 @@ public class SshConnector {
     private boolean downloadFrom(DevopsProperties.Ssh ssh, SshTarget target, String remotePath, Path localFile, long offset)
             throws IOException {
         try (SSHClient client = new SSHClient()) {
-            if (ssh.isTrustUnknown()) {
-                client.addHostKeyVerifier(new PromiscuousVerifier());
-            } else {
-                client.addHostKeyVerifier(new StoredFingerprintVerifier(trustedHostStore));
-            }
+            addVerifier(client, ssh);
             client.setConnectTimeout(ssh.getTimeoutSeconds() * 1000);
             client.setTimeout(Math.max(120, ssh.getTimeoutSeconds()) * 1000);
             client.connect(target.host(), target.port());
-            KeyProvider keys = ssh.getPassphrase() == null || ssh.getPassphrase().isBlank()
-                    ? client.loadKeys(ssh.getPrivateKeyPath())
-                    : client.loadKeys(ssh.getPrivateKeyPath(), ssh.getPassphrase());
+            KeyProvider keys = loadKeys(client, ssh);
             client.authPublickey(target.user(), keys);
             try (SFTPClient sftp = client.newSFTPClient()) {
                 long size = sftp.size(remotePath);
@@ -192,11 +178,7 @@ public class SshConnector {
         DevopsProperties.Ssh ssh = properties.getSsh();
         int timeout = timeoutSeconds <= 0 ? ssh.getTimeoutSeconds() : timeoutSeconds;
         try (SSHClient client = new SSHClient()) {
-            if (ssh.isTrustUnknown()) {
-                client.addHostKeyVerifier(new PromiscuousVerifier());
-            } else {
-                client.addHostKeyVerifier(new StoredFingerprintVerifier(trustedHostStore));
-            }
+            addVerifier(client, ssh);
             client.setConnectTimeout(timeout * 1000);
             // Une connexion figée (sans RST) bloquait la lecture indéfiniment : silence > timeout = échec.
             client.setTimeout(timeout * 1000);
@@ -227,6 +209,46 @@ public class SshConnector {
         } catch (IOException e) {
             rethrow(e, target, passwordAuth);
             throw e;
+        }
+    }
+
+    /** Clé du serveur fournie par le SaaS ({@link ExecutionScope}) sinon clé de l'agent ({@code DEVOPS_SSH_KEY}). */
+    private static KeyProvider loadKeys(SSHClient client, DevopsProperties.Ssh ssh) throws IOException {
+        var scoped = ExecutionScope.current();
+        if (scoped.isPresent()) {
+            return client.loadKeys(scoped.get().privateKeyPem(), null, null);
+        }
+        return ssh.getPassphrase() == null || ssh.getPassphrase().isBlank()
+                ? client.loadKeys(ssh.getPrivateKeyPath())
+                : client.loadKeys(ssh.getPrivateKeyPath(), ssh.getPassphrase());
+    }
+
+    /**
+     * Avec {@link ExecutionScope} : l'empreinte doit égaler celle enregistrée pour ce serveur (aucune confiance
+     * implicite). Sans : comportement d'origine (fichier de confiance, ou {@code trust-unknown}).
+     */
+    private void addVerifier(SSHClient client, DevopsProperties.Ssh ssh) {
+        var scoped = ExecutionScope.current();
+        if (scoped.isPresent()) {
+            String expected = scoped.get().hostFingerprintSha256();
+            client.addHostKeyVerifier(new HostKeyVerifier() {
+                @Override
+                public boolean verify(String hostname, int port, PublicKey key) {
+                    return expected != null && !expected.isBlank()
+                            && expected.equals(HostKeyService.sha256Fingerprint(key));
+                }
+
+                @Override
+                public List<String> findExistingAlgorithms(String hostname, int port) {
+                    return List.of();
+                }
+            });
+            return;
+        }
+        if (ssh.isTrustUnknown()) {
+            client.addHostKeyVerifier(new PromiscuousVerifier());
+        } else {
+            client.addHostKeyVerifier(new StoredFingerprintVerifier(trustedHostStore));
         }
     }
 

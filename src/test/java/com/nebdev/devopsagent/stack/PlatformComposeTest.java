@@ -127,6 +127,21 @@ class PlatformComposeTest {
     }
 
     @Test
+    void retainSourcesDefaultsToTrueAndCanBeDisabled() {
+        PlatformServiceSpec www = new PlatformServiceSpec("www", "https://github.com/org/site.git", "main",
+                "asso.org", 3000, "", List.of(), Map.of(), "/");
+        assertThat(PlatformSpec.normalized("asso", "", "path", List.of(www), null).retainsSources()).isTrue();
+        assertThat(PlatformSpec.normalized("asso", "", "path", List.of(www), List.of(), null, null).retainsSources())
+                .isTrue();
+        assertThat(PlatformSpec.normalized("asso", "", "path", List.of(www), List.of(), false, null).retainsSources())
+                .isFalse();
+        assertThat(new PlatformSpec("asso", "", "path", List.of(www), List.of(), null).retainsSources()).isTrue();
+        String purged = RoleScript.loadPlatform(
+                PlatformSpec.normalized("asso", "", "path", List.of(www), List.of(), false, null));
+        assertThat(purged).contains("PLATFORM_RETAIN_SOURCES=0");
+    }
+
+    @Test
     void httpOnlyServerGetsPlainRoutersNestedPathAndTranslatedPort() {
         PlatformSpec p = PlatformSpec.normalized(
                 "app",

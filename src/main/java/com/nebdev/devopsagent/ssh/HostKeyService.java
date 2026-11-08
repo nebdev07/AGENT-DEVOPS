@@ -63,4 +63,45 @@ public class HostKeyService {
     }
 
     public record AcceptResult(String host, int port, String fingerprint) {}
+
+    /**
+     * Lit l'empreinte de la clé d'hôte (READ) <b>sans</b> l'enregistrer : le SaaS la montre à l'utilisateur,
+     * qui la confirme explicitement (protection contre l'interception à la première connexion).
+     */
+    public String scanSha256(String host, int port) throws IOException {
+        actionGuard.assertAllowed(RiskLevel.READ, "scan-host-key");
+        forbiddenTargetGuard.assertReadAllowed(host);
+        AtomicReference<PublicKey> seen = new AtomicReference<>();
+        try (SSHClient client = new SSHClient()) {
+            client.addHostKeyVerifier(new HostKeyVerifier() {
+                @Override
+                public boolean verify(String hostname, int port1, PublicKey key) {
+                    seen.set(key);
+                    return true;
+                }
+
+                @Override
+                public List<String> findExistingAlgorithms(String hostname, int port1) {
+                    return List.of();
+                }
+            });
+            client.setConnectTimeout(12_000);
+            client.connect(host, port <= 0 ? 22 : port);
+        }
+        if (seen.get() == null) {
+            throw new IOException("Aucune clé d'hôte reçue de " + host + ":" + port);
+        }
+        return sha256Fingerprint(seen.get());
+    }
+
+    /** Empreinte au format OpenSSH ({@code SHA256:<base64 sans remplissage>}), celle que montre {@code ssh-keygen -l}. */
+    public static String sha256Fingerprint(PublicKey key) {
+        byte[] blob = new net.schmizz.sshj.common.Buffer.PlainBuffer().putPublicKey(key).getCompactData();
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(blob);
+            return "SHA256:" + java.util.Base64.getEncoder().withoutPadding().encodeToString(d);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 }

@@ -19,18 +19,32 @@ public class AppDeployPlanService {
     }
 
     public AppDeployPlan plan(String appId) throws IOException {
-        AppSpec app = appIntentStore.require(appId);
+        return plan(appIntentStore.require(appId), true);
+    }
+
+    /** Plan SaaS : spec figée, collisions d'hôte gérées à l'enregistrement de la fiche. */
+    public AppDeployPlan planStandalone(AppSpec app) throws IOException {
+        return plan(app, false, false);
+    }
+
+    private AppDeployPlan plan(AppSpec app, boolean checkLocalCollisions) throws IOException {
+        return plan(app, checkLocalCollisions, true);
+    }
+
+    private AppDeployPlan plan(AppSpec app, boolean checkLocalCollisions, boolean checkLocalGitKeys) throws IOException {
         List<String> actions = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         actions.add("Cloner « " + app.gitUrl() + " » (branche « " + app.gitRef() + " ») sur le VPS.");
         if (GitUrls.ssh(app.gitUrl())) {
-            if (!gitDeployKeyStore.present(app.gitUrl())) {
+            if (checkLocalGitKeys && !gitDeployKeyStore.present(app.gitUrl())) {
                 return AppDeployPlan.blocked(
                         app.id(),
                         actions,
                         "Dépôt SSH : génère la clé Git lecture seule, ajoute-la en Deploy key (read-only) sur GitHub/GitLab, puis Déployer.");
             }
-            actions.add("Poser la clé Git lecture seule sur le compte deploy (IdentitiesOnly).");
+            actions.add(checkLocalGitKeys
+                    ? "Poser la clé Git lecture seule sur le compte deploy (IdentitiesOnly)."
+                    : "Utiliser la Deploy key SaaS (coffre organisation).");
         }
 
         Optional<Boolean> hasDocker = CargoScaffold.dockerfileExists(app);
@@ -72,13 +86,15 @@ public class AppDeployPlanService {
         actions.add("Générer le compose Traefik (réseau proxy, aucun port publié) + HTTPS Let’s Encrypt.");
         actions.add("Publier sur https://" + app.hostname() + "/ (lien public ; HTTP redirigé vers HTTPS).");
 
-        for (AppSpec other : appIntentStore.load()) {
-            if (!other.id().equals(app.id()) && other.hostname().equalsIgnoreCase(app.hostname())) {
-                return AppDeployPlan.blocked(
-                        app.id(),
-                        actions,
-                        "Collision de nom d’hôte avec l’app « " + other.id() + " » (" + other.hostname()
-                                + "). Change le champ Nom d’hôte (ex. " + app.id() + ".<IP>.sslip.io), Enregistrer, puis Déployer.");
+        if (checkLocalCollisions) {
+            for (AppSpec other : appIntentStore.load()) {
+                if (!other.id().equals(app.id()) && other.hostname().equalsIgnoreCase(app.hostname())) {
+                    return AppDeployPlan.blocked(
+                            app.id(),
+                            actions,
+                            "Collision de nom d’hôte avec l’app « " + other.id() + " » (" + other.hostname()
+                                    + "). Change le champ Nom d’hôte (ex. " + app.id() + ".<IP>.sslip.io), Enregistrer, puis Déployer.");
+                }
             }
         }
 

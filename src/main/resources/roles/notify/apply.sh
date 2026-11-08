@@ -1,6 +1,7 @@
 set -eu
 # VPS Autopilot — alertes par e-mail envoyées par le VPS lui-même (BIZ-15, ADR-044).
-# Variables : NOTIFY_MODE (set|test|status|remove)
+# Variables : NOTIFY_MODE (set|test|status|remove|message)
+#   message : NOTIFY_KIND NOTIFY_SUBJECT_B64 NOTIFY_BODY_B64 (alertes déjà configurées)
 #   set : NOTIFY_HOST NOTIFY_PORT NOTIFY_TLS (ssl|starttls|none) NOTIFY_USER NOTIFY_PASS_B64 (vide = garder)
 #         NOTIFY_FROM NOTIFY_TO (adresses séparées par des virgules) NOTIFY_LABEL_B64 NOTIFY_MONTHLY (1|0)
 # Le mot de passe n’est jamais affiché : base64 dans /opt/vps-autopilot/notify.env (600, root), lu par curl via -K.
@@ -52,6 +53,21 @@ case "$NOTIFY_MODE" in
   test)
     $SUDO test -s "$CONF" || { echo NOTIFY_NOT_CONFIGURED; exit 1; }
     send_test
+    echo NOTIFY_DONE
+    exit 0
+    ;;
+  message)
+    $SUDO test -s "$CONF" || { echo NOTIFY_NOT_CONFIGURED; exit 1; }
+    $SUDO test -x "$SEND" || { echo NOTIFY_NOT_CONFIGURED; exit 1; }
+    KIND="${NOTIFY_KIND:-info}"
+    SUBJECT="$(printf '%s' "${NOTIFY_SUBJECT_B64:-}" | base64 -d 2>/dev/null || true)"
+    BODY="$(printf '%s' "${NOTIFY_BODY_B64:-}" | base64 -d 2>/dev/null || true)"
+    [ -n "$SUBJECT" ] || SUBJECT="VPS Autopilot"
+    if printf '%s\n' "$BODY" | $SUDO "$SEND" "$KIND" "$SUBJECT"; then
+      echo NOTIFY_SENT
+    else
+      echo NOTIFY_TEST_FAILED
+    fi
     echo NOTIFY_DONE
     exit 0
     ;;

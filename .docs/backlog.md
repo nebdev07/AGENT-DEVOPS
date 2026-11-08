@@ -28,10 +28,15 @@
 | V7-04 | P2 | Routage par **chemin** (`PathPrefix`) pour un seul nom d’hôte | Done — 2026-09-29 |
 | V7-05 | P2 | Clone Git **privé** (clé lecture seule) | Done — 2026-09-29 |
 | V7-06 | P2 | Monorepo : `context` Docker (sous-dossier) + templates Next build-args / Spring Java 11 | **Done 2026-10-01** (+ env d’exécution, keepPath, Redis privé, clés Git par dépôt, préréglage ARC, restauration dump SQL + fichiers) |
-| V7-07 | P3 | Redeploy d’un seul service d’une plateforme | Open — après V7-02 |
-| PLAT-01 | P2 | Auth + sessions opérateur (ADR-031 / V9) | Open — spécifié seulement |
-| PLAT-02 | P2 | Paramètres VPS / apps isolés par compte | Open — après PLAT-01 |
-| PLAT-03 | P2 | Cockpit public derrière login (remplace cargo anonyme) | Open — après PLAT-01 ; ADR-030 amendé |
+| V7-07 | P3 | Redeploy d’un seul service d’une plateforme | **Done 2026-11-02** — `service` sur deploy-plan / deploy + UI « Déployer &lt;id&gt; » ; lock hôte `DEPLOY_BUSY` |
+| PLAT-01 | P0 | Auth + sessions (mot de passe + lien magique) — ADR-031 / ADR-046 | **Partiel 2026-10-18** — MDP défaut + mustChange ; lab public encore ouvert |
+| PLAT-02 | P0 | Assignations serveur par compte (grants) | **Partiel 2026-10-17** — API + UI admin + filtre liste serveurs |
+| PLAT-03 | P0 | Cockpit public derrière login (profil `platform`) | **Partiel 2026-10-17** — filtres auth ; déploiement lab à faire |
+| PLAT-04 | P0 | RBAC : catalogue permissions + rôles éditables (SUPER_ADMIN / OPERATOR / VIEWER) | **Partiel 2026-10-17** — seed + édition + tests |
+| PLAT-05 | P0 | Garde HTTP : session + permission + grant avant CHANGE | **Partiel 2026-10-17** — RoutePermissions + PlatformRbacFilter |
+| PLAT-06 | P0 | UI admin comptes / rôles / permissions + login | **Partiel 2026-10-17** — `login.html` + `admin.html` |
+| PLAT-07 | P1 | Journal : identité du compte plateforme (amende ADR-042) | Open |
+| PLAT-08 | P0 | Lab vert + tag 2.0.0 | Open — critère de done ADR-046 |
 | BIZ-01 | P0 | Déploiement long fiable : rôle lancé détaché (`systemd-run`), état suivi par l'agent, plus de faux échec à la coupure SSH | **Done 2026-10-14** (ADR-040, lab : tâche 6 min 20) — ~~Open — défaut constaté 2026-10-08~~ |
 | BIZ-02 | P0 | Parcours guidé testé de bout en bout sur un VPS vierge (Analyser → En ligne) | Open — **bloqué 2026-10-14 : aucun VPS vierge disponible** (le lab porte des apps en service, le réinstaller les détruirait). Chaque étape a été jouée séparément sur le lab (analyse, installations, déploiements, sauvegardes, restauration), jamais d'affilée sur un système neuf. Prérequis : un VPS de test jetable |
 | BIZ-03 | P0 | Restauration complète depuis les sauvegardes chiffrées de l'agent + test de restauration périodique | **Done 2026-10-14 pour MariaDB** (ADR-041 : minuteur quotidien, vérification complète, exercice de restauration, restauration de plateforme ; lab 25/25 tables). ~~Exercice **à la demande** (mensuel en maintenance, pas encore automatique).~~ Exercice **automatique mensuel** sur le VPS depuis 2026-10-14 (BIZ-12). ~~Open — preuve de déchiffrement seule aujourd'hui (ADR-034)~~ |

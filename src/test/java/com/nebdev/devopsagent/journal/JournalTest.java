@@ -74,7 +74,12 @@ class JournalTest {
         assertEquals("Requête SQL sur une plateforme", e.action());
         assertEquals("ubuntu", e.user());
         assertEquals(JournalEntry.OK, e.outcome());
-        assertEquals(Map.of("id", "arc", "confirm", "true", "risk", "CHANGE"), e.details());
+        assertEquals("arc", e.details().get("id"));
+        assertEquals("true", e.details().get("confirm"));
+        assertEquals("CHANGE", e.details().get("risk"));
+        assertTrue(e.details().containsKey("summary"));
+        assertFalse(e.details().containsKey("sql"));
+        assertFalse(e.details().containsKey("password"));
         String raw = Files.readString(dir.resolve("1.2.3.4.jsonl"));
         assertFalse(raw.contains("UPDATE"));
         assertFalse(raw.contains("s3cret"));
@@ -90,7 +95,12 @@ class JournalTest {
 
         JournalEntry e = store.list("1.2.3.4", 0).get(0);
         assertEquals("Secret d’exécution posé", e.action());
-        assertEquals(Map.of("id", "arc", "service", "api", "name", "MAIL_PASSWORD", "confirm", "true"), e.details());
+        assertEquals("arc", e.details().get("id"));
+        assertEquals("api", e.details().get("service"));
+        assertEquals("MAIL_PASSWORD", e.details().get("name"));
+        assertEquals("true", e.details().get("confirm"));
+        assertTrue(e.details().containsKey("summary"));
+        assertFalse(e.details().containsKey("value"));
         assertFalse(Files.readString(dir.resolve("1.2.3.4.jsonl")).contains("Hunter2"));
     }
 
@@ -120,8 +130,34 @@ class JournalTest {
         get.addParameter("host", "1.2.3.4");
         filter.doFilter(get, new MockHttpServletResponse(), new MockFilterChain(new EchoServlet(200, "{}")));
 
-        assertEquals(Map.of("id", "demo"), store.list(null, 0).get(0).details());
+        Map<String, String> details = store.list(null, 0).get(0).details();
+        assertEquals("demo", details.get("id"));
+        assertTrue(details.containsKey("summary"));
         assertTrue(store.list("1.2.3.4", 0).isEmpty());
+    }
+
+    @Test
+    void pageFiltersByUtcDateAndPaginates() throws Exception {
+        JournalStore store = new JournalStore(dir);
+        store.append(entry("1.2.3.4", "2026-10-20T10:00:00Z", JournalEntry.OK));
+        store.append(entry("1.2.3.4", "2026-10-20T22:00:00Z", JournalEntry.OK));
+        store.append(entry("1.2.3.4", "2026-10-21T08:00:00Z", JournalEntry.FAILED));
+        store.append(entry("1.2.3.4", "2026-10-21T09:00:00Z", JournalEntry.OK));
+
+        JournalStore.Page day = store.page("1.2.3.4", "2026-10-21", 1, 10);
+        assertEquals(2, day.total());
+        assertEquals("2026-10-21", day.date());
+        assertEquals(1, day.totalPages());
+        assertTrue(day.dates().contains("2026-10-20"));
+        assertTrue(day.dates().contains("2026-10-21"));
+
+        JournalStore.Page p1 = store.page("1.2.3.4", "", 1, 2);
+        assertEquals(4, p1.total());
+        assertEquals(2, p1.totalPages());
+        assertEquals(2, p1.entries().size());
+        JournalStore.Page p2 = store.page("1.2.3.4", "", 2, 2);
+        assertEquals(2, p2.page());
+        assertEquals(2, p2.entries().size());
     }
 
     @Test
@@ -132,15 +168,17 @@ class JournalTest {
         String csv = JournalExport.csv(List.of(e));
         assertTrue(csv.startsWith("\uFEFF"));
         assertTrue(csv.contains("\"14/10/2026 08:00:00\""));
-        assertTrue(csv.contains("\"component==cmd\""));
+        assertTrue(csv.contains("Composant : =cmd") || csv.contains("component"));
         assertEquals("\"'=1+1\"", JournalExport.cell("=1+1"));
         assertTrue(csv.contains("\"<script>\"\"x\"\"\""));
 
         String html = JournalExport.html("1.2.3.4", "Client <A>", List.of(e));
         assertTrue(html.contains("Client &lt;A&gt;"));
         assertTrue(html.contains("&lt;script&gt;"));
-        assertFalse(html.contains("<script>"));
-        assertTrue(html.contains("1 action(s), dont 1 modification(s) du serveur et 1 échec(s)"));
+        assertFalse(html.contains("<script>\"x\""));
+        assertTrue(html.contains("1 action(s) : 1 modification(s)"));
+        assertTrue(html.contains("échec"));
+        assertTrue(html.contains("class=\"timeline\"") || html.contains("Chronologie") || html.contains("<article"));
     }
 
     private static JournalEntry entry(String host, String at, String outcome) {

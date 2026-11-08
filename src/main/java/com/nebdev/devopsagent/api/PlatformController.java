@@ -1,9 +1,16 @@
 package com.nebdev.devopsagent.api;
 
 import com.nebdev.devopsagent.discovery.DiscoveryService;
+import com.nebdev.devopsagent.journal.ActionCatalog;
+import com.nebdev.devopsagent.journal.DeployActivity;
+import com.nebdev.devopsagent.journal.JournalEntry;
+import com.nebdev.devopsagent.journal.JournalStore;
 import com.nebdev.devopsagent.risk.UnsafeActionException;
+import com.nebdev.devopsagent.ssh.DeployBusyException;
+import com.nebdev.devopsagent.ssh.LongJobTracker;
 import com.nebdev.devopsagent.ssh.SshTarget;
 import com.nebdev.devopsagent.stack.AppDeployPlan;
+import com.nebdev.devopsagent.stack.NotifyService;
 import com.nebdev.devopsagent.stack.PlatformDeployService;
 import com.nebdev.devopsagent.stack.PlatformIntentStore;
 import com.nebdev.devopsagent.stack.PlatformRestoreService;
@@ -17,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,6 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,19 +52,28 @@ public class PlatformController {
     private final PlatformRestoreService restoreService;
     private final PlatformSqlService sqlService;
     private final PlatformSecretService secretService;
+    private final LongJobTracker longJobs;
+    private final NotifyService notifyService;
+    private final JournalStore journalStore;
 
     public PlatformController(
             PlatformIntentStore store,
             PlatformDeployService deployService,
             PlatformRestoreService restoreService,
             PlatformSqlService sqlService,
-            PlatformSecretService secretService
+            PlatformSecretService secretService,
+            LongJobTracker longJobs,
+            NotifyService notifyService,
+            JournalStore journalStore
     ) {
         this.store = store;
         this.deployService = deployService;
         this.restoreService = restoreService;
         this.sqlService = sqlService;
         this.secretService = secretService;
+        this.longJobs = longJobs;
+        this.notifyService = notifyService;
+        this.journalStore = journalStore;
     }
 
     @GetMapping
@@ -94,13 +112,17 @@ public class PlatformController {
     }
 
     @GetMapping("/deploy-plan")
-    public Map<String, Object> deployPlan(@RequestParam("id") String id) throws IOException {
+    public Map<String, Object> deployPlan(
+            @RequestParam("id") String id,
+            @RequestParam(value = "service", required = false) String service
+    ) throws IOException {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("Indique l’id de plateforme (paramètre id).");
         }
-        AppDeployPlan plan = deployService.plan(id.trim());
+        AppDeployPlan plan = deployService.plan(id.trim(), service);
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("id", plan.id());
+        out.put("service", service == null || service.isBlank() ? "" : service.trim().toLowerCase());
         out.put("actions", plan.actions());
         out.put("warnings", plan.warnings());
         out.put("canProceed", plan.canProceed());
@@ -118,8 +140,12 @@ public class PlatformController {
         );
     }
 
+    /**
+     * Déploiement asynchrone : répond tout de suite avec un {@code jobId}.
+     * Le navigateur suit via {@code GET /jobs/{jobId}} (évite « Failed to fetch » sur builds longs).
+     */
     @PostMapping("/deploy")
-    public Map<String, Object> deploy(@RequestBody DeployRequest body) throws IOException {
+    public ResponseEntity<Map<String, Object>> deploy(@RequestBody DeployRequest body) {
         if (body == null || body.id() == null || body.id().isBlank()) {
             throw new IllegalArgumentException("Indique la plateforme à déployer.");
         }
@@ -127,18 +153,103 @@ public class PlatformController {
             throw new IllegalArgumentException("Indique l’hôte et l’utilisateur SSH.");
         }
         int port = body.port() == null ? 22 : body.port();
-        DiscoveryService.DiscoveryResult result = deployService.deploy(
-                body.id().trim(),
-                new SshTarget(body.host().trim(), port, body.user().trim()),
-                Boolean.TRUE.equals(body.confirm())
-        );
-        return Map.of(
-                "status", "ok",
-                "id", body.id().trim(),
-                "risk", "CHANGE",
-                "snapshot", result.snapshot(),
-                "report", result.report()
-        );
+        String platformId = body.id().trim();
+        String serviceId = body.service() == null || body.service().isBlank()
+                ? null
+                : body.service().trim().toLowerCase();
+        SshTarget target = new SshTarget(body.host().trim(), port, body.user().trim());
+        boolean confirmed = Boolean.TRUE.equals(body.confirm());
+        Instant started = Instant.now();
+        String jobLabel = serviceId == null ? platformId : platformId + "/" + serviceId;
+        String jobId = longJobs.start("deploy-platform", jobLabel, target.host(), () -> {
+            try {
+                PlatformDeployService.DeployOutcome outcome =
+                        deployService.deploy(platformId, target, confirmed, serviceId);
+                Map<String, String> activity = recordDeployDone(platformId, target, started, true, null, outcome.rawLog());
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("status", "ok");
+                payload.put("id", platformId);
+                if (serviceId != null) {
+                    payload.put("service", serviceId);
+                }
+                payload.put("risk", "CHANGE");
+                payload.put("snapshot", outcome.discovery().snapshot());
+                payload.put("report", outcome.discovery().report());
+                payload.put("apps", activity.getOrDefault("apps", ""));
+                payload.put("summary", activity.getOrDefault("summary", ""));
+                String mailBody = activity.getOrDefault("summary", "Plateforme " + platformId + " déployée")
+                        + "\n\nServeur : " + target.user() + "@" + target.host()
+                        + "\nDate (UTC) : " + Instant.now()
+                        + (serviceId != null ? "\nService : " + serviceId : "")
+                        + (activity.containsKey("services") ? "\n\nDétail :\n" + activity.get("services").replace(" | ", "\n") : "")
+                        + (activity.containsKey("urls") ? "\n\nURLs :\n" + activity.get("urls").replace(" · ", "\n") : "")
+                        + "\n\nVérifie les URL publiques depuis le cockpit si besoin.";
+                notifyService.tryAnnounce(target, "deploy-ok",
+                        serviceId == null
+                                ? "Plateforme " + platformId + " déployée"
+                                : "Service " + serviceId + " (" + platformId + ") déployé",
+                        mailBody);
+                return payload;
+            } catch (Exception e) {
+                String err = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                recordDeployDone(platformId, target, started, false, err, null);
+                notifyService.tryAnnounce(target, "deploy-fail",
+                        "Échec déploiement " + jobLabel,
+                        "Le déploiement de « " + jobLabel + " » a échoué sur "
+                                + target.user() + "@" + target.host() + ".\n\n"
+                                + err + "\n\nOuvre le journal Activité dans le cockpit.");
+                throw e;
+            }
+        });
+        Map<String, Object> accepted = new LinkedHashMap<>();
+        accepted.put("status", "accepted");
+        accepted.put("jobId", jobId);
+        accepted.put("id", platformId);
+        if (serviceId != null) {
+            accepted.put("service", serviceId);
+        }
+        accepted.put("risk", "CHANGE");
+        accepted.put("message", "Déploiement lancé sur le serveur. Suivi en cours — ne ferme pas le cockpit.");
+        return ResponseEntity.accepted().body(accepted);
+    }
+
+    @GetMapping("/jobs/{jobId}")
+    public Map<String, Object> job(@PathVariable("jobId") String jobId) {
+        return longJobs.snapshot(jobId);
+    }
+
+    private Map<String, String> recordDeployDone(String platformId, SshTarget target, Instant started,
+                                                   boolean ok, String error, String rawLog) {
+        Map<String, String> details = new LinkedHashMap<>();
+        try {
+            long ms = Math.max(0, Instant.now().toEpochMilli() - started.toEpochMilli());
+            try {
+                details.putAll(DeployActivity.details(store.require(platformId), rawLog, ok));
+            } catch (Exception ignored) {
+                details.put("id", platformId);
+                details.put("summary", ok
+                        ? "Plateforme « " + platformId + " » déployée"
+                        : "Échec du déploiement de « " + platformId + " »");
+            }
+            journalStore.append(new JournalEntry(
+                    Instant.now().toString(),
+                    System.getProperty("user.name", ""),
+                    target.host(),
+                    target.user(),
+                    "POST",
+                    "/api/v1/platforms/deploy",
+                    "Déploiement d’une plateforme (terminé)",
+                    ActionCatalog.Risk.CHANGE.name(),
+                    ok ? JournalEntry.OK : JournalEntry.FAILED,
+                    ok ? 200 : 500,
+                    ms,
+                    details,
+                    error == null ? "" : error
+            ));
+        } catch (IOException ignored) {
+            // journal best-effort
+        }
+        return details;
     }
 
     @PostMapping(value = "/restore", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -261,6 +372,15 @@ public class PlatformController {
         return new PlatformRestoreService.RestoreFile(tmp, part.getOriginalFilename());
     }
 
+    @ExceptionHandler(DeployBusyException.class)
+    public ResponseEntity<Map<String, Object>> busy(DeployBusyException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", ex.getMessage());
+        body.put("code", "DEPLOY_BUSY");
+        body.put("active", ex.holder() == null ? Map.of() : ex.holder().toMap());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     @ExceptionHandler(UnsafeActionException.class)
     public ResponseEntity<Map<String, String>> forbidden(UnsafeActionException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", ex.getMessage()));
@@ -282,7 +402,12 @@ public class PlatformController {
         }
     }
 
-    public record DeployRequest(String id, String host, Integer port, String user, Boolean confirm) {}
+    /** {@code service} optionnel : redeploy d’un seul service (V7-07). */
+    public record DeployRequest(String id, String host, Integer port, String user, Boolean confirm, String service) {
+        public DeployRequest(String id, String host, Integer port, String user, Boolean confirm) {
+            this(id, host, port, user, confirm, null);
+        }
+    }
 
     public record SqlRequest(String id, String host, Integer port, String user, String sql, Boolean confirm) {}
 

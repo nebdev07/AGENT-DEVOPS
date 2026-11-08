@@ -40,3 +40,16 @@ Elle n'a pas de mot de passe : ne l'expose jamais sur un réseau (voir SERVER_AD
 
 6. Vérifier que tout marche
    - http://127.0.0.1:8088/api/v1/health doit répondre "status":"UP" et la version installée.
+
+7. Mode plateforme (2.0.0, profil Spring "platform") — déploiement public
+   - Dans .env : SPRING_PROFILES_ACTIVE=platform
+                 SERVER_ADDRESS=0.0.0.0
+                 PLATFORM_FOUNDER_EMAIL=nebdev07@gmail.com
+                 PLATFORM_DEFAULT_PASSWORD=VpsAutopilot!ChangeMe
+                 PLATFORM_COOKIE_SECURE=true   (si HTTPS)
+                 PLATFORM_PUBLIC_URL=https://ton-domaine
+                 DEVOPS_SSH_KEY=...
+   - Premier démarrage : crée le compte fondateur avec le mot de passe par défaut.
+   - Ouvre /login.html → connecte-toi → /change-password.html (obligatoire) → cockpit.
+   - Accueil / est public. Ne laisse PAS le mot de passe par défaut en production.
+   - Santé : "role":"platform", "version":"2.0.0".

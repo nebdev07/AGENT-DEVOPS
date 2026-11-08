@@ -1,6 +1,6 @@
 # Sécurité — VPS Autopilot
 
-> Dernière mise à jour : 2026-09-08
+> Dernière mise à jour : 2026-10-17 (ADR-046)
 
 ## Règle d’or
 
@@ -18,6 +18,7 @@ L’IA n’a jamais un accès root illimité. Elle propose. L’humain valide le
 | CHANGE | compte `deploy` (docker, pas sudo) | **whitelist + confirmation** (ADR-028) |
 | CHANGE | déployer une app (Git → image → Traefik) | **whitelist + confirmation** (ADR-029) |
 | Public | instance cargo de cet agent | **lecture santé seulement** (ADR-030) — pas de CHANGE exposé |
+| Public auth | profil `platform` | session + RBAC + grant serveur avant tout CHANGE (ADR-046) ; clés SSH sur l’exécuteur seulement |
 | DESTRUCTIVE | drop DB, rm, reset | **refusé** |
 
 ## SSH

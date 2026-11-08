@@ -14,7 +14,7 @@
 | **V6** | Autonomie contrôlée : plan → validation → exécution → vérification | spécifié |
 | **V7** | Plusieurs **produits** 1:1 sur un VPS **et** **plateforme cargo** (N services) | **en cours** — V7-01/02/04/05 livrés ; templates Java 11 ouverts |
 | **V8** | Multi-serveurs (OVH, Hetzner, …) | spécifié |
-| **V9** | Plateforme **multi-opérateurs** : auth, sessions, paramètres par compte, cockpit en ligne derrière login | **spécifié** (ADR-031) — pas de code. Ne pas confondre avec V7 (plusieurs *services* d’un produit). |
+| **V9** | Plateforme **multi-opérateurs** : auth, sessions, RBAC, paramètres par compte, cockpit en ligne derrière login | **en cours** (ADR-031 + ADR-046, 2026-10-17) — MVP RBAC. Ne pas confondre avec V7 (plusieurs *services* d’un produit). |
 
 SKIP/READY = déjà là **sur l’IP analysée**. La roadmap suit les traitements **livrés dans l’agent**, pour n’importe quel VPS (ADR-025). Le lab ne clôt pas une version.
 

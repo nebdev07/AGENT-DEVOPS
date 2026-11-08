@@ -12,3 +12,14 @@ infrastructure/lab/keys
 README.md
 **/.DS_Store
 Thumbs.db
+
+# SaaS (infrastructure/saas)
+web/node_modules
+web/.angular
+web/dist
+node_modules
+.local
+dist
+state-platform-smoke
+infrastructure/saas/.env
+infrastructure/saas/*.key

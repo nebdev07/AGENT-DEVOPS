@@ -1,6 +1,8 @@
 set -eu
 # VPS Autopilot — plateforme N services. Compose généré par l’agent. Pas de port public.
 # Variables : PLATFORM_ID PLATFORM_COMPOSE_B64 PLATFORM_MANIFEST_B64 PLATFORM_NEED_DB PLATFORM_NEED_REDIS
+#             PLATFORM_RETAIN_SOURCES (1=garder src/ après build, 0=purger — défaut 1)
+#             PLATFORM_ONLY_SERVICE (optionnel : id d’un seul service à cloner/builder — V7-07)
 #             PLATFORM_FILES_B64 (Dockerfile de modèle, env) GIT_KEYS_B64 (une clé lecture seule par dépôt)
 # Manifeste : sid<TAB>git<TAB>ref<TAB>context<TAB>template<TAB>keyId — « - » = vide.
 PLATFORM_ID="${PLATFORM_ID:-}"
@@ -8,7 +10,16 @@ PLATFORM_COMPOSE_B64="${PLATFORM_COMPOSE_B64:-}"
 PLATFORM_MANIFEST_B64="${PLATFORM_MANIFEST_B64:-}"
 PLATFORM_NEED_DB="${PLATFORM_NEED_DB:-0}"
 PLATFORM_NEED_REDIS="${PLATFORM_NEED_REDIS:-0}"
+PLATFORM_RETAIN_SOURCES="${PLATFORM_RETAIN_SOURCES:-1}"
+PLATFORM_ONLY_SERVICE="${PLATFORM_ONLY_SERVICE:-}"
 umask 022
+# true si on traite ce service (plein déploiement ou cible unique)
+want_service() {
+  if [ -z "$PLATFORM_ONLY_SERVICE" ]; then
+    return 0
+  fi
+  [ "$1" = "$PLATFORM_ONLY_SERVICE" ]
+}
 if [ "$(id -u)" -eq 0 ]; then
   SUDO=""
 else
@@ -116,7 +127,10 @@ if [ "$PLATFORM_NEED_DB" = "1" ] || [ "$PLATFORM_NEED_REDIS" = "1" ]; then
 fi
 
 ROOT=/opt/vps-autopilot/platforms/$PLATFORM_ID
-$SUDO mkdir -p "$ROOT/src"
+# platforms doit être traversable par deploy (sinon git clone → « Permission denied » sur …/src/<svc>).
+$SUDO mkdir -p /opt/vps-autopilot/platforms "$ROOT/src"
+$SUDO chown deploy:deploy /opt/vps-autopilot/platforms
+$SUDO chmod 755 /opt/vps-autopilot/platforms
 $SUDO chown -R deploy:deploy "$ROOT"
 
 # clone_one <sid> <git> <ref> <keyId|->
@@ -132,6 +146,8 @@ clone_one() {
     if ! git_as_deploy "$SKEY" -C "$SRC" fetch --depth 1 origin "$SREF" >"$CLONE_LOG" 2>&1; then
       echo GIT_CLONE_FAILED
       echo "SERVICE=$SID"
+      echo "GIT_URL=$SGIT"
+      echo "GIT_REF=$SREF"
       tail -n 20 "$CLONE_LOG" || true
       rm -f "$CLONE_LOG"
       exit 1
@@ -139,10 +155,14 @@ clone_one() {
     git_as_deploy "$SKEY" -C "$SRC" checkout -f FETCH_HEAD >>"$CLONE_LOG" 2>&1
   else
     $SUDO rm -rf "$SRC"
+    $SUDO mkdir -p "$ROOT/src"
+    $SUDO chown -R deploy:deploy "$ROOT"
     if ! git_as_deploy "$SKEY" clone --depth 1 --branch "$SREF" "$SGIT" "$SRC" >"$CLONE_LOG" 2>&1; then
       if ! git_as_deploy "$SKEY" clone --depth 1 "$SGIT" "$SRC" >>"$CLONE_LOG" 2>&1; then
         echo GIT_CLONE_FAILED
         echo "SERVICE=$SID"
+        echo "GIT_URL=$SGIT"
+        echo "GIT_REF=$SREF"
         tail -n 20 "$CLONE_LOG" || true
         rm -f "$CLONE_LOG"
         exit 1
@@ -155,8 +175,27 @@ clone_one() {
 }
 
 MANIFEST="$(printf '%s' "$PLATFORM_MANIFEST_B64" | base64 -d)"
+if [ -n "$PLATFORM_ONLY_SERVICE" ]; then
+  FOUND_ONLY=0
+  while IFS="$(printf '\t')" read -r SID SGIT SREF SCTX STPL SKEY || [ -n "${SID:-}" ]; do
+    [ -z "${SID:-}" ] && continue
+    if [ "$SID" = "$PLATFORM_ONLY_SERVICE" ]; then
+      FOUND_ONLY=1
+      break
+    fi
+  done <<EOF
+$MANIFEST
+EOF
+  if [ "$FOUND_ONLY" != "1" ]; then
+    echo NEED_SERVICE
+    echo "SERVICE=$PLATFORM_ONLY_SERVICE"
+    exit 1
+  fi
+  echo "ONLY_SERVICE=$PLATFORM_ONLY_SERVICE"
+fi
 while IFS="$(printf '\t')" read -r SID SGIT SREF SCTX STPL SKEY || [ -n "${SID:-}" ]; do
   [ -z "${SID:-}" ] && continue
+  want_service "$SID" || continue
   clone_one "$SID" "$SGIT" "$SREF" "${SKEY:--}"
 done <<EOF
 $MANIFEST
@@ -167,6 +206,7 @@ if [ -n "${PLATFORM_FILES_B64:-}" ]; then
   FILES="$(printf '%s' "$PLATFORM_FILES_B64" | base64 -d)"
   while IFS="$(printf '\t')" read -r FSID FPATH FB64 || [ -n "${FSID:-}" ]; do
     [ -z "${FSID:-}" ] && continue
+    want_service "$FSID" || continue
     case "$FSID$FPATH" in *..*) echo "BAD_FILE_PATH=$FSID/$FPATH"; exit 1 ;; esac
     if [ "$FPATH" = "@env" ]; then
       DEST="$ROOT/svc-${FSID}.env"
@@ -186,6 +226,7 @@ fi
 
 while IFS="$(printf '\t')" read -r SID SGIT SREF SCTX STPL SKEY || [ -n "${SID:-}" ]; do
   [ -z "${SID:-}" ] && continue
+  want_service "$SID" || continue
   SCTX="$(undash "${SCTX:--}")"
   STPL="$(undash "${STPL:--}")"
   DIR="$ROOT/src/$SID"
@@ -249,6 +290,7 @@ fi
 
 while IFS="$(printf '\t')" read -r SID SGIT SREF SCTX STPL SKEY || [ -n "${SID:-}" ]; do
   [ -z "${SID:-}" ] && continue
+  want_service "$SID" || continue
   ENVF="$ROOT/svc-${SID}.env"
   if ! $SUDO test -s "$ENVF"; then
     printf 'NODE_ENV=production\n' | $SUDO tee "$ENVF" >/dev/null
@@ -268,17 +310,37 @@ EOF
 printf '%s' "$PLATFORM_COMPOSE_B64" | base64 -d | $SUDO -u deploy tee "$ROOT/docker-compose.yml" >/dev/null
 $SUDO chown deploy:deploy "$ROOT/docker-compose.yml"
 
+BUILD_ARGS=""
+if [ -n "$PLATFORM_ONLY_SERVICE" ]; then
+  BUILD_ARGS="$PLATFORM_ONLY_SERVICE"
+fi
 BUILD_LOG="$(mktemp)"
+# Marqueur pour le suivi cockpit (sinon JOB_TAIL reste bloqué sur DB_GRANT pendant tout le build).
+echo BUILD_START
 if $SUDO docker compose version >/dev/null 2>&1; then
-  if ! $SUDO docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" up -d --build >"$BUILD_LOG" 2>&1; then
+  # shellcheck disable=SC2086
+  if ! $SUDO docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" up -d --build $BUILD_ARGS >"$BUILD_LOG" 2>&1; then
     echo BUILD_FAILED
+    if [ -n "$PLATFORM_ONLY_SERVICE" ]; then
+      echo "BUILD_FAILED_SERVICE=$PLATFORM_ONLY_SERVICE"
+    else
+      # Dernière cible BuildKit « > [svc …] » = service en échec le plus probable.
+      FAILED_SVC="$(grep -Eo '> \[[a-z][a-z0-9-]{0,31} ' "$BUILD_LOG" 2>/dev/null | tail -n 1 | sed -E 's/^> \[//;s/ $//' || true)"
+      if [ -n "$FAILED_SVC" ]; then
+        echo "BUILD_FAILED_SERVICE=$FAILED_SVC"
+      fi
+    fi
     tail -n 80 "$BUILD_LOG" || true
     rm -f "$BUILD_LOG"
     exit 1
   fi
 elif command -v docker-compose >/dev/null 2>&1; then
-  if ! $SUDO docker-compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" up -d --build >"$BUILD_LOG" 2>&1; then
+  # shellcheck disable=SC2086
+  if ! $SUDO docker-compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" up -d --build $BUILD_ARGS >"$BUILD_LOG" 2>&1; then
     echo BUILD_FAILED
+    if [ -n "$PLATFORM_ONLY_SERVICE" ]; then
+      echo "BUILD_FAILED_SERVICE=$PLATFORM_ONLY_SERVICE"
+    fi
     tail -n 80 "$BUILD_LOG" || true
     rm -f "$BUILD_LOG"
     exit 1
@@ -289,6 +351,21 @@ else
   exit 1
 fi
 rm -f "$BUILD_LOG"
+
+# Sources Git : option plateforme. 1 = copie locale de secours ; 0 = plus de .java/.tsx ni .git sur le disque.
+# Les images Docker et svc-*.env / docker-compose.yml restent. Au prochain déploiement, re-clone.
+# Jamais de purge globale si redeploy d’un seul service (PLATFORM_ONLY_SERVICE).
+if [ -n "$PLATFORM_ONLY_SERVICE" ]; then
+  echo SOURCES_RETAINED
+  echo "ONLY_BUILT=$PLATFORM_ONLY_SERVICE"
+elif [ "$PLATFORM_RETAIN_SOURCES" = "0" ]; then
+  $SUDO rm -rf "$ROOT/src"
+  $SUDO mkdir -p "$ROOT/src"
+  $SUDO chown deploy:deploy "$ROOT/src"
+  echo SOURCES_PURGED
+else
+  echo SOURCES_RETAINED
+fi
 
 # Garde en ligne : toutes les 2 min (et au démarrage), relance les conteneurs de plateforme arrêtés.
 # restart: unless-stopped ne relance pas un conteneur arrêté par « docker stop » ou un script interrompu.

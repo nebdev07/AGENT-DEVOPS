@@ -1,14 +1,22 @@
 # API — VPS Autopilot
 
-> Dernière mise à jour : 2026-10-14 (audit, sauvegardes)  
-> Implémenté : V0–V3 partiel + V7-01/02/04/05 (plateformes + Git privé). Base : `http://127.0.0.1:8088`
+> Dernière mise à jour : 2026-10-17 (ADR-046 plateforme)  
+> Implémenté : V0–V3 partiel + V7 + backups/notify + **socle V9 RBAC (profil `platform`)**. Base locale : `http://127.0.0.1:8088`
 
-Auth : **aucune** (outil local). Ne pas exposer tel quel sur Internet. Depuis 1.0.0 la console n'écoute que sur `127.0.0.1` (`SERVER_ADDRESS`, ADR-045). Profil `cargo` (image Docker) : `/` + `GET /api/v1/health` seulement ; le reste → `403` (ADR-030).
+Auth : **aucune** en profil défaut (outil local, `127.0.0.1`, ADR-045). Profil `cargo` : `/` + santé seulement (ADR-030). Profil **`platform`** (ADR-046) : session cookie / `X-Platform-Session` obligatoire ; RBAC + grants serveur ; bootstrap `PLATFORM_BOOTSTRAP_EMAIL` ; lien magique `POST /api/v1/platform/auth/request`, `GET .../consume`.
 
 | Méthode | Chemin | Rôle | Implémenté |
 |---|---|---|---|
 | GET | `/` | UI : accueil `#home`, aide `#help`, cockpit `#cockpit` | oui |
-| GET | `/api/v1/health` | Liveness (`role` = `operator` ou `cargo`, `version` depuis 1.0.0) | oui |
+| GET | `/api/v1/health` | Liveness (`role` = `operator` \| `cargo` \| `platform`, `version` depuis 1.0.0) | oui |
+| POST | `/api/v1/platform/auth/request` | Lien magique `{email}` → `{status, message}` (+ `devToken`/`devLink` si `mail-dev-capture`) | **oui 2026-10-17** ADR-046 |
+| GET | `/api/v1/platform/auth/consume?token=` | Consomme le jeton → cookie session + `{email, roleId, permissions, sessionId}` | **oui 2026-10-17** |
+| GET | `/api/v1/platform/auth/me` | Compte courant (session) | **oui 2026-10-17** |
+| POST | `/api/v1/platform/auth/logout` | Invalide la session | **oui 2026-10-17** |
+| GET/POST | `/api/v1/platform/accounts` … | CRUD comptes (`account.manage`) | **oui 2026-10-17** |
+| GET/PUT | `/api/v1/platform/roles` … | Liste + édition permissions (`role.manage`) | **oui 2026-10-17** |
+| GET/POST/DELETE | `/api/v1/platform/grants` … | Assignations serveur (`server.assign`) ; `GET .../grants/mine` = ses grants | **oui 2026-10-17** |
+| GET | `/api/v1/platform/permissions` | Catalogue des codes permission | **oui 2026-10-17** |
 | GET | `/api/v1/runtime` | Mode `ssh` ou `lab-fixture`, host, fixture | oui |
 | GET | `/api/v1/state` | Dernier `InfrastructureState` (`204` si vide) | oui |
 | GET | `/api/v1/servers` | Mes serveurs : serveurs déjà analysés (nom, hôte, port, utilisateur, OS, date, `readOnly`), plus récent d'abord. Jamais de secret (`state/known-servers.json`) | oui |
@@ -154,13 +162,23 @@ PUT :
 Hôte vide → `service.plateforme.domaine` (routage host) ou `plateforme.domaine` (routage path) ; sslip si `vpsIp`.  
 `routing: path` : un DNS partagé, `pathPrefix` par service (`/` , `/api`). Traefik `PathPrefix` + `StripPrefix` (sauf `/`). Collision d’hôte avec une app 1:1 → `400`.  
 `aliases` (optionnel, 2026-10-07, routage `path` seulement, 4 max) : adresses secondaires, ex. `["www.mondomaine.org"]`, redirigées en 301 vers l’hôte principal en gardant le chemin, avec leur propre certificat. Chaque adresse doit déjà pointer vers le serveur (sinon la demande de certificat échoue en boucle). IP, hôte principal ou routage `host` → `400`.  
+`retainSources` (optionnel, 2026-10-21, défaut `true`) : `true` = laisser les clones Git sous `platforms/<id>/src` après le build (copie de secours) ; `false` = les effacer une fois les images démarrées. Absent / `null` → conserver.  
 Réponse : `{ platforms, deployReady: true, note }`.
+
+## GET `/api/v1/platforms/deploy-plan`
+
+Query : `id` (plateforme), `service` (optionnel, V7-07) — plan pour un seul service ou toute la plateforme.
 
 ## POST `/api/v1/platforms/deploy`
 
 ```json
-{ "id": "ma-asso", "host": "x.x.x.x", "port": 22, "user": "debian", "confirm": true }
+{ "id": "ma-asso", "host": "x.x.x.x", "port": 22, "user": "debian", "confirm": true, "service": "api" }
 ```
 
-Sans `confirm: true` → `403`. Prérequis : analyse SSH réelle, sécurité SKIP, Docker, Traefik, compte `deploy`. Redis/MariaDB SKIP si un service les exige. GET `/deploy-plan` avant le popup.
+`service` optionnel : redeploy d’**un seul** service (`docker compose up -d --build <service>`). Absent = toute la plateforme.  
+Sans `confirm: true` → `403`. Un second déploiement sur le même hôte pendant qu’un autre tourne → `409` + `code: DEPLOY_BUSY` + `active`. Prérequis : analyse SSH réelle, sécurité SKIP, Docker, Traefik, compte `deploy`. Redis/MariaDB SKIP si le(s) service(s) ciblé(s) les exigent. GET `/deploy-plan` avant le popup. Réponse immédiate `202` + `jobId` ; suivi `GET /api/v1/platforms/jobs/{jobId}` (`SUCCEEDED` / `FAILED` — un échec métier ne doit pas être retried comme une coupure réseau).
+
+## GET `/api/v1/deploy/active`
+
+Query optionnelle `host`. Indique si un verrou de déploiement est pris sur cet hôte (`busy`, `active.{jobId,kind,label,startedAt}`).
 

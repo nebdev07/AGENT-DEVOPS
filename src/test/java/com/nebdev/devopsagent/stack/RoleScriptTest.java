@@ -122,7 +122,17 @@ class RoleScriptTest {
         assertThat(script).contains("PLATFORM_ID=ma-asso");
         assertThat(script).contains("PLATFORM_NEED_DB=1");
         assertThat(script).contains("PLATFORM_NEED_REDIS=1");
+        assertThat(script).contains("PLATFORM_RETAIN_SOURCES=1");
+        assertThat(script.lines().noneMatch(l -> l.equals("PLATFORM_ONLY_SERVICE=www"))).isTrue();
         assertThat(script).contains("PLATFORM_DEPLOYED");
+        assertThat(script).contains("BUILD_START");
+        assertThat(script).contains("SOURCES_RETAINED");
+        assertThat(script).contains("SOURCES_PURGED");
+        String onlyWww = RoleScript.loadPlatform(p, Map.of(), ServerProfile.DEFAULT, "www");
+        assertThat(onlyWww.lines().anyMatch(l -> l.equals("PLATFORM_ONLY_SERVICE=www"))).isTrue();
+        assertThat(onlyWww).contains("PLATFORM_NEED_DB=0");
+        assertThat(onlyWww).contains("PLATFORM_NEED_REDIS=0");
+        assertThat(onlyWww).contains("PLATFORM_RETAIN_SOURCES=1");
         String b64 = java.util.Arrays.stream(script.split("\n"))
                 .filter(l -> l.startsWith("PLATFORM_COMPOSE_B64="))
                 .findFirst()

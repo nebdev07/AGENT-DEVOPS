@@ -1,6 +1,8 @@
 package com.nebdev.devopsagent.api;
 
 import com.nebdev.devopsagent.discovery.model.LiveSnapshot;
+import com.nebdev.devopsagent.platform.AccessControl;
+import com.nebdev.devopsagent.platform.PlatformPrincipal;
 import com.nebdev.devopsagent.report.DiscoveryReportFormatter;
 import com.nebdev.devopsagent.risk.ForbiddenTargetGuard;
 import com.nebdev.devopsagent.state.KnownServerStore;
@@ -21,7 +23,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Serveurs déjà analysés : rouvrir une session (paramètres + dernière analyse) sans reconnexion. */
 @RestController
@@ -32,22 +37,43 @@ public class KnownServerController {
     private final StateStore stateStore;
     private final DiscoveryReportFormatter reportFormatter;
     private final ForbiddenTargetGuard guard;
+    private final AccessControl access;
 
     public KnownServerController(
             KnownServerStore store,
             StateStore stateStore,
             DiscoveryReportFormatter reportFormatter,
-            ForbiddenTargetGuard guard
+            ForbiddenTargetGuard guard,
+            AccessControl access
     ) {
         this.store = store;
         this.stateStore = stateStore;
         this.reportFormatter = reportFormatter;
         this.guard = guard;
+        this.access = access;
     }
 
     @GetMapping
     public List<Map<String, Object>> list() throws IOException {
-        return store.list().stream().map(this::describe).toList();
+        List<KnownServer> all = store.list();
+        if (!access.isPlatformMode()) {
+            return all.stream().map(this::describe).toList();
+        }
+        PlatformPrincipal principal = access.requireLogin();
+        if (principal != null && principal.isPlatformAdmin()) {
+            return all.stream().map(this::describe).toList();
+        }
+        Set<String> keys = access.visibleGrants().stream()
+                .map(g -> key(g.host(), g.port(), g.user()))
+                .collect(Collectors.toSet());
+        return all.stream()
+                .filter(s -> keys.contains(key(s.host(), s.port(), s.user())))
+                .map(this::describe)
+                .toList();
+    }
+
+    private static String key(String host, int port, String user) {
+        return (host == null ? "" : host.toLowerCase(Locale.ROOT)) + "|" + port + "|" + (user == null ? "" : user);
     }
 
     @GetMapping("/last")

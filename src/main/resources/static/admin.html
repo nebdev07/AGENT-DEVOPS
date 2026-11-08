@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Administration â€” VPS Autopilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0d12;
+      --panel: rgba(20, 26, 34, .92);
+      --panel-solid: #141a22;
+      --line: rgba(230, 235, 242, .1);
+      --line-strong: rgba(230, 235, 242, .16);
+      --text: #e6ebf2;
+      --muted: #8d97a6;
+      --accent: #8fcdc0;
+      --accent-ink: #0c1614;
+      --danger: #c98b8b;
+      --ok: #8fcdc0;
+      --chip: rgba(143, 205, 192, .12);
+      --font-display: "Sora", system-ui, sans-serif;
+      --font-body: "Figtree", system-ui, sans-serif;
+      --measure: 68rem;
+      --radius: 1rem;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font-body);
+      color: var(--text);
+      background:
+        radial-gradient(900px 420px at 12% -8%, rgba(143, 205, 192, .09), transparent 55%),
+        radial-gradient(800px 380px at 100% 0%, rgba(138, 160, 184, .08), transparent 48%),
+        radial-gradient(700px 400px at 80% 100%, rgba(143, 205, 192, .05), transparent 45%),
+        var(--bg);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .shell {
+      width: min(100% - 2rem, var(--measure));
+      margin: 0 auto;
+      padding: 1.25rem 0 3rem;
+    }
+
+    .top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem 1.5rem;
+      margin-bottom: 1.75rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand-block { min-width: min(100%, 18rem); }
+    .brand {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 1.05rem;
+      letter-spacing: -.03em;
+      color: var(--accent);
+      margin: 0 0 .2rem;
+    }
+    h1 {
+      font-family: var(--font-display);
+      font-size: clamp(1.55rem, 3vw, 2rem);
+      letter-spacing: -.035em;
+      margin: 0 0 .35rem;
+      line-height: 1.15;
+    }
+    .lede {
+      margin: 0;
+      color: var(--muted);
+      font-size: .95rem;
+      line-height: 1.45;
+      max-width: 36rem;
+    }
+    .top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: .55rem;
+    }
+    .who {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      padding: .4rem .7rem;
+      border-radius: 999px;
+      background: var(--chip);
+      border: 1px solid rgba(143, 205, 192, .25);
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .who span { color: var(--muted); font-weight: 500; }
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      padding: .45rem .8rem;
+      border-radius: .55rem;
+      border: 1px solid var(--line);
+      background: rgba(12, 16, 22, .55);
+      color: var(--text);
+      font-size: .88rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .nav-link:hover { border-color: var(--line-strong); text-decoration: none; background: rgba(20, 26, 34, .9); }
+    .nav-link.ghost { color: var(--muted); }
+
+    #msg {
+      min-height: 1.25rem;
+      margin: 0 0 1.25rem;
+      white-space: pre-wrap;
+      font-size: .92rem;
+      line-height: 1.45;
+    }
+    #msg:empty { margin: 0; min-height: 0; }
+    .ok { color: var(--ok); }
+    .err { color: var(--danger); }
+
+    .grid {
+      display: grid;
+      gap: 1.15rem;
+    }
+    @media (min-width: 960px) {
+      .grid-split {
+        grid-template-columns: 1.15fr .85fr;
+        align-items: start;
+      }
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.3rem 1.35rem;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
+    }
+    .panel h2 {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      letter-spacing: -.02em;
+      margin: 0 0 .25rem;
+    }
+    .panel .hint {
+      margin: 0 0 1rem;
+      color: var(--muted);
+      font-size: .88rem;
+      line-height: 1.45;
+    }
+    .kicker {
+      margin: 0 0 .35rem;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .table-wrap { overflow-x: auto; margin: 0 0 1.1rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+    }
+    th {
+      text-align: left;
+      font-size: .72rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+      padding: .45rem .55rem .55rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    td {
+      padding: .7rem .55rem .7rem 0;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: 0; }
+    .mono {
+      font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      font-size: .78rem;
+      color: var(--muted);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: .18rem .5rem;
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+      background: rgba(138, 160, 184, .15);
+      color: #c5d0de;
+      border: 1px solid rgba(138, 160, 184, .25);
+    }
+    .badge.admin { background: var(--chip); color: var(--accent); border-color: rgba(143, 205, 192, .3); }
+    .badge.off { opacity: .55; }
+    .empty {
+      margin: .35rem 0 1rem;
+      padding: .85rem 1rem;
+      border-radius: .7rem;
+      border: 1px dashed var(--line-strong);
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .form-block {
+      margin-top: .25rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+    .form-block h3 {
+      margin: 0 0 .75rem;
+      font-size: 1rem;
+      font-family: var(--font-display);
+      letter-spacing: -.02em;
+    }
+    .fields {
+      display: grid;
+      gap: .75rem;
+    }
+    @media (min-width: 640px) {
+      .fields.two { grid-template-columns: 1fr 1fr; }
+      .fields.three { grid-template-columns: 1fr 1fr 1fr; }
+    }
+    label.field {
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: var(--muted);
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: .65rem .7rem;
+      border-radius: .55rem;
+      border: 1px solid var(--line);
+      background: #0c1016;
+      color: var(--text);
+      font: inherit;
+      font-weight: 500;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid rgba(143, 205, 192, .35);
+      outline-offset: 1px;
+      border-color: rgba(143, 205, 192, .45);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .55rem;
+      margin-top: .95rem;
+    }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: .55rem;
+      padding: .62rem 1rem;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    button:hover { filter: brightness(1.06); }
+    button.ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+    button.ghost:hover { border-color: var(--line-strong); filter: none; background: rgba(255,255,255,.03); }
+    button.danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid rgba(201, 139, 139, .35);
+    }
+    button.danger:hover { background: rgba(201, 139, 139, .08); filter: none; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+
+    .role-card {
+      margin: 0 0 1rem;
+      padding: 1rem 1.05rem;
+      border-radius: .85rem;
+      border: 1px solid var(--line);
+      background: rgba(12, 16, 22, .45);
+    }
+    .role-card:last-child { margin-bottom: 0; }
+    .role-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: .5rem;
+      margin-bottom: .75rem;
+    }
+    .role-head h3 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 1.02rem;
+      letter-spacing: -.02em;
+    }
+    .role-head .sub { color: var(--muted); font-size: .85rem; }
+    .perm-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+      gap: .45rem .65rem;
+      margin-bottom: .85rem;
+    }
+    .perm {
+      display: flex;
+      align-items: flex-start;
+      gap: .45rem;
+      margin: 0;
+      padding: .4rem .5rem;
+      border-radius: .45rem;
+      border: 1px solid transparent;
+      font-size: .8rem;
+      font-weight: 500;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .perm:hover { background: rgba(255,255,255,.03); border-color: var(--line); }
+    .perm input { width: auto; margin-top: .15rem; accent-color: var(--accent); }
+    .perm code {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: .76rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div class="brand-block">
+        <p class="brand">VPS Autopilot</p>
+        <h1>Administration</h1>
+        <p class="lede">Comptes, rÃ´les RBAC et serveurs assignÃ©s. Les CHANGE restent sur lâ€™exÃ©cuteur qui dÃ©tient les clÃ©s SSH.</p>
+      </div>
+      <div class="top-actions">
+        <div class="who" id="who" hidden><strong id="whoEmail"></strong><span id="whoRole"></span></div>
+        <a class="nav-link" href="/index.html#cockpit">Cockpit</a>
+        <a class="nav-link ghost" href="/index.html#home">Accueil</a>
+        <button type="button" class="ghost" id="btnLogout">DÃ©connexion</button>
+      </div>
+    </header>
+
+    <p id="msg" role="status"></p>
+
+    <div class="grid grid-split">
+      <section class="panel" id="secAccounts">
+        <p class="kicker">AccÃ¨s</p>
+        <h2>Comptes</h2>
+        <p class="hint">CrÃ©e un opÃ©rateur ou un lecteur, puis assigne-lui les VPS quâ€™il peut piloter.</p>
+        <div id="accounts"></div>
+        <div class="form-block">
+          <h3>Nouveau compte</h3>
+          <div class="fields two">
+            <label class="field">E-mail
+              <input id="accEmail" type="email" autocomplete="off" placeholder="ops@entreprise.ci"/>
+            </label>
+            <label class="field">Nom affichÃ©
+              <input id="accName" type="text" autocomplete="off" placeholder="OpÃ©rateur"/>
+            </label>
+            <label class="field">RÃ´le
+              <select id="accRole">
+                <option value="OPERATOR">OPERATOR â€” dÃ©ploie et opÃ¨re</option>
+                <option value="VIEWER">VIEWER â€” lecture seule</option>
+                <option value="SUPER_ADMIN">SUPER_ADMIN â€” admin plateforme</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions">
+            <button type="button" id="btnCreateAcc">CrÃ©er le compte</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="secGrants">
+        <p class="kicker">PÃ©rimÃ¨tre</p>
+        <h2>Assignations serveur</h2>
+        <p class="hint">Sans assignation, un OPERATOR ne voit pas le VPS dans Â« Mes serveurs Â».</p>
+        <div id="grants"></div>
+        <div class="form-block">
+          <h3>Assigner un serveur</h3>
+          <div class="fields">
+            <label class="field">Compte
+              <select id="gAcc"></select>
+            </label>
+            <div class="fields three">
+              <label class="field">HÃ´te / IP
+                <input id="gHost" type="text" placeholder="213.156.134.92" autocomplete="off"/>
+              </label>
+              <label class="field">Port SSH
+                <input id="gPort" type="number" value="22" min="1" max="65535"/>
+              </label>
+              <label class="field">User SSH
+                <input id="gUser" type="text" placeholder="agentuser" autocomplete="off"/>
+              </label>
+            </div>
+            <label class="field">LibellÃ© (optionnel)
+              <input id="gLabel" type="text" placeholder="ARC production" autocomplete="off"/>
+            </label>
+          </div>
+          <div class="actions">
+            <button type="button" id="btnGrant">Assigner</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" id="secRoles" style="margin-top:1.15rem">
+      <p class="kicker">RBAC</p>
+      <h2>RÃ´les et permissions</h2>
+      <p class="hint">Chaque case = une capacitÃ© API. Enregistre un rÃ´le aprÃ¨s modification. Les SUPER_ADMIN gardent lâ€™admin mÃªme si tu retires des cases par erreur â€” vÃ©rifie avant de sauver.</p>
+      <div id="roles"></div>
+    </section>
+  </div>
+
+  <script>
+    const msg = document.getElementById("msg");
+    let accountList = [];
+
+    function esc(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function say(t, ok) {
+      msg.className = ok ? "ok" : "err";
+      msg.textContent = t || "";
+    }
+
+    function roleBadge(roleId) {
+      const admin = roleId === "SUPER_ADMIN";
+      return "<span class=\"badge" + (admin ? " admin" : "") + "\">" + esc(roleId) + "</span>";
+    }
+
+    async function api(path, opts) {
+      const r = await fetch(path, Object.assign({
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" }
+      }, opts || {}));
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 401) {
+        const reason = j.code === "SESSION_EXPIRED" ? "expired" : "required";
+        location.href = "/login.html?reason=" + reason + "&next=" + encodeURIComponent("/admin.html");
+        throw new Error(j.error || "Connexion requise");
+      }
+      if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+      return j;
+    }
+
+    function fillAccountSelect(selected) {
+      const sel = document.getElementById("gAcc");
+      const prev = selected || sel.value;
+      sel.innerHTML = accountList.length
+        ? accountList.map((a) =>
+            "<option value=\"" + esc(a.id) + "\">"
+            + esc(a.email) + " Â· " + esc(a.roleId)
+            + "</option>").join("")
+        : "<option value=\"\">Aucun compte</option>";
+      if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+    }
+
+    function renderAccounts(accounts) {
+      accountList = accounts || [];
+      fillAccountSelect();
+      const box = document.getElementById("accounts");
+      if (!accountList.length) {
+        box.innerHTML = "<p class=\"empty\">Aucun compte pour lâ€™instant.</p>";
+        return;
+      }
+      box.innerHTML = "<div class=\"table-wrap\"><table>"
+        + "<thead><tr><th>E-mail</th><th>Nom</th><th>RÃ´le</th><th>Ã‰tat</th></tr></thead><tbody>"
+        + accountList.map((a) => "<tr>"
+          + "<td><strong>" + esc(a.email) + "</strong><div class=\"mono\">" + esc(a.id) + "</div></td>"
+          + "<td>" + esc(a.displayName || "â€”") + "</td>"
+          + "<td>" + roleBadge(a.roleId) + "</td>"
+          + "<td>" + (a.active
+            ? "<span class=\"badge admin\">actif</span>"
+            : "<span class=\"badge off\">inactif</span>") + "</td>"
+          + "</tr>").join("")
+        + "</tbody></table></div>";
+    }
+
+    function renderGrants(grants) {
+      const box = document.getElementById("grants");
+      const list = grants || [];
+      if (!list.length) {
+        box.innerHTML = "<p class=\"empty\">Aucune assignation. Un opÃ©rateur sans serveur assignÃ© ne peut rien piloter.</p>";
+        return;
+      }
+      const byId = Object.fromEntries(accountList.map((a) => [a.id, a]));
+      box.innerHTML = "<div class=\"table-wrap\"><table>"
+        + "<thead><tr><th>Compte</th><th>Serveur</th><th>LibellÃ©</th><th></th></tr></thead><tbody>"
+        + list.map((g) => {
+          const acc = byId[g.accountId];
+          const label = acc ? acc.email : g.accountId;
+          return "<tr>"
+            + "<td><strong>" + esc(label) + "</strong>"
+            + (acc ? "" : "<div class=\"mono\">" + esc(g.accountId) + "</div>") + "</td>"
+            + "<td><code>" + esc(g.user) + "@" + esc(g.host) + "</code>"
+            + "<div class=\"mono\">port " + esc(g.port) + "</div></td>"
+            + "<td>" + esc(g.label || "â€”") + "</td>"
+            + "<td><button type=\"button\" class=\"danger\" data-revoke=\"" + esc(g.id) + "\">Retirer</button></td>"
+            + "</tr>";
+        }).join("")
+        + "</tbody></table></div>";
+
+      box.querySelectorAll("[data-revoke]").forEach((btn) => btn.addEventListener("click", async () => {
+        if (!confirm("Retirer cette assignation serveur ?")) return;
+        try {
+          await api("/api/v1/platform/grants/" + encodeURIComponent(btn.getAttribute("data-revoke")), { method: "DELETE" });
+          say("Assignation retirÃ©e.", true);
+          refresh();
+        } catch (e) { say(e.message, false); }
+      }));
+    }
+
+    function renderRoles(roles, catalog) {
+      const box = document.getElementById("roles");
+      const list = roles || [];
+      const perms = catalog || [];
+      if (!list.length) {
+        box.innerHTML = "<p class=\"empty\">Aucun rÃ´le.</p>";
+        return;
+      }
+      box.innerHTML = list.map((r) => {
+        const boxes = perms.map((p) => {
+          const checked = (r.permissions || []).includes(p) ? " checked" : "";
+          return "<label class=\"perm\"><input type=\"checkbox\" data-role=\"" + esc(r.id)
+            + "\" value=\"" + esc(p) + "\"" + checked + "/> <code>" + esc(p) + "</code></label>";
+        }).join("");
+        return "<div class=\"role-card\">"
+          + "<div class=\"role-head\"><h3>" + esc(r.id) + "</h3>"
+          + "<span class=\"sub\">" + esc(r.label || "") + " Â· " + ((r.permissions || []).length) + " permission(s)</span></div>"
+          + "<div class=\"perm-grid\">" + boxes + "</div>"
+          + "<div class=\"actions\"><button type=\"button\" data-save-role=\"" + esc(r.id)
+          + "\">Enregistrer " + esc(r.id) + "</button></div>"
+          + "</div>";
+      }).join("");
+
+      box.querySelectorAll("[data-save-role]").forEach((btn) => btn.addEventListener("click", async () => {
+        const id = btn.getAttribute("data-save-role");
+        const permissions = [...box.querySelectorAll("input[data-role='" + id + "']:checked")].map((i) => i.value);
+        btn.disabled = true;
+        try {
+          await api("/api/v1/platform/roles/" + encodeURIComponent(id) + "/permissions", {
+            method: "PUT",
+            body: JSON.stringify({ permissions })
+          });
+          say("RÃ´le Â« " + id + " Â» enregistrÃ© (" + permissions.length + " permission(s)).", true);
+          refresh();
+        } catch (e) { say(e.message, false); }
+        finally { btn.disabled = false; }
+      }));
+    }
+
+    async function refresh() {
+      const me = await api("/api/v1/platform/auth/me");
+      document.getElementById("who").hidden = false;
+      document.getElementById("whoEmail").textContent = me.email || "";
+      document.getElementById("whoRole").textContent = " Â· " + (me.roleId || "") + (me.platformAdmin ? " Â· admin" : "");
+      if (!me.platformAdmin && !(me.permissions || []).includes("account.manage")) {
+        say("Droits admin requis pour cette page.", false);
+        return;
+      }
+      const [accounts, roles, permPayload, grants] = await Promise.all([
+        api("/api/v1/platform/accounts"),
+        api("/api/v1/platform/roles"),
+        api("/api/v1/platform/permissions"),
+        api("/api/v1/platform/grants")
+      ]);
+      renderAccounts(accounts);
+      renderGrants(grants);
+      renderRoles(roles, permPayload.permissions || []);
+    }
+
+    document.getElementById("btnCreateAcc").addEventListener("click", async () => {
+      const email = document.getElementById("accEmail").value.trim();
+      if (!email) { say("Indique un e-mail.", false); return; }
+      try {
+        await api("/api/v1/platform/accounts", {
+          method: "POST",
+          body: JSON.stringify({
+            email,
+            displayName: document.getElementById("accName").value.trim(),
+            roleId: document.getElementById("accRole").value
+          })
+        });
+        document.getElementById("accEmail").value = "";
+        document.getElementById("accName").value = "";
+        say("Compte crÃ©Ã© : " + email + ". Assigne-lui un serveur si besoin.", true);
+        refresh();
+      } catch (e) { say(e.message, false); }
+    });
+
+    document.getElementById("btnGrant").addEventListener("click", async () => {
+      const accountId = document.getElementById("gAcc").value.trim();
+      const host = document.getElementById("gHost").value.trim();
+      const user = document.getElementById("gUser").value.trim();
+      if (!accountId || !host || !user) {
+        say("Compte, hÃ´te et user SSH sont requis.", false);
+        return;
+      }
+      try {
+        await api("/api/v1/platform/grants", {
+          method: "POST",
+          body: JSON.stringify({
+            accountId,
+            host,
+            port: Number(document.getElementById("gPort").value) || 22,
+            user,
+            label: document.getElementById("gLabel").value.trim()
+          })
+        });
+        say("Serveur " + user + "@" + host + " assignÃ©.", true);
+        document.getElementById("gHost").value = "";
+        document.getElementById("gLabel").value = "";
+        refresh();
+      } catch (e) { say(e.message, false); }
+    });
+
+    document.getElementById("btnLogout").addEventListener("click", async () => {
+      try {
+        await api("/api/v1/platform/auth/logout", { method: "POST", body: "{}" });
+      } catch (_) { /* best-effort */ }
+      location.href = "/login.html";
+    });
+
+    refresh().catch((e) => say(e.message, false));
+  </script>
+</body>
+</html>

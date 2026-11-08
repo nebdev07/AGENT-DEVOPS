@@ -1,0 +1,96 @@
+# VPS Autopilot SaaS — PostgreSQL + control plane + runner séparé (ADR-055).
+#   cp infrastructure/saas/.env.example infrastructure/saas/.env   (puis remplir)
+#   docker compose -f infrastructure/saas/docker-compose.yml --env-file infrastructure/saas/.env up -d --build
+# Le control plane écoute sur 127.0.0.1:${AUTOPILOT_HTTP_PORT:-8080} : le placer derrière un reverse proxy TLS.
+name: vps-autopilot-saas
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: autopilot
+      POSTGRES_USER: autopilot_owner
+      POSTGRES_PASSWORD: ${AUTOPILOT_DB_OWNER_PASSWORD:?à définir}
+      AUTOPILOT_DB_PASSWORD: ${AUTOPILOT_DB_PASSWORD:?à définir}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autopilot_owner -d autopilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  control-plane:
+    build:
+      context: ../..
+      dockerfile: infrastructure/saas/Dockerfile
+    image: vps-autopilot-saas:local
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      SPRING_PROFILES_ACTIVE: saas
+      AUTOPILOT_DB_URL: jdbc:postgresql://db:5432/autopilot
+      AUTOPILOT_DB_USER: autopilot_app
+      AUTOPILOT_DB_PASSWORD: ${AUTOPILOT_DB_PASSWORD}
+      AUTOPILOT_DB_OWNER_USER: autopilot_owner
+      AUTOPILOT_DB_OWNER_PASSWORD: ${AUTOPILOT_DB_OWNER_PASSWORD}
+      AUTOPILOT_MASTER_KEY: ${AUTOPILOT_MASTER_KEY:?à définir}
+      AUTOPILOT_PUBLIC_URL: ${AUTOPILOT_PUBLIC_URL:?à définir}
+      AUTOPILOT_BOOTSTRAP_ADMIN_EMAIL: ${AUTOPILOT_BOOTSTRAP_ADMIN_EMAIL:-}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      AUTOPILOT_RUNNER_MODE: remote
+      AUTOPILOT_RUNNER_TOKEN: ${AUTOPILOT_RUNNER_TOKEN:?à définir}
+      AUTOPILOT_RUNNER_PUBLIC_KEY: ${AUTOPILOT_RUNNER_PUBLIC_KEY:?à définir}
+      AUTOPILOT_AI_PROVIDER: ${AUTOPILOT_AI_PROVIDER:-none}
+      AUTOPILOT_AI_API_KEY: ${AUTOPILOT_AI_API_KEY:-}
+      AUTOPILOT_PAYMENT_WEBHOOK_SECRET: ${AUTOPILOT_PAYMENT_WEBHOOK_SECRET:-}
+    ports:
+      - "127.0.0.1:${AUTOPILOT_HTTP_PORT:-8080}:8080"
+    networks: [internal, public]
+    healthcheck:
+      # bash (et non sh) : /dev/tcp est une fonction de bash ; l'image n'embarque ni curl ni wget.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  runner:
+    image: vps-autopilot-saas:local
+    restart: unless-stopped
+    depends_on:
+      control-plane: { condition: service_healthy }
+    environment:
+      SPRING_PROFILES_ACTIVE: runner
+      AUTOPILOT_CONTROL_PLANE_URL: http://control-plane:8080
+      # Réseau Docker interne et privé : http accepté explicitement. Runner sur une autre machine : https obligatoire.
+      AUTOPILOT_AGENT_ALLOW_INSECURE_HTTP: "true"
+      AUTOPILOT_RUNNER_TOKEN: ${AUTOPILOT_RUNNER_TOKEN}
+      AUTOPILOT_RUNNER_PRIVATE_KEY_FILE: /run/secrets/runner_key
+      AUTOPILOT_RUNNER_ID: runner-1
+    secrets: [runner_key]
+    volumes:
+      - runner-state:/app/data
+    # Pas de base, pas de port : le runner ne fait que sortir vers le control plane et les serveurs gérés.
+    networks: [internal, public]
+
+secrets:
+  runner_key:
+    file: ${AUTOPILOT_RUNNER_PRIVATE_KEY_PATH:-./runner.key}
+
+volumes:
+  db-data:
+  runner-state:
+
+networks:
+  # La base n'est joignable que par le réseau interne (aucun accès Internet).
+  internal:
+    internal: true
+  public: {}

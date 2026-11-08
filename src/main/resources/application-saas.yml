@@ -1,0 +1,104 @@
+# Profil saas (ADR-047 → ADR-054) : control plane multi-tenant sur PostgreSQL.
+# Jamais combiné avec platform ou cargo. Les API v1 (console locale) y sont fermées.
+server.address: ${SERVER_ADDRESS:0.0.0.0}
+server.port: ${SERVER_PORT:8080}
+server.forward-headers-strategy: framework
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  datasource:
+    # Rôle applicatif : NOSUPERUSER, NOBYPASSRLS, non propriétaire des tables (la RLS s'applique).
+    url: ${AUTOPILOT_DB_URL:jdbc:postgresql://127.0.0.1:5432/autopilot}
+    username: ${AUTOPILOT_DB_USER:autopilot_app}
+    password: ${AUTOPILOT_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${AUTOPILOT_DB_POOL:10}
+  flyway:
+    enabled: true
+    locations: classpath:db/saas
+    # Rôle propriétaire du schéma (migrations seulement).
+    url: ${AUTOPILOT_DB_URL:jdbc:postgresql://127.0.0.1:5432/autopilot}
+    user: ${AUTOPILOT_DB_OWNER_USER:autopilot_owner}
+    password: ${AUTOPILOT_DB_OWNER_PASSWORD:}
+    placeholders:
+      app_role: ${AUTOPILOT_DB_USER:autopilot_app}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+  messages:
+    basename: i18n/messages
+    fallback-to-system-locale: false
+    always-use-message-format: true
+  # SMTP : poser SPRING_MAIL_HOST (+ _PORT, _USERNAME, _PASSWORD) pour activer l'envoi.
+  # Sans hôte, aucun client SMTP n'est créé et les e-mails sont tracés (statut LOGGED).
+
+autopilot:
+  public-url: ${AUTOPILOT_PUBLIC_URL:http://localhost:4200}
+  mail-from: ${AUTOPILOT_MAIL_FROM:no-reply@localhost}
+  crypto:
+    # 32 octets en base64 (openssl rand -base64 32). Obligatoire : refus de démarrer sinon.
+    master-key: ${AUTOPILOT_MASTER_KEY:}
+    master-key-id: ${AUTOPILOT_MASTER_KEY_ID:k1}
+  auth:
+    session-hours: 12
+    max-failed-logins: 10
+    lockout-minutes: 15
+  operations:
+    approval-ttl-minutes: 60
+    proposal-ttl-hours: 24
+    output-max-bytes: 65536
+    output-retention-days: 90
+  runner:
+    # embedded : le control plane exécute lui-même (lab). remote : un runner séparé tire les exécutions.
+    mode: ${AUTOPILOT_RUNNER_MODE:embedded}
+    token: ${AUTOPILOT_RUNNER_TOKEN:}
+    # Mode remote : clé publique PEM du runner (openssl pkey -in runner.key -pubout). Le control plane scelle les
+    # clés SSH pour le runner et ne peut plus les rouvrir (ADR-055).
+    public-key: ${AUTOPILOT_RUNNER_PUBLIC_KEY:}
+    poll-millis: 2000
+    threads: 4
+    stale-after-minutes: 30
+  servers:
+    # Anti-SSRF : aucune cible SSH interne (boucle locale, réseaux privés, lien local, métadonnées cloud).
+    # true seulement en lab ou en auto-hébergé sur réseau privé — jamais sur l'instance publique.
+    allow-private-targets: ${AUTOPILOT_ALLOW_PRIVATE_TARGETS:false}
+    # Liste (virgules) d'hôtes ou IP que la plateforme refuse toujours de cibler.
+    denied-targets: ${AUTOPILOT_DENIED_TARGETS:}
+  billing:
+    provider: ${AUTOPILOT_PAYMENT_PROVIDER:manual}
+    webhook-secret: ${AUTOPILOT_PAYMENT_WEBHOOK_SECRET:}
+  ai:
+    provider: ${AUTOPILOT_AI_PROVIDER:none}
+    model: ${AUTOPILOT_AI_MODEL:claude-opus-5-5}
+    api-key: ${AUTOPILOT_AI_API_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    # Un SMTP indisponible ne doit pas sortir l'application du service : l'échec d'envoi est suivi par notification.
+    mail:
+      enabled: false
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /api/v2/openapi
+  swagger-ui:
+    enabled: ${AUTOPILOT_SWAGGER_UI:false}
+    path: /api/v2/docs

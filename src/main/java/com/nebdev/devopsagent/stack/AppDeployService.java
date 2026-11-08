@@ -64,7 +64,16 @@ public class AppDeployService {
     ) throws IOException {
         actionGuard.assertConfirmedChange("deploy-app", confirmed);
         forbiddenTargetGuard.assertAllowed(target.host());
-        ServerSnapshot snap = lastSnapshot();
+        AppSpec app = appIntentStore.require(appId);
+        AppDeployPlan plan = planService.plan(appId);
+        String gitKey = GitUrls.ssh(app.gitUrl()) ? gitDeployKeyStore.privateKeyBase64(app.gitUrl()) : null;
+        return deployResolved(app, lastSnapshot(), target, plan, allowScaffold, gitKey);
+    }
+
+    /** Cœur d'exécution réutilisable (console locale et moteur SaaS). */
+    public DiscoveryService.DiscoveryResult deployResolved(AppSpec app, ServerSnapshot snap, SshTarget target,
+                                                           AppDeployPlan plan, boolean allowScaffold,
+                                                           String gitKeyBase64) throws IOException {
         if (snap == null || !LiveSnapshot.isLive(snap)) {
             throw new IllegalStateException(OperatorMessage.of(
                     "pas d’analyse SSH réelle en mémoire (fixture ou aucune discovery).",
@@ -95,12 +104,9 @@ public class AppDeployService {
                     "Étape Déployer — prérequis Compte deploy",
                     "installe le compte deploy dans Installations (pas Analyser), puis Enregistrer / Déployer."));
         }
-
-        AppSpec app = appIntentStore.require(appId);
-        AppDeployPlan plan = planService.plan(appId);
-        if (!plan.canProceed()) {
+        if (plan == null || !plan.canProceed()) {
             throw new IllegalStateException(OperatorMessage.of(
-                    plan.blocker() == null ? "déploiement impossible." : plan.blocker(),
+                    plan == null || plan.blocker() == null ? "déploiement impossible." : plan.blocker(),
                     "Popup confirmation — plan bloqué",
                     "corrige le dépôt ou attends un template pour cette stack."));
         }
@@ -113,13 +119,11 @@ public class AppDeployService {
             if (sc.port() != app.port()) {
                 effective = new AppSpec(app.id(), app.gitUrl(), app.gitRef(), app.hostname(), sc.port());
             }
-        } else {
-            // Pas de rattrapage autorisé : garder l’ancien préflight strict.
+        } else if (!allowScaffold) {
             DockerfilePreflight.assertPresentOrSkip(app);
         }
 
-        String gitKey = GitUrls.ssh(effective.gitUrl()) ? gitDeployKeyStore.privateKeyBase64(effective.gitUrl()) : null;
-        String script = RoleScript.loadApp(effective, scaffoldB64, gitKey);
+        String script = RoleScript.loadApp(effective, scaffoldB64, gitKeyBase64);
         String raw;
         try {
             raw = jobRunner.run(script, target, DEPLOY_TIMEOUT_SECONDS);

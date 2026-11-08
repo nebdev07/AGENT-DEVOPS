@@ -88,7 +88,12 @@ public class PlatformSqlService {
             actionGuard.assertConfirmedChange("sql-write-platform", confirmed);
         }
         forbiddenTargetGuard.assertAllowed(target.host());
-        PlatformSpec platform = store.require(platformId);
+        return runResolved(store.require(platformId), target, sql);
+    }
+
+    /** Cœur réutilisable (console locale et moteur SaaS) : gardes confirm/cible déjà appliquées. */
+    public SqlResult runResolved(PlatformSpec platform, SshTarget target, String sql) throws IOException {
+        SqlConsolePolicy.Analysis analysis = SqlConsolePolicy.analyze(sql);
         if (!PlatformCompose.needsDb(platform)) {
             throw new IllegalArgumentException(OperatorMessage.of(
                     "la plateforme « " + platform.id() + " » n’a pas de base MariaDB.",

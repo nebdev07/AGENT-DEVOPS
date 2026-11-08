@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -65,6 +66,14 @@ public class RemoteJobRunner {
     }
 
     public String run(String script, SshTarget target, int timeoutSeconds) throws IOException {
+        return run(script, target, timeoutSeconds, null);
+    }
+
+    /**
+     * @param onProgress dernière ligne métier distante ({@code JOB_TAIL}), ex. {@code BUILD_START} — peut être null
+     */
+    public String run(String script, SshTarget target, int timeoutSeconds, Consumer<String> onProgress)
+            throws IOException {
         String jobId = newJobId();
         launch(jobId, script, target);
         long deadline = clock.getAsLong() + timeoutSeconds * 1000L;
@@ -94,7 +103,11 @@ public class RemoteJobRunner {
             }
             Matcher tail = TAIL.matcher(state);
             if (tail.find() && !tail.group(1).isBlank()) {
-                log.info("Tâche {} : {}", jobId, tail.group(1).strip());
+                String tip = tail.group(1).strip();
+                log.info("Tâche {} : {}", jobId, tip);
+                if (onProgress != null) {
+                    onProgress.accept(tip);
+                }
             }
             pause();
         }

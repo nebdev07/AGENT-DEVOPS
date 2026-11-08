@@ -17,7 +17,13 @@ public record PlatformSpec(
         String baseDomain,
         String routing,
         List<PlatformServiceSpec> services,
-        List<String> aliases
+        List<String> aliases,
+        /**
+         * {@code true} (défaut) : laisser les clones Git sous {@code platforms/<id>/src} après le build
+         * (copie locale de secours). {@code false} : les effacer dès que les images tournent.
+         * Jackson : champ absent → {@code null} → défaut conserver.
+         */
+        Boolean retainSources
 ) {
 
     public static final String ROUTING_HOST = "host";
@@ -30,10 +36,16 @@ public record PlatformSpec(
 
     public PlatformSpec {
         aliases = aliases == null ? List.of() : List.copyOf(aliases);
+        retainSources = retainSources == null || retainSources;
     }
 
     public PlatformSpec(String id, String baseDomain, String routing, List<PlatformServiceSpec> services) {
-        this(id, baseDomain, routing, services, List.of());
+        this(id, baseDomain, routing, services, List.of(), true);
+    }
+
+    public PlatformSpec(String id, String baseDomain, String routing, List<PlatformServiceSpec> services,
+                        List<String> aliases) {
+        this(id, baseDomain, routing, services, aliases, true);
     }
 
     public static PlatformSpec normalized(
@@ -43,7 +55,7 @@ public record PlatformSpec(
             List<PlatformServiceSpec> services,
             String vpsIp
     ) {
-        return normalized(id, baseDomain, routing, services, List.of(), vpsIp);
+        return normalized(id, baseDomain, routing, services, List.of(), true, vpsIp);
     }
 
     public static PlatformSpec normalized(
@@ -52,6 +64,18 @@ public record PlatformSpec(
             String routing,
             List<PlatformServiceSpec> services,
             List<String> aliases,
+            String vpsIp
+    ) {
+        return normalized(id, baseDomain, routing, services, aliases, true, vpsIp);
+    }
+
+    public static PlatformSpec normalized(
+            String id,
+            String baseDomain,
+            String routing,
+            List<PlatformServiceSpec> services,
+            List<String> aliases,
+            Boolean retainSources,
             String vpsIp
     ) {
         if (id == null || id.isBlank()) {
@@ -160,7 +184,8 @@ public record PlatformSpec(
             clean.add(n);
         }
         return new PlatformSpec(slug, domain, route, List.copyOf(clean),
-                normalizeAliases(aliases, pathRouting, sharedHost));
+                normalizeAliases(aliases, pathRouting, sharedHost),
+                retainSources == null || retainSources);
     }
 
     /**
@@ -212,13 +237,18 @@ public record PlatformSpec(
         return ROUTING_PATH.equals(routing);
     }
 
+    /** Conservateur : absent / null / true → garder les sources sur le VPS. */
+    public boolean retainsSources() {
+        return retainSources == null || retainSources;
+    }
+
     public PlatformSpec resolved() {
         return new PlatformSpec(id, baseDomain, routing,
-                services.stream().map(PlatformServiceSpec::resolved).toList(), aliases);
+                services.stream().map(PlatformServiceSpec::resolved).toList(), aliases, retainsSources());
     }
 
     public PlatformSpec masked() {
         return new PlatformSpec(id, baseDomain, routing,
-                services.stream().map(PlatformServiceSpec::masked).toList(), aliases);
+                services.stream().map(PlatformServiceSpec::masked).toList(), aliases, retainsSources());
     }
 }

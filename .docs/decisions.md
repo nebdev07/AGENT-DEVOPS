@@ -288,6 +288,7 @@
 - **Décision** : Le premier déploiement Git→image→Traefik est **ce dépôt** (`devops-agent`). Le cerveau (cockpit, confirmation, CHANGE) reste sur le poste opérateur (`127.0.0.1:8088`). L’instance sur le VPS démarre avec le profil Spring `cargo` (Dockerfile) : page de preuve + `/api/v1/health` seulement. Aucun discover / install / deploy depuis Internet. Pas d’auth à inventer pour ouvrir l’API admin.
 - **Conséquence** : `Dockerfile` à la racine (port 8080). Dépôt **HTTPS public** obligatoire (ADR-029). Ce workspace n’a pas encore d’`origin` : pousser avant le bouton Déployer. Identifiant prévu : `vps-autopilot`.
 - **Amendement 2026-09-08** : le mode cargo reste la preuve **tant que** la plateforme multi-opérateurs (ADR-031) n’est pas livrée. Le cockpit public derrière auth remplacera progressivement cette page, sans rouvrir les CHANGE anonymes.
+- **Amendement 2026-10-17 (ADR-046)** : le profil Spring `platform` ouvre le **cockpit derrière login** (RBAC). Le profil `cargo` reste la preuve anonyme (santé + page). Les CHANGE publics anonymes restent **interdits**.
 
 ---
 
@@ -309,7 +310,7 @@
 ## ADR-031 — Plateforme multi-opérateurs (sessions, paramètres par compte)
 
 - **Date** : 2026-09-08
-- **Statut** : Accepted (spécifié ; **pas encore implémenté**)
+- **Statut** : Accepted — **implémentation démarrée 2026-10-17** (détail ADR-046) ; ~~spécifié ; pas encore implémenté~~
 - **Contexte** : L’attente produit est qu’un utilisateur se connecte, ait **sa** session, et ne voie / ne pilote que **ses** VPS et paramètres. Aujourd’hui l’outil est mono-opérateur local (poste + `state/` local). Le lien public cargo n’est pas ce cockpit.
 - **Décision** :
   1. **Phase actuelle (V0–V3)** : un opérateur, console sur le poste, CHANGE après confirmation. Cargo public = preuve uniquement (ADR-030).
@@ -318,6 +319,7 @@
   4. L’executor peut vivre sur un serveur dédié ou le VPS lab ; le modèle de risque (READ / CHANGE / DESTRUCTIVE) ne change pas.
 - **Non-objectifs V9 jour 1** : marketplace, multi-org complexe, facturation.
 - **Conséquence** : roadmap **V9** ; backlog `PLAT-*`. Aucun code multi-tenant tant que V3 (grants) / V4 (backups) utiles au mono-opérateur ne bloquent pas. ADR-030 reste valide jusqu’à la première livraison auth.
+- **Amendement 2026-10-17** : la première livraison V9 est le **MVP RBAC** décrit dans **ADR-046** (rôles éditables, assignation serveur, exécuteur = instance `platform`). La console locale sans auth (`127.0.0.1`, profil défaut) reste pour l’exploitation mono-poste ; elle n’est pas la forme « prod publique ».
 
 ---
 
@@ -380,7 +382,7 @@
   7. **Git** : HTTPS public (comme V3) **ou** SSH `git@github.com` / `gitlab.com` avec une **clé lecture seule** locale (`state/git-deploy`, livré V7-05). Pas de jeton dans l’URL. Requis association / DTSI-forme ; **pas** pour ouvrir la prod ARC.
   8. **Cible d’exécution** : VPS lab Autopilot seulement. Prod ARC et staging DTSI restent **interdites** (`ActionGuard`). Le scénario ARC sert de **spécimen** (forme d’infra), pas de premier bouton Déployer.
   9. **Packaging** : chaque service a un Dockerfile (racine du repo **ou** `context` monorepo). Le rattrapage ADR-032 reste pour l’app 1:1. Pour une plateforme, les templates (Next + build-args, Spring **Java 11** WAR/JAR) sont des Dockerfiles **dans le cargo** ou des templates versionnés **explicitement choisis** dans le plan — pas un pom racine GitHub magique.
-  10. **Unité de déploiement** : un CHANGE met à jour **toute** la plateforme (ordre : API puis fronts, healthcheck API avant de basculer les fronts). Redeploy d’un seul service = chantier suivant, pas jour 1.
+  10. **Unité de déploiement** : ~~un CHANGE met à jour **toute** la plateforme (ordre : API puis fronts…). Redeploy d’un seul service = chantier suivant.~~ **Amendement 2026-11-02 (V7-07)** : le CHANGE full plateforme reste l’action « Tout déployer ». On peut aussi cibler **un seul service** (`service` dans `POST /platforms/deploy`) : clone + `docker compose up -d --build <service>` ; les autres services ne sont pas reconstruits. Un seul déploiement CHANGE à la fois **par hôte** (`DeployLock`, `409 DEPLOY_BUSY`) pour ne pas croiser deux builds.
 - **Non-objectifs jour 1** : Kubernetes, Apache hôte, pointer l’agent sur `arc-nwanyo.org` prod, migrer Tomcat existant sans images, multi-opérateurs (V9).
 - **Conséquence** : roadmap **V7** précisée ; backlog `V7-01`… ; module architecture « Plateforme cargo ». L’app 1:1 ne disparaît pas. Premier lab plateforme = copie / maquette sur VPS-2, jamais l’IP ARC.
 
@@ -528,30 +530,114 @@
 
 ---
 
-## ADR-044 - Alertes e-mail envoyées par le VPS lui-même
+## ADR-044 — Alertes e-mail envoyées par le VPS
 
 - **Date** : 2026-10-15
 - **Statut** : Accepted (implémenté, testé sur le lab) — `BIZ-15`
-- **Contexte** : les sauvegardes quotidiennes et l'exercice mensuel tournent seuls sur le serveur (ADR-041), mais un échec n'était vu qu'à la prochaine analyse de l'opérateur. Le poste d'exploitation est souvent éteint : il ne peut pas surveiller. Le client n'apprenait rien hors des rapports remis à la main.
+- **Contexte** : sauvegardes et exercices automatiques tournaient sans prévenir l’opérateur ni le client en cas d’échec.
 - **Décision** :
-  1. C'est le **VPS** qui envoie, avec `curl` (SMTP / SMTPS, présent sur Ubuntu et Debian) : aucun paquet ni service ajouté, aucune dépendance au poste.
-  2. Rôle `notify` (CHANGE `configure-notify` ; essai : `test-notify`) : réglages dans `/opt/vps-autopilot/notify.env` (600, root ; mot de passe en base64), scripts `vps-autopilot-notify`, `-notify-unit`, `-notify-drill`, gabarit systemd `vps-autopilot-notify-failure@.service`.
-  3. Déclencheurs posés par **drop-in** systemd, sans toucher au rôle `backups` (une réinstallation des sauvegardes les garde) : `OnFailure=` sur la sauvegarde et l'exercice ; `ExecStartPost=-` sur l'exercice réussi (résumé mensuel, option ; un échec d'envoi ne marque pas l'exercice en échec).
-  4. Le mot de passe SMTP passe par le script sur l'entrée standard (base64), puis par un fichier de configuration `curl -K` dans un dossier temporaire 700 : jamais en argument de commande, jamais sur le poste, jamais renvoyé, jamais journalisé. Champ vide = garder celui posé.
-  5. Chiffrement obligatoire (SSL 465 ou STARTTLS) ; « aucun » accepté seulement vers `127.0.0.1` / `localhost`.
-  6. L'analyse lit `NOTIFY=on|off` et le dernier envoi ; l'audit juge : sauvegardes programmées sans alerte = `alerts-missing` (faible), dernier envoi en échec = `alerts-failing` (moyen), sinon point fort.
-- **Conséquence** : panneau « Alertes e-mail » dans la bande Sauvegardes, Aide 7g. Limites : un serveur éteint ou injoignable n'envoie rien (pas de supervision 24/7, pas d'alerte « sauvegarde absente ») ; pas de SMS / WhatsApp / Telegram.
+  1. Le **VPS** envoie le mail lui-même (`curl` SMTP/SMTPS). Réglages dans `/opt/vps-autopilot/notify.env` (600 root, mot de passe en base64). Jamais stockés sur le poste opérateur.
+  2. Rôle `notify` (set / test / status / remove) ; CHANGE `configure-notify` / `test-notify` ; 1–5 destinataires.
+  3. Déclencheurs systemd : `OnFailure=` (sauvegarde, exercice) ; résumé mensuel après exercice réussi.
+  4. Analyse / audit : `NOTIFY`, dernière alerte ; constats `alerts-missing` / `alerts-failing`.
+- **Limite** : serveur éteint = aucun message (voir BIZ-16). Pas de SMS / WhatsApp.
+- **Conséquence** : panneau console « Alertes e-mail », Aide 7g.
 
 ---
 
-## ADR-045 - Version livrable 1.0.0 : console limitée au poste, paquet zip
+## ADR-045 — Version livrable et console limitée au poste
 
 - **Date** : 2026-10-15
-- **Statut** : Accepted (implémenté)
-- **Contexte** : l'agent se lançait depuis les sources (`mvn spring-boot:run`) et la console, sans authentification, écoutait sur **toutes** les interfaces (aucun `server.address`) : un autre appareil du réseau local pouvait lancer des CHANGE. La documentation disait `127.0.0.1` sans que la configuration l'impose. Pas de version ni de paquet.
+- **Statut** : Accepted (implémenté) — `REL-01` ; versions 1.0.0 / 1.0.1
+- **Contexte** : la console sans authentification écoutait sur toutes les interfaces ; pas de paquet d’installation hors sources.
 - **Décision** :
-  1. `server.address` = `127.0.0.1` par défaut (`SERVER_ADDRESS` pour changer, déconseillé). Le profil `cargo` (conteneur derrière Traefik) écoute sur `0.0.0.0`, `CargoModeFilter` n'y ouvre que la preuve et la santé (ADR-030).
-  2. Version **1.0.0** (`pom.xml`), exposée par `GET /api/v1/health` (`build-info` Spring Boot) ; tag Git `v1.0.0`.
-  3. Paquet `scripts/release.ps1` → `dist/vps-autopilot-<version>.zip` + `.sha256` : `vps-autopilot.jar`, `start.cmd` / `start.ps1` / `start.sh` (vérifient Java 21, créent `.env` au premier lancement), `LISEZMOI.txt` (installation, sauvegarde de `state/` et de `backup.key`, mise à jour, retour arrière), `.env.example`, `state/agent-local.example.yml`.
-  4. Dockerfile de l'instance cargo indépendant du numéro de version.
-- **Conséquence** : installation sans Maven ni sources. Mise à jour = remplacer le jar, garder `.env` et `state/`. Toujours un outil mono-opérateur sans authentification (V9 / ADR-031 pour un cockpit en ligne).
+  1. `server.address` = `127.0.0.1` par défaut (`SERVER_ADDRESS` pour surcharger). Profil `cargo` : `0.0.0.0`.
+  2. `GET /api/v1/health` expose `version` (build-info Maven).
+  3. Paquet `scripts/release.ps1` → `dist/vps-autopilot-<v>.zip` + `.sha256` ; notice `LISEZMOI.txt`.
+- **Conséquence** : doc `deploiement.md`. Le profil `platform` (ADR-046) pourra écouter publiquement **uniquement** derrière auth.
+
+---
+
+## ADR-046 — Plateforme multi-comptes : RBAC, cockpit en ligne, exécuteur
+
+- **Date** : 2026-10-17
+- **Statut** : Accepted (spécifié ; implémentation en cours) — remplace le périmètre « portail emails seuls »
+- **Contexte** : monétiser et ouvrir la plateforme à tout compte autorisé pour gérer **ses** serveurs et paramètres. Un compte super-admin (porteur) administre comptes, rôles et rattachements. Les clés SSH ne doivent jamais passer par le navigateur.
+- **Décision** :
+  1. **Profil Spring `platform`** : cockpit + API derrière session ; clés SSH sur cette instance (exécuteur). Profil défaut = mono-poste local sans auth (1.x). Profil `cargo` = preuve anonyme inchangée.
+  2. **Comptes** + **sessions** (lien magique e-mail, cookie HttpOnly, durée limitée). Bootstrap : premier `SUPER_ADMIN` via `PLATFORM_BOOTSTRAP_EMAIL` si aucun compte.
+  3. **RBAC** : catalogue de permissions stables ; rôles (`SUPER_ADMIN`, `OPERATOR`, `VIEWER` au seed) dont l’ensemble de permissions est **éditable** par qui a `role.manage`. `SUPER_ADMIN` conserve un accès global (tous serveurs) tant que le rôle porte la permission spéciale `platform.admin` ou équivalent seed.
+  4. **Assignation** : `server-grants` lie `(accountId → host, port, user)`. Un opérateur sans grant sur un serveur → 403.
+  5. Chaque requête sensible : session → permission du rôle → grant serveur (sauf admin global) → puis `ActionGuard` (whitelist + confirm, ADR-003 / ADR-016).
+  6. État sous `state/platform/` (hors git) : accounts, roles, grants, sessions, tokens. Journal : conserver l’identité du compte connecté quand la plateforme est active (amende ADR-042 à la livraison).
+- **Permissions seed** : `account.manage`, `role.manage`, `server.assign`, `server.read`, `server.analyze`, `server.change.install`, `server.change.deploy`, `server.change.backup`, `server.change.notify`, `server.change.secret`, `server.journal`, `audit.read`, `platform.admin`.
+- **Non-objectifs jour 1** : facturation, multi-org imbriquée, marketplace, IA (V5), alerte serveur éteint (BIZ-16).
+- **Conséquence** : backlog `PLAT-04`… ; version cible **2.0.0** quand lab vert. Amendements ADR-030 / ADR-031 ci-dessus.
+## ADR-047 — SaaS : monolithe modulaire hexagonal (profil `saas`)
+
+- **Date** : 2026-11-07
+- **Statut** : Accepted — implémenté (validé par la consigne du 2026-11-07 « fais toutes les implémentations » après l'audit `saas/audit-trajectoire-saas.md`)
+- **Décision** : un seul déployable ; modules `identity`, `organization`, `server`, `credential`, `operation`, `audit`, `notification`, `apitoken`, `managed`, `billing`, `ai`, `admin`, `security`, `shared` sous `com.nebdev.devopsagent.saas`, chargés seulement en profil `saas`. Le moteur historique (discovery, stack, ssh) est appelé par le port `EnginePort` (adaptateur `saas.engine.LocalEngineAdapter`). Règles ArchUnit : moteur sans dépendance vers `saas`, aucun cycle entre modules, `identity` ne dépend d'aucun module métier. Pas de microservices.
+- **Conséquence** : profils historiques (défaut, `cargo`, `platform`) inchangés ; `saas` refuse d'être combiné avec eux.
+
+## ADR-048 — SaaS : PostgreSQL 16 + Flyway
+
+- **Date** : 2026-11-07 — **Statut** : Accepted — implémenté
+- **Décision** : migrations `classpath:db/saas` jouées par le rôle propriétaire ; l'application se connecte avec `autopilot_app` (NOSUPERUSER, NOBYPASSRLS, non propriétaire). JPA en `validate`. Les stores JSON restent l'adaptateur des éditions locales. Démarrage refusé si le rôle applicatif contourne la RLS.
+
+## ADR-049 — Multi-tenancy : `organization_id` + RLS
+
+- **Date** : 2026-11-07 — **Statut** : Accepted — implémenté
+- **Décision** : toute table métier porte `organization_id` ; politiques RLS sur `app.org_id` posé par transaction (`RlsContext`) ; contournement plateforme explicite (`app.bypass_rls`) réservé aux traitements système. Contrôle applicatif en plus (`OrgAccess`) : une autre organisation reçoit 404 et la tentative est auditée. Tests d'isolation sur PostgreSQL réel (SQLSTATE 42501).
+
+## ADR-050 — Opérations : plan haché, approbation liée au hash
+
+- **Date** : 2026-11-07 — **Statut** : Accepted — implémenté (amende ADR-016 / ADR-018 pour le SaaS)
+- **Décision** : READ / CHANGE / DESTRUCTIVE ; une opération CHANGE porte un plan déterministe dont le hash (JSON canonique SHA-256) couvre le plan, la cible et l'empreinte d'hôte. L'approbation porte sur ce hash, expire (TTL), règle des quatre yeux en option. Le plan est recalculé sur l'état frais juste avant d'agir : différent ⇒ rien n'est exécuté (`plan_changed`). Une exécution active par serveur (index partiel), file `FOR UPDATE SKIP LOCKED`, clé d'idempotence, aucune relance automatique d'un CHANGE (`runner_lost`).
+
+## ADR-051 — Coffre des identifiants
+
+- **Date** : 2026-11-07 — **Statut** : Accepted — implémenté (complété par ADR-055)
+- **Décision** : une clé SSH par serveur (RSA-3072 générée ou importée), chiffrement par enveloppe AES-256-GCM avec AAD (DEK par organisation, KEK `AUTOPILOT_MASTER_KEY` hors base). Empreinte d'hôte confirmée explicitement avant la première connexion, vérifiée exactement à chaque connexion. Rotation (PENDING → ACTIVE par opération approuvée) et révocation. Jamais vers l'IA, jamais renvoyée par l'API.
+
+## ADR-052 — Personnel INOVNE et accès support
+
+- **Date** : 2026-11-07 — **Statut** : Accepted — implémenté
+- **Décision** : personnel (`PLATFORM_ADMIN`, `PLATFORM_OPERATOR`) distinct des membres clients ; aucun accès implicite aux données client : seulement par `support_access_grant` accordé par le client, borné dans le temps, révocable, audité. **Amendement 2026-11-08** : le rôle de personnel n'est effectif qu'avec la MFA active (`autopilot.auth.staff-mfa-required`, défaut vrai).
+
+## ADR-053 — Audit append-only chaîné
+
+- **Date** : 2026-11-07 — **Statut** : Accepted — implémenté
+- **Décision** : `audit_event` en ajout seul (trigger + REVOKE UPDATE/DELETE/TRUNCATE au rôle applicatif), chaîne de hachage par organisation, vérification par API. Sorties de commandes tronquées et hachées (SHA-256), purge des sorties après rétention.
+
+## ADR-054 — IA : conseil seulement
+
+- **Date** : 2026-11-07 — **Statut** : Accepted — implémenté
+- **Décision** : port `AiProvider` (Anthropic via SDK officiel, sortie structurée ; conseiller à règles déterministe en repli). Contexte = faits techniques sans adresse ni secret (`EnginePort.summarize`). Sortie validée par le code ; une recommandation ne devient qu'un brouillon (DRAFT) d'un `OperationType` en liste blanche, qu'un humain doit proposer et faire approuver.
+
+## ADR-055 — Runner d'exécution séparé, coffre scellé
+
+- **Date** : 2026-11-08 — **Statut** : Accepted — implémenté
+- **Contexte** : risque n°1 de l'audit : l'instance publique détenait la KEK et pouvait lire toutes les clés SSH.
+- **Décision** :
+  1. Mode `AUTOPILOT_RUNNER_MODE=remote` : le control plane ne détient que la **clé publique** RSA (≥ 3072 bits) du runner (`AUTOPILOT_RUNNER_PUBLIC_KEY`). Clés SSH et phrase de sauvegarde sont **scellées** (RSA-OAEP-SHA256 + AES-256-GCM, AAD organisation + usage, format 2) ; le control plane ne sait plus les rouvrir.
+  2. Au démarrage en remote, les valeurs encore chiffrées par la KEK (format 1) sont rescellées (migration sans coupure) ; ensuite la KEK ne protège plus que les secrets MFA.
+  3. Runner = même jar, profil `runner` : aucune base, aucun port d'écoute ; il réserve (`POST /api/v2/internal/runner/claim`), ouvre les secrets avec sa clé privée, laisse le moteur recalculer le plan et n'agit que si le hash est identique, envoie battements et compte rendu. Une exécution ne peut être rapportée que par le runner qui l'a réservée ; un seul compte rendu fait foi.
+  4. Authentification par jeton partagé (≥ 32 caractères) ; https obligatoire hors boucle locale (dérogation explicite pour un réseau Docker privé).
+- **Limites** : les clés SSH sont encore générées par le control plane (qui les voit à la création) ; génération côté runner = étape suivante. Lecture d'empreinte d'hôte faite par le control plane (lecture seule, sans secret).
+
+## ADR-056 — Cibles SSH : anti-SSRF
+
+- **Date** : 2026-11-08 — **Statut** : Accepted — implémenté
+- **Contexte** : une organisation pouvait enregistrer un « serveur » sur une adresse interne (boucle locale, réseau privé, base de données, métadonnées cloud) et faire ouvrir des connexions depuis la plateforme.
+- **Décision** : `TargetPolicy` refuse boucle locale, RFC 1918, lien local, CGNAT, ULA IPv6, IPv4 encapsulées ; jamais (même en lab) : adresse non spécifiée, multicast, 169.254.169.254. Contrôle à l'enregistrement **et** juste avant chaque connexion (control plane et runner, chacun avec sa politique), connexion vers l'IP résolue (pas de second DNS). Liste d'interdiction configurable (`AUTOPILOT_DENIED_TARGETS`). `AUTOPILOT_ALLOW_PRIVATE_TARGETS=true` réservé au lab et à l'auto-hébergé.
+
+## ADR-057 — Migration des données `platform` → SaaS
+
+- **Date** : 2026-11-08 — **Statut** : Accepted — implémenté (jamais exécuté sur les données de production)
+- **Décision** : `PlatformImporter` (profil `saas`), déclenché par `AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR`. **Essai à blanc par défaut** : tout est écrit puis annulé (contraintes réellement vérifiées), rapport JSON sans secret ; `AUTOPILOT_MIGRATION_APPLY=true` pour valider. Idempotent.
+  1. Une organisation (`AUTOPILOT_MIGRATION_ORGANIZATION_NAME`, défaut INOVNE) ; comptes repris avec leur hachage BCrypt (mot de passe inchangé) ; administrateurs ⇒ propriétaires, droits `server.change.*` ⇒ responsable technique, sinon lecteur.
+  2. **Fail-closed** : un compte non administrateur limité à certains serveurs n'est pas repris (le rôle SaaS couvre toute l'organisation) ; il est listé pour une invitation manuelle.
+  3. Serveurs depuis les rattachements ; empreinte d'hôte à reconfirmer (ancien format MD5) ; clé SSH de l'instance reprise si `AUTOPILOT_MIGRATION_SSH_PRIVATE_KEY_FILE` est fourni.
+  4. Non repris : sessions, liens magiques, journaux `state/journal` (à archiver). MFA à activer par le personnel.
+- **Plan de bascule de `autopilot.inovne.com`** (à faire, avec autorisation explicite) : sauvegarde de `state/` → SaaS déployé à côté → essai à blanc → lecture du rapport → application → reconfirmation des empreintes → bascule DNS/proxy → ancienne instance gardée arrêtée, pas supprimée.

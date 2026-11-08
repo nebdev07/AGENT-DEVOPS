@@ -39,6 +39,7 @@ Règles Cursor : [`.cursor/rules.md`](../.cursor/rules.md).
 | `architecture.md` | published | Couches, modules, flux |
 | `decisions.md` | published | ~~ADR-001 → ADR-036~~ ~~ADR-001 → ADR-039 (2026-10-13)~~ ADR-001 → ADR-041 (2026-10-14) |
 | `commercial/offre.md`, `commercial/devis-modele.md`, `commercial/mandat-intervention.md` | draft | Documents commerciaux (2026-10-14), prix = hypothèses de `business.md` |
+| `saas/audit-trajectoire-saas.md` | draft | Audit vérifié de l'existant + trajectoire SaaS / Managed, ADR-047 → 054 **proposés** (2026-11-07, en attente de validation) |
 | `plan-commercial.md` | draft | Plan A → D du premier client payant (2026-10-13) |
 | `business.md` | draft | Monétisation : offres, cibles, étapes, risques (ADR-039) |
 | `security.md` | published | Risques, SSH, cibles interdites |

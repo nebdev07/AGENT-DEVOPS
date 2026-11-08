@@ -1,0 +1,21 @@
+{
+  "name": "devops-agent",
+  "version": "1.0.0",
+  "description": "Premier agent du dossier [`AGENTS/`](../README.md). Les suivants seront des **projets séparés** à côté de celui-ci.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nebdev07/AGENT-DEVOPS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/nebdev07/AGENT-DEVOPS/issues"
+  },
+  "homepage": "https://github.com/nebdev07/AGENT-DEVOPS#readme"
+}

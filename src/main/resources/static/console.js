@@ -2,6 +2,68 @@ const $ = (id) => document.getElementById(id);
 
 const AGENT_USER_DEFAULT = "autopilot";
 
+/** Session platform expirée / absente → toast + redirection login. */
+(function installSessionGuard() {
+  const nativeFetch = window.fetch.bind(window);
+  let redirecting = false;
+
+  function showSessionToast(text) {
+    let el = document.getElementById("sessionToast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "sessionToast";
+      el.className = "session-toast";
+      el.setAttribute("role", "alert");
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.classList.add("show");
+  }
+
+  function redirectToLogin(message) {
+    if (redirecting) return;
+    redirecting = true;
+    showSessionToast(message || "Session expirée. Redirection vers la connexion…");
+    const next = location.pathname + location.search + location.hash;
+    setTimeout(() => {
+      location.href = "/login.html?reason=expired&next=" + encodeURIComponent(next);
+    }, 1200);
+  }
+
+  window.__notifySessionExpired = redirectToLogin;
+
+  window.fetch = async function patchedFetch(input, init) {
+    const res = await nativeFetch(input, init);
+    if (res.status !== 401) return res;
+    const url = typeof input === "string" ? input : (input && input.url) || "";
+    if (/\/api\/v1\/platform\/auth\//.test(url)) return res;
+    try {
+      const body = await res.clone().json();
+      if (body && body.code === "SESSION_EXPIRED") {
+        redirectToLogin(body.error || "Session expirée. Reconnectez-vous.");
+      }
+    } catch (_) {
+      /* corps non JSON */
+    }
+    return res;
+  };
+
+  setInterval(() => {
+    if (redirecting) return;
+    nativeFetch("/api/v1/platform/auth/me", { credentials: "same-origin" })
+      .then(async (r) => {
+        if (r.status !== 401) return;
+        try {
+          const j = await r.json();
+          if (j && j.code === "SESSION_EXPIRED") {
+            redirectToLogin(j.error || "Session expirée. Reconnectez-vous.");
+          }
+        } catch (_) { /* ignore */ }
+      })
+      .catch(() => {});
+  }, 60000);
+})();
+
 /** Comptes livrés par l’hébergeur à la création du VPS (méthode A, mot de passe du mail de livraison). */
 const OS_USER = {
   auto: "",
@@ -116,6 +178,7 @@ function paint(snapshot, report, mode) {
   $("installCard").classList.remove("hidden");
   if ($("appsCard")) $("appsCard").classList.remove("hidden");
   if ($("platformsCard")) $("platformsCard").classList.remove("hidden");
+  refreshDeployLockBanner();
   $("osPretty").textContent = snapshot.osPretty || snapshot.osId || "—";
   $("hostLine").textContent = [
     snapshot.profileName,
@@ -178,19 +241,34 @@ function paint(snapshot, report, mode) {
 function currentView() {
   const hash = (location.hash || "#home").replace("#", "");
   if (hash === "guide") return "help";
-  return ["home", "help", "cockpit"].includes(hash) ? hash : "home";
+  if (hash === "home-solutions" || hash === "solutions") return "home";
+  return ["home", "help", "cockpit", "activity"].includes(hash) ? hash : "home";
 }
 
 function showView(name) {
-  const view = name === "guide" ? "help" : (["home", "help", "cockpit"].includes(name) ? name : "home");
+  const raw = (name || "").replace(/^#/, "");
+  const view = raw === "guide" ? "help"
+    : (raw === "home-solutions" || raw === "solutions") ? "home"
+    : (["home", "help", "cockpit", "activity"].includes(raw) ? raw : "home");
   $("view-home").classList.toggle("hidden", view !== "home");
   $("view-help").classList.toggle("hidden", view !== "help");
   $("view-cockpit").classList.toggle("hidden", view !== "cockpit");
+  if ($("view-activity")) $("view-activity").classList.toggle("hidden", view !== "activity");
   document.querySelectorAll(".nav a[data-view]").forEach((a) => {
     a.classList.toggle("active", a.dataset.view === view);
   });
-  if (location.hash.replace("#", "") !== view) {
+  const keepHash = raw === "home-solutions" || raw === "solutions";
+  if (!keepHash && location.hash.replace("#", "") !== view) {
     history.replaceState(null, "", "#" + view);
+  }
+  if (view === "home" && keepHash) {
+    requestAnimationFrame(() => {
+      const el = document.getElementById("home-solutions");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+  if (view === "activity") {
+    refreshActivityHosts().then(() => loadActivity());
   }
 }
 
@@ -361,11 +439,18 @@ function renderBusySteps(steps, current) {
   }
   list.classList.remove("hidden");
   list.innerHTML = "";
+  const idx = Math.max(0, Math.min(current | 0, steps.length - 1));
   steps.forEach((text, i) => {
     const li = document.createElement("li");
-    li.textContent = text;
-    if (i < current) li.className = "done";
-    else if (i === current) li.className = "current";
+    if (i < idx) {
+      li.className = "done";
+      li.textContent = "✓ " + text;
+    } else if (i === idx) {
+      li.className = "current";
+      li.textContent = "→ " + text;
+    } else {
+      li.textContent = text;
+    }
     list.appendChild(li);
   });
 }
@@ -418,6 +503,30 @@ function hideBusy() {
   if ($("btnPlatSave")) $("btnPlatSave").disabled = false;
 }
 
+/** Affiche Cause / Où / À faire en blocs lisibles (sinon texte brut). */
+function fillResultDetail(el, detail) {
+  el.textContent = "";
+  const raw = detail == null ? "" : String(detail);
+  const m = /^(?:Cause\s*:\s*)([\s\S]*?)\nOù\s*:\s*([\s\S]*?)\nÀ faire\s*:\s*([\s\S]*)$/i.exec(raw.trim());
+  if (!m) {
+    el.textContent = raw;
+    return;
+  }
+  [["Cause", m[1]], ["Où", m[2]], ["À faire", m[3]]].forEach(([label, text]) => {
+    const block = document.createElement("div");
+    block.className = "result-block";
+    const lab = document.createElement("strong");
+    lab.className = "result-block-label";
+    lab.textContent = label;
+    const body = document.createElement("p");
+    body.className = "result-block-body";
+    body.textContent = text.trim();
+    block.appendChild(lab);
+    block.appendChild(body);
+    el.appendChild(block);
+  });
+}
+
 function showResult({ ok, kicker, title, detail, next, link }) {
   const overlay = $("resultOverlay");
   const card = $("resultCard");
@@ -425,7 +534,7 @@ function showResult({ ok, kicker, title, detail, next, link }) {
   card.classList.toggle("err", !ok);
   $("resultKicker").textContent = kicker || (ok ? "Réussi" : "Échec");
   $("resultTitle").textContent = title || (ok ? "Opération terminée" : "Opération interrompue");
-  $("resultDetail").textContent = detail || "";
+  fillResultDetail($("resultDetail"), detail || "");
   const nextEl = $("resultNext");
   nextEl.textContent = next || "";
   nextEl.hidden = !next;
@@ -445,6 +554,7 @@ function showResult({ ok, kicker, title, detail, next, link }) {
   overlay.classList.remove("hidden");
   overlay.setAttribute("aria-hidden", "false");
   document.body.classList.add("is-busy");
+  overlay.scrollTop = 0;
   $("btnResultClose").focus();
 }
 
@@ -539,7 +649,12 @@ async function loadRuntime() {
   const r = await fetch("/api/v1/runtime");
   const j = await r.json();
   $("modePill").textContent = j.sshConfigured ? "SSH réel" : "Prêt pour le VPS";
-  $("phasePill").textContent = j.phase || "V0";
+  try {
+    const h = await fetch("/api/v1/health").then((x) => x.json());
+    $("phasePill").textContent = h.version ? ("v" + h.version) : (h.phase || j.phase || "…");
+  } catch (_) {
+    $("phasePill").textContent = j.phase || "…";
+  }
   if (j.host) $("sshHost").value = j.host;
   if (j.user) $("sshUser").value = j.user;
   if (j.port) $("sshPort").value = j.port;
@@ -901,10 +1016,33 @@ document.querySelectorAll("[data-view]").forEach((el) => {
     const view = el.getAttribute("data-view");
     if (!view) return;
     e.preventDefault();
+    const href = el.getAttribute("href") || "";
+    const hash = href.startsWith("#") ? href.slice(1) : view;
+    if (hash === "home-solutions" || hash === "solutions") {
+      history.replaceState(null, "", "#home-solutions");
+      showView("home-solutions");
+      return;
+    }
+    if (view === "cockpit") {
+      fetch("/api/v1/health").then((r) => r.json()).then((h) => {
+        if (h.role !== "platform") {
+          showView("cockpit");
+          return;
+        }
+        return fetch("/api/v1/platform/auth/me", { credentials: "same-origin" }).then((me) => {
+          if (me.status === 401) location.href = "/login.html";
+          else showView("cockpit");
+        });
+      }).catch(() => showView("cockpit"));
+      return;
+    }
     showView(view);
   });
 });
-window.addEventListener("hashchange", () => showView(currentView()));
+window.addEventListener("hashchange", () => {
+  const hash = (location.hash || "#home").replace("#", "");
+  showView(hash === "home-solutions" || hash === "solutions" ? "home-solutions" : currentView());
+});
 
 $("vpsOs").addEventListener("change", () => {
   const hint = OS_USER[$("vpsOs").value] || "";
@@ -929,6 +1067,11 @@ if ($("btnPlatPreset")) $("btnPlatPreset").addEventListener("click", fillPlatfor
 if ($("btnPlatRestore")) $("btnPlatRestore").addEventListener("click", restorePlatform);
 if ($("platRouting")) $("platRouting").addEventListener("change", syncPlatRoutingHint);
 $("btnResultClose").addEventListener("click", hideResult);
+if ($("resultOverlay")) {
+  $("resultOverlay").addEventListener("click", (e) => {
+    if (e.target === $("resultOverlay")) hideResult();
+  });
+}
 if ($("btnConfirmCancel")) $("btnConfirmCancel").addEventListener("click", () => settleConfirm(false));
 if ($("btnConfirmOk")) $("btnConfirmOk").addEventListener("click", () => {
   if ($("btnConfirmOk").disabled) return;
@@ -962,6 +1105,19 @@ $("btnBackupRun").addEventListener("click", runBackupNow);
 $("btnBackupFetch").addEventListener("click", fetchLatestBackup);
 $("btnBackupRefresh").addEventListener("click", loadBackups);
 $("btnJournalRefresh").addEventListener("click", loadJournal);
+if ($("btnActivityRefresh")) $("btnActivityRefresh").addEventListener("click", () => { activityPage = 1; loadActivity(); });
+if ($("btnActivityHtml")) $("btnActivityHtml").addEventListener("click", () => exportActivity("html"));
+if ($("btnActivityCsv")) $("btnActivityCsv").addEventListener("click", () => exportActivity("csv"));
+if ($("btnActivityMail")) $("btnActivityMail").addEventListener("click", mailActivity);
+if ($("activityHost")) $("activityHost").addEventListener("change", () => { activityPage = 1; loadActivity(); });
+if ($("activityDate")) $("activityDate").addEventListener("change", () => { activityPage = 1; loadActivity(); });
+if ($("activityPageSize")) $("activityPageSize").addEventListener("change", () => { activityPage = 1; loadActivity(); });
+if ($("btnActivityPrev")) $("btnActivityPrev").addEventListener("click", () => {
+  if (activityPage > 1) { activityPage -= 1; loadActivity(); }
+});
+if ($("btnActivityNext")) $("btnActivityNext").addEventListener("click", () => {
+  activityPage += 1; loadActivity();
+});
 $("btnJournalHtml").addEventListener("click", () => exportJournal("html"));
 $("btnJournalCsv").addEventListener("click", () => exportJournal("csv"));
 
@@ -1315,20 +1471,75 @@ async function loadJournal() {
       box.innerHTML = "<p class=\"hint\">Aucune action enregistrée pour ce serveur.</p>";
       return;
     }
-    box.innerHTML = "<table><thead><tr><th>Date</th><th>Action</th><th>Type</th><th>Résultat</th><th>Détails</th></tr></thead><tbody>"
-      + entries.map((e) => {
-        const details = Object.entries(e.details || {}).map(([k, v]) => k + "=" + v).join(", ");
-        return "<tr><td>" + esc(new Date(e.at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "medium" }))
-          + "</td><td class=\"risk-" + esc(e.risk) + "\">" + esc(e.action)
-          + "</td><td>" + esc(JOURNAL_RISK[e.risk] || e.risk)
-          + "</td><td" + (e.outcome === "OK" ? ">Réussi" : " class=\"ko\">Échec ou refus" + (e.error ? " · " + esc(e.error) : ""))
-          + "</td><td>" + esc(details) + "</td></tr>";
-      }).join("")
-      + "</tbody></table>"
-      + (entries.length >= 50 ? "<p class=\"hint\">50 dernières actions. L’export contient tout.</p>" : "");
+    box.innerHTML = journalEntriesHtml(entries)
+      + (entries.length >= 50 ? "<p class=\"hint\">50 dernières actions. L’export HTML contient le détail complet.</p>" : "");
   } catch (e) {
     box.innerHTML = "<p class=\"hint\">" + esc(e.message) + "</p>";
   }
+}
+
+function journalDetailLines(e) {
+  const d = e.details || {};
+  const lines = [];
+  if (d.summary) lines.push(d.summary);
+  if (d.apps) lines.push("Applications : " + d.apps);
+  if (d.commits) lines.push("Commits déployés : " + d.commits);
+  if (d.services) {
+    String(d.services).split(" | ").forEach((part) => {
+      if (part.trim()) lines.push(part.trim());
+    });
+  }
+  if (d.urls) {
+    String(d.urls).split(" · ").forEach((part) => {
+      if (part.trim()) lines.push(part.trim());
+    });
+  }
+  if (d.routing) lines.push("Routage : " + d.routing);
+  if (d.component) lines.push("Composant : " + d.component);
+  if (d.file) lines.push("Fichier : " + d.file);
+  if (d.hostname || d.os) lines.push([d.hostname, d.os].filter(Boolean).join(" · "));
+  if (d.jobId) lines.push("Tâche : " + d.jobId);
+  if (d.message && d.message !== d.summary) lines.push(d.message);
+  if (e.user) lines.push("SSH : " + e.user + (e.host ? "@" + e.host : ""));
+  if (e.operator) lines.push("Opérateur : " + e.operator);
+  if (e.durationMs > 0) {
+    const s = Math.round(e.durationMs / 1000);
+    lines.push("Durée : " + (s < 60 ? s + " s" : Math.floor(s / 60) + " min " + (s % 60) + " s"));
+  }
+  if (e.error) lines.push("Erreur : " + e.error);
+  if (!lines.length) {
+    const rest = Object.entries(d).filter(([k]) => !["summary", "confirm", "risk", "apps", "commits", "services", "urls", "count"].includes(k))
+      .map(([k, v]) => k + "=" + v);
+    if (rest.length) lines.push(rest.join(", "));
+  }
+  return lines;
+}
+
+let activityPage = 1;
+
+function activityDateParam() {
+  const el = $("activityDate");
+  return el && el.value ? el.value : "";
+}
+
+function activityPageSizeParam() {
+  const el = $("activityPageSize");
+  const n = el ? parseInt(el.value, 10) : 20;
+  return Number.isFinite(n) && n > 0 ? n : 20;
+}
+
+function journalEntriesHtml(entries) {
+  return "<div class=\"activity-timeline\">" + entries.map((e) => {
+    const lines = journalDetailLines(e);
+    return "<article class=\"activity-item " + (e.outcome === "OK" ? "ok" : "ko") + "\">"
+      + "<header><time>" + esc(new Date(e.at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "medium" })) + "</time>"
+      + "<span class=\"pill\">" + esc(JOURNAL_RISK[e.risk] || e.risk) + "</span>"
+      + "<span class=\"pill " + (e.outcome === "OK" ? "ok" : "ko") + "\">"
+      + (e.outcome === "OK" ? "Réussi" : "Échec ou refus") + "</span></header>"
+      + "<h3 class=\"risk-" + esc(e.risk) + "\">" + esc(e.action) + "</h3>"
+      + (lines.length ? "<ul>" + lines.map((l) => "<li>" + esc(l) + "</li>").join("") + "</ul>" : "<p class=\"hint\">Aucun détail enregistré pour cette action.</p>")
+      + "</article>";
+  }).join("") + "</div>";
 }
 
 function exportJournal(format) {
@@ -1345,6 +1556,167 @@ function exportJournal(format) {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+function activitySelectedHost() {
+  const sel = $("activityHost");
+  if (sel && sel.value) return sel.value;
+  return backupHost() || ($("sshHost") ? $("sshHost").value.trim() : "");
+}
+
+async function refreshActivityHosts() {
+  const sel = $("activityHost");
+  if (!sel) return;
+  const current = sel.value || backupHost() || ($("sshHost") ? $("sshHost").value.trim() : "");
+  try {
+    const r = await fetch("/api/v1/servers", { credentials: "same-origin" });
+    const j = await r.json().catch(() => []);
+    const list = Array.isArray(j) ? j : (j.servers || []);
+    const hosts = list.map((s) => s.host).filter(Boolean);
+    if (current && !hosts.includes(current)) hosts.unshift(current);
+    sel.innerHTML = hosts.length
+      ? hosts.map((h) => "<option value=\"" + esc(h) + "\"" + (h === current ? " selected" : "") + ">" + esc(h) + "</option>").join("")
+      : "<option value=\"\">Aucun serveur connu</option>";
+  } catch (e) {
+    sel.innerHTML = current
+      ? "<option value=\"" + esc(current) + "\" selected>" + esc(current) + "</option>"
+      : "<option value=\"\">Erreur chargement</option>";
+  }
+}
+
+async function loadActivity() {
+  const box = $("activityList");
+  const summary = $("activitySummary");
+  const pageInfo = $("activityPageInfo");
+  const status = $("activityStatus");
+  if (!box) return;
+  if (status) status.hidden = true;
+  const host = activitySelectedHost();
+  if (!host) {
+    box.innerHTML = "<p class=\"hint\">Analyse d’abord un serveur dans le cockpit, ou choisis-en un ici.</p>";
+    if (summary) summary.textContent = "";
+    if (pageInfo) pageInfo.textContent = "";
+    return;
+  }
+  const date = activityDateParam();
+  const pageSize = activityPageSizeParam();
+  try {
+    const q = "/api/v1/journal?host=" + encodeURIComponent(host)
+      + "&page=" + activityPage
+      + "&pageSize=" + pageSize
+      + (date ? "&date=" + encodeURIComponent(date) : "");
+    const r = await fetch(q, { credentials: "same-origin" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    activityPage = j.page || 1;
+    const entries = j.entries || [];
+    const failed = entries.filter((e) => e.outcome !== "OK").length;
+    const changes = entries.filter((e) => e.risk === "CHANGE").length;
+    const scope = date ? ("journée " + date + " (UTC)") : "toutes dates";
+    if (summary) {
+      summary.textContent = host + " · " + scope + " · " + (j.total || 0) + " action(s) au total"
+        + (entries.length ? (" — cette page : " + changes + " modification(s), " + failed + " échec(s)") : "");
+    }
+    if (pageInfo) {
+      pageInfo.textContent = "Page " + (j.page || 1) + " / " + (j.totalPages || 1)
+        + " (" + pageSize + " par page)";
+    }
+    if ($("btnActivityPrev")) $("btnActivityPrev").disabled = (j.page || 1) <= 1;
+    if ($("btnActivityNext")) $("btnActivityNext").disabled = (j.page || 1) >= (j.totalPages || 1);
+    // Propose les dates connues via datalist si présent
+    const dates = j.dates || [];
+    if ($("activityDate") && dates.length && !$("activityDateList")) {
+      const dl = document.createElement("datalist");
+      dl.id = "activityDateList";
+      dates.forEach((d) => {
+        const o = document.createElement("option");
+        o.value = d;
+        dl.appendChild(o);
+      });
+      $("activityDate").setAttribute("list", "activityDateList");
+      $("activityDate").parentElement.appendChild(dl);
+    }
+    if (!entries.length) {
+      box.innerHTML = "<p class=\"hint\">Aucune action"
+        + (date ? " pour le " + date : "") + ".</p>";
+      return;
+    }
+    box.innerHTML = journalEntriesHtml(entries);
+  } catch (e) {
+    box.innerHTML = "<p class=\"hint\">" + esc(e.message) + "</p>";
+  }
+}
+
+function exportActivity(format) {
+  const host = activitySelectedHost();
+  if (!host) {
+    if ($("activityList")) $("activityList").innerHTML = "<p class=\"hint\">Choisis un serveur.</p>";
+    return;
+  }
+  const client = ($("activityClient") && $("activityClient").value.trim())
+    || ($("auditClient") ? $("auditClient").value.trim() : "");
+  const date = activityDateParam();
+  const a = document.createElement("a");
+  a.href = "/api/v1/journal/export?format=" + format + "&host=" + encodeURIComponent(host)
+    + (client ? "&client=" + encodeURIComponent(client) : "")
+    + (date ? "&date=" + encodeURIComponent(date) : "");
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function mailActivity() {
+  const status = $("activityStatus");
+  const host = activitySelectedHost();
+  const t = target();
+  if (!host || !t.user) {
+    if (status) {
+      status.hidden = false;
+      status.className = "app-form-status err";
+      status.textContent = "Choisis un serveur et un utilisateur SSH dans le cockpit.";
+    }
+    return;
+  }
+  const client = ($("activityClient") && $("activityClient").value.trim()) || "";
+  const date = activityDateParam();
+  const scope = date ? (" du " + date) : "";
+  if (!window.confirm("Envoyer le rapport d’activité de " + host + scope + " par e-mail (alertes du VPS) ?")) {
+    return;
+  }
+  if (status) {
+    status.hidden = false;
+    status.className = "app-form-status";
+    status.textContent = "Envoi…";
+  }
+  try {
+    const r = await fetch("/api/v1/journal/mail", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        host,
+        port: t.port,
+        user: t.user,
+        confirm: true,
+        client,
+        date: date || undefined,
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    if (status) {
+      status.className = "app-form-status " + (j.sent ? "ok" : "err");
+      status.textContent = j.sent
+        ? "Rapport envoyé (" + (j.entries || 0) + " actions)."
+        : ("Envoi refusé : " + (j.error || "alertes non configurées sur le VPS."));
+    }
+  } catch (e) {
+    if (status) {
+      status.className = "app-form-status err";
+      status.textContent = e.message;
+    }
+  }
 }
 
 async function downloadAudit() {
@@ -2115,6 +2487,9 @@ async function deployApp(app) {
       }),
     });
     const j = await r.json();
+    if (r.status === 409 || j.code === "DEPLOY_BUSY") {
+      throw new Error(j.error || "Un déploiement est déjà en cours sur ce serveur.");
+    }
     if (!r.ok) throw new Error(j.error || r.statusText);
     paint(j.snapshot, j.report, "ssh");
     const elapsed = formatElapsed(Date.now() - busyStartedAt);
@@ -2281,6 +2656,7 @@ function clearPlatForm() {
   if ($("platId")) $("platId").value = "";
   if ($("platRouting")) $("platRouting").value = "host";
   if ($("platAliases")) $("platAliases").value = "";
+  if ($("platRetainSources")) $("platRetainSources").checked = true;
   if ($("platBase") && $("publicBaseDomain")) $("platBase").value = $("publicBaseDomain").value.trim();
   const box = $("platServices");
   if (box) box.innerHTML = "";
@@ -2296,6 +2672,7 @@ function fillPlatForm(p) {
   $("platBase").value = p.baseDomain || "";
   if ($("platRouting")) $("platRouting").value = p.routing === "path" ? "path" : "host";
   if ($("platAliases")) $("platAliases").value = (p.aliases || []).join(", ");
+  if ($("platRetainSources")) $("platRetainSources").checked = p.retainSources !== false;
   const box = $("platServices");
   box.innerHTML = "";
   (p.services || []).forEach((s) => addPlatServiceRow(s));
@@ -3073,25 +3450,135 @@ function renderPlatList(platforms, deployReady) {
     const btnDeploy = document.createElement("button");
     btnDeploy.type = "button";
     btnDeploy.className = "change";
-    btnDeploy.textContent = "Déployer";
+    btnDeploy.textContent = "Tout déployer";
+    btnDeploy.title = "Reconstruire tous les services de la plateforme";
     btnDeploy.addEventListener("click", () => deployPlatform(p));
     actions.appendChild(btnEdit);
     actions.appendChild(btnDel);
     actions.appendChild(btnDeploy);
+    (p.services || []).forEach((s) => {
+      const btnSvc = document.createElement("button");
+      btnSvc.type = "button";
+      btnSvc.className = "ghost";
+      btnSvc.textContent = "Déployer " + s.id;
+      btnSvc.title = "Reconstruire uniquement « " + s.id + " » (les autres restent)";
+      btnSvc.addEventListener("click", () => deployPlatform(p, s.id));
+      actions.appendChild(btnSvc);
+    });
     row.appendChild(actions);
     box.appendChild(row);
   });
+  refreshDeployLockBanner();
 }
 
-async function deployPlatform(p) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Phases cockpit pour un deploy plateforme (le plan CHANGE a trop d’items pour le stepper). */
+const DEPLOY_BUSY_STEPS = [
+  "Clone des dépôts Git",
+  "Build images Docker (souvent plusieurs minutes)",
+  "Mise en ligne (compose / Traefik)",
+];
+
+/**
+ * 0 = clone, 1 = build, 2 = mise en ligne.
+ * Pendant tout le docker build le marqueur reste souvent BUILD_START — c’est normal (étape 2 figée = build en cours).
+ */
+function deployBusyStep(progress, elapsedMs) {
+  const p = String(progress || "");
+  if (/PLATFORM_DEPLOYED|KEEPALIVE|SOURCES_RETAINED|SOURCES_PURGED|ONLY_BUILT=/i.test(p)) return 2;
+  if (/BUILD_START|BUILD_FAILED/i.test(p)) return 1;
+  if (/CLONED=|DB_GRANT=/i.test(p)) return 0;
+  if (/ONLY_SERVICE=/i.test(p)) return 0;
+  if (elapsedMs >= 60_000) return 1;
+  return 0;
+}
+
+/** Suit une tâche longue sans garder une seule requête HTTP ouverte 20 min. */
+async function pollLongJob(jobId, onTick) {
+  const deadline = Date.now() + 2_700_000;
+  let lastErr = "";
+  while (Date.now() < deadline) {
+    await sleep(3000);
+    let j;
+    try {
+      const r = await fetch("/api/v1/platforms/jobs/" + encodeURIComponent(jobId), {
+        credentials: "same-origin",
+      });
+      j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        // Tâche inconnue après redémarrage agent : pas un « réseau », on arrête.
+        if (r.status === 400 || r.status === 404) {
+          throw new Error(j.error || ("Erreur " + r.status));
+        }
+        throw Object.assign(new Error(j.error || ("Erreur " + r.status)), { transient: true });
+      }
+    } catch (e) {
+      // Échec métier (FAILED) ne passe pas ici — seulement fetch / HTTP transient.
+      if (!e.transient && e.message && !/Failed to fetch|NetworkError|fetch/i.test(e.message)
+          && !/Erreur (5\d\d|408|429)/.test(e.message)) {
+        throw e;
+      }
+      lastErr = e.message || String(e);
+      if (onTick) onTick({ state: "RUNNING", error: lastErr });
+      continue;
+    }
+    lastErr = "";
+    if (onTick) onTick(j);
+    if (j.state === "SUCCEEDED") return j;
+    if (j.state === "FAILED") {
+      // Ne pas avaler comme « Suivi réseau interrompu » (bug historique : retry 45 min).
+      throw new Error(j.error || "Échec de la tâche.");
+    }
+  }
+  throw new Error("Délai dépassé. La tâche peut encore tourner sur le serveur"
+    + (lastErr ? " (dernier suivi : " + lastErr + ")" : "")
+    + ". Vérifie le menu Activité et le site public — ne relance pas tant qu’un build tourne.");
+}
+
+async function refreshDeployLockBanner() {
+  const el = $("deployLockBanner");
+  if (!el) return;
+  const t = target();
+  if (!t.host) {
+    el.hidden = true;
+    el.textContent = "";
+    return;
+  }
+  try {
+    const r = await fetch("/api/v1/deploy/active?host=" + encodeURIComponent(t.host), {
+      credentials: "same-origin",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.busy || !j.active) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    const a = j.active;
+    el.hidden = false;
+    el.textContent = "Déploiement en cours sur " + (a.host || t.host)
+      + " : « " + (a.label || "?") + " » (" + (a.kind || "deploy")
+      + "). Attends la fin — un second lancement est refusé (409).";
+  } catch (_) {
+    /* bandeau best-effort */
+  }
+}
+
+async function deployPlatform(p, serviceId) {
   const t = target();
   if (!t.host || !t.user) {
     setStatus("Indique IP et utilisateur SSH.", "err");
     return;
   }
+  const svc = serviceId ? String(serviceId).trim().toLowerCase() : "";
   let plan;
   try {
-    const r = await fetch("/api/v1/platforms/deploy-plan?id=" + encodeURIComponent(p.id));
+    let url = "/api/v1/platforms/deploy-plan?id=" + encodeURIComponent(p.id);
+    if (svc) url += "&service=" + encodeURIComponent(svc);
+    const r = await fetch(url);
     plan = await r.json();
     if (!r.ok) throw new Error(plan.error || r.statusText);
   } catch (e) {
@@ -3100,8 +3587,12 @@ async function deployPlatform(p) {
   }
   const accepted = await showConfirmPlan({
     kicker: "CHANGE · confirmation",
-    title: "Déployer la plateforme « " + p.id + " »",
-    detail: "Cible " + t.user + "@" + t.host + ". N services, aucun port public. Rien ne part sans confirmation.",
+    title: svc
+      ? "Déployer « " + svc + " » (plateforme " + p.id + ")"
+      : "Déployer la plateforme « " + p.id + " »",
+    detail: svc
+      ? "Cible " + t.user + "@" + t.host + ". Un seul service rebuild ; les autres restent. Rien ne part sans confirmation."
+      : "Cible " + t.user + "@" + t.host + ". N services, aucun port public. Rien ne part sans confirmation.",
     actions: plan.actions || [],
     warnings: plan.warnings || [],
     canProceed: plan.canProceed !== false,
@@ -3111,53 +3602,96 @@ async function deployPlatform(p) {
     setStatus("Déploiement plateforme annulé.", "ok");
     return;
   }
-  const steps = (plan.actions || []).slice(0, 5);
+  const title = svc ? "Plateforme — " + p.id + " / " + svc : "Plateforme — " + p.id;
   showBusy({
     risk: "CHANGE",
-    title: "Plateforme — " + p.id,
+    title: title,
     detail: "Clones + builds sur " + t.user + "@" + t.host + ". Jusqu’à 20 minutes. Ne ferme pas cette page.",
-    steps: steps.length ? steps : ["Cloner", "Build", "Traefik"],
+    steps: DEPLOY_BUSY_STEPS,
     currentStep: 0,
   });
-  setStatus("Déploiement de la plateforme " + p.id + "…");
+  setStatus(svc
+    ? "Déploiement de " + p.id + " / " + svc + "…"
+    : "Déploiement de la plateforme " + p.id + "…");
   try {
+    const body = {
+      id: p.id,
+      host: t.host,
+      port: t.port,
+      user: t.user,
+      confirm: true,
+    };
+    if (svc) body.service = svc;
     const r = await fetch("/api/v1/platforms/deploy", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: p.id,
-        host: t.host,
-        port: t.port,
-        user: t.user,
-        confirm: true,
-      }),
+      body: JSON.stringify(body),
     });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || r.statusText);
-    paint(j.snapshot, j.report, "ssh");
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 409 || j.code === "DEPLOY_BUSY") {
+      throw new Error(j.error || "Un déploiement est déjà en cours sur ce serveur.");
+    }
+    if (!r.ok && r.status !== 202) throw new Error(j.error || r.statusText);
+    refreshDeployLockBanner();
+    let done = j;
+    if (j.jobId) {
+      setStatus((svc ? p.id + "/" + svc : p.id) + " : lancé sur le serveur (suivi…)");
+      done = await pollLongJob(j.jobId, (tick) => {
+        const elapsedMs = Date.now() - busyStartedAt;
+        const elapsed = formatElapsed(elapsedMs);
+        const tip = tick.progress ? String(tick.progress) : "";
+        const step = deployBusyStep(tip, elapsedMs);
+        const phase = DEPLOY_BUSY_STEPS[step] || DEPLOY_BUSY_STEPS[0];
+        const note = tick.error
+          ? "Suivi réseau interrompu (« " + tick.error + " ») — on réessaie. " + elapsed
+          : "Phase : " + phase + " — " + elapsed
+            + (tip ? " [" + tip + "]" : "");
+        updateBusy({
+          currentStep: step,
+          steps: DEPLOY_BUSY_STEPS,
+          detail: "Cible " + t.user + "@" + t.host + ". " + note,
+        });
+      });
+      done = Object.assign({}, done.result || {}, { jobId: j.jobId });
+    }
+    if (done.snapshot) paint(done.snapshot, done.report, "ssh");
     const elapsed = formatElapsed(Date.now() - busyStartedAt);
     hideBusy();
-    const firstUrl = (p.services && p.services[0]) ? platPublicUrl(p, p.services[0]) : "";
-    setStatus(p.id + " : plateforme déployée.", "ok");
+    refreshDeployLockBanner();
+    const linkSvc = svc
+      ? (p.services || []).find((s) => s.id === svc)
+      : (p.services && p.services[0]);
+    const firstUrl = linkSvc ? platPublicUrl(p, linkSvc) : "";
+    setStatus(svc
+      ? p.id + " / " + svc + " : déployé."
+      : p.id + " : plateforme déployée.", "ok");
     showResult({
       ok: true,
       kicker: "CHANGE · réussi",
-      title: "Plateforme " + p.id + " déployée",
-      detail: "Plan exécuté en " + elapsed + ". HTTPS "
+      title: svc
+        ? "Service " + svc + " déployé (« " + p.id + " »)"
+        : "Plateforme " + p.id + " déployée",
+      detail: "Plan exécuté en " + elapsed + ". Un e-mail a été tenté si les alertes du VPS sont configurées. HTTPS "
         + (p.routing === "path" ? "par chemins (un DNS)." : "par sous-domaines."),
       link: firstUrl,
-      next: "DNS wildcard vers le VPS si ce n’est pas du sslip. Redis/MariaDB doivent déjà être SKIP si tu les as cochés.",
+      next: "Voir aussi le menu Activité. Redis/MariaDB doivent déjà être SKIP si tu les as cochés.",
     });
+    loadJournal();
   } catch (e) {
     hideBusy();
+    refreshDeployLockBanner();
     setStatus("Plateforme « " + p.id + " » échouée — vois la fenêtre.", "err");
     showResult({
       ok: false,
       kicker: "CHANGE · échec",
-      title: p.id + " n’a pas abouti",
+      title: (svc ? p.id + " / " + svc : p.id) + " n’a pas abouti",
       detail: e.message,
-      next: "Lis Cause / Où / À faire. Chaque service doit avoir un Dockerfile (racine ou sous-dossier).",
+      next: /Déployer [a-z0-9-]+/.test(e.message || "")
+        ? "Suis la ligne « À faire » : en général un seul bouton « Déployer <service> », pas « Tout déployer »."
+        : "Lis Cause / Où / À faire. Si un seul service a cassé : corrige son dépôt, puis « Déployer <service> » seulement.",
     });
+    loadJournal();
   }
 }
 
@@ -3178,6 +3712,7 @@ async function savePlatform() {
       services,
       aliases: ($("platAliases") ? $("platAliases").value : "")
         .split(/[\s,;]+/).map((a) => a.trim()).filter(Boolean),
+      retainSources: !$("platRetainSources") || $("platRetainSources").checked,
     };
     const idx = list.findIndex((p) => p.id === (platEditingId || spec.id));
     if (idx >= 0) list[idx] = spec;
@@ -3308,6 +3843,19 @@ function journeyCurrent(done) {
   return s ? s.id : "done";
 }
 
+/**
+ * Classes du stepper : « current » = étape affichée (carte), pas le prochain trou du parcours.
+ * Exposée pour les probes (ne pas casser : data/online affichés doivent être .current).
+ */
+function journeyStepFlags(stepId, { showing, current, done, viewing }) {
+  const isShowing = stepId === showing;
+  return {
+    done: !!done[stepId],
+    current: isShowing,
+    next: !isShowing && stepId === current && !!viewing,
+  };
+}
+
 function renderJourney() {
   if (!$("journey") || !journey.snapshot) return;
   const done = journeyDone();
@@ -3330,9 +3878,15 @@ function renderJourney() {
   JOURNEY_STEPS.forEach((s) => {
     const li = document.createElement("li");
     li.textContent = s.label;
-    if (done[s.id]) li.classList.add("done");
-    if (s.id === current) li.classList.add("current");
-    if (s.id === showing && journey.viewing) li.classList.add("viewing");
+    li.dataset.step = s.id;
+    const flags = journeyStepFlags(s.id, { showing, current, done, viewing: journey.viewing });
+    if (flags.done) li.classList.add("done");
+    if (flags.current) li.classList.add("current");
+    if (flags.next) li.classList.add("next");
+    if (flags.current) li.setAttribute("aria-current", "step");
+    li.title = flags.current
+      ? "Étape affichée"
+      : (s.id === current ? "Prochaine étape du parcours" : (flags.done ? "Terminée — cliquer pour revoir" : "À faire"));
     li.addEventListener("click", () => {
       journey.viewing = s.id === current ? "" : s.id;
       renderJourney();
@@ -3805,6 +4359,50 @@ if ($("platServices") && !$("platServices").children.length) {
   addPlatServiceRow({ id: "www", port: 3000, needs: [] });
   syncPlatRoutingHint();
 }
-loadRuntime().then(restoreLastSession).then(loadStack).catch(() => {
-  setStatus("API injoignable.", "err");
-});
+
+/**
+ * Profil platform (ADR-046) :
+ * accueil + aide = publics ; cockpit = login obligatoire.
+ */
+async function ensurePlatformSession() {
+  try {
+    const h = await fetch("/api/v1/health").then((r) => r.json());
+    if ($("phasePill") && h.version) $("phasePill").textContent = "v" + h.version;
+    if (h.role !== "platform") return { platform: false, loggedIn: true };
+    const me = await fetch("/api/v1/platform/auth/me", { credentials: "same-origin" });
+    let meBody = {};
+    try { meBody = await me.clone().json(); } catch (_) { /* ignore */ }
+    if (!me.ok && meBody.code === "SESSION_EXPIRED") {
+      window.__notifySessionExpired(meBody.error || "Session expirée. Reconnectez-vous.");
+      throw new Error("Connexion requise");
+    }
+    const loggedIn = me.ok;
+    const view = currentView();
+    if (!loggedIn && (view === "cockpit" || view === "activity")) {
+      location.href = "/login.html?reason=required&next="
+        + encodeURIComponent(location.pathname + location.search + location.hash);
+      throw new Error("Connexion requise");
+    }
+    const loginLink = document.getElementById("navLogin");
+    if (loginLink) {
+      loginLink.textContent = loggedIn ? "Mon compte" : "Connexion";
+      loginLink.href = loggedIn ? "/admin.html" : "/login.html";
+    }
+    return { platform: true, loggedIn };
+  } catch (e) {
+    if (e && e.message === "Connexion requise") throw e;
+    return { platform: false, loggedIn: true };
+  }
+}
+
+ensurePlatformSession()
+  .then((session) => {
+    if (session && session.platform && !session.loggedIn) {
+      return; // accueil / aide publics : pas d’appels API protégés
+    }
+    return loadRuntime().then(restoreLastSession).then(loadStack);
+  })
+  .catch((e) => {
+    if (e && e.message === "Connexion requise") return;
+    setStatus("API injoignable.", "err");
+  });

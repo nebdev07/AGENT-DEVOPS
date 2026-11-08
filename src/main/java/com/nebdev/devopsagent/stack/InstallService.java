@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class InstallService {
@@ -86,9 +87,52 @@ public class InstallService {
             throw new IllegalStateException("Analyse SSH réelle requise. Aucune fixture n’est utilisée.");
         }
         StackIntentStore.Intent intent = stackIntentStore.loadIntent();
-        Map<String, List<String>> details = StackPresence.subtract(intent.details(), StackPresence.of(snap));
-        ServerProfile profile = serverProfiles.of(target.host());
-        InstallPlan plan = InstallPlanBuilder.build(snap, new LinkedHashSet<>(intent.enabled()), details, profile);
+        return applyResolved(componentId, target, snap, new LinkedHashSet<>(intent.enabled()), intent.details(),
+                serverProfiles.of(target.host()));
+    }
+
+    /**
+     * Pile voulue de l'instance ({@code stack-intent.json}) : utilisée par le SaaS, qui ne laisse pas les
+     * organisations modifier ce fichier global (ADR-047).
+     */
+    public StackIntentStore.Intent instanceIntent() throws IOException {
+        return stackIntentStore.loadIntent();
+    }
+
+    public ServerProfile profileOf(String host) throws IOException {
+        return serverProfiles.of(host);
+    }
+
+    /**
+     * Plan d'un composant sur un snapshot donné, avec pile et détails explicites (sans lire l'état local).
+     * Utilisé par le SaaS pour un plan déterministe, puis recalculé à l'identique juste avant l'exécution.
+     */
+    public static InstallPlan.InstallAction planComponent(String componentId, ServerSnapshot snap, Set<String> wanted,
+                                                         Map<String, List<String>> intentDetails, ServerProfile profile) {
+        Map<String, List<String>> details = StackPresence.subtract(intentDetails, StackPresence.of(snap));
+        Set<String> enabled = new LinkedHashSet<>(wanted);
+        enabled.add(componentId);
+        InstallPlan plan = InstallPlanBuilder.build(snap, enabled, details, profile);
+        return plan.actions().stream().filter(a -> a.id().equals(componentId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Composant inconnu: " + componentId));
+    }
+
+    /** Script exact qui sera envoyé (pour hacher le plan : un script modifié invalide l'approbation). */
+    public static String scriptFor(String componentId, ServerSnapshot snap, Map<String, List<String>> intentDetails,
+                                   ServerProfile profile) {
+        Map<String, List<String>> details = StackPresence.subtract(intentDetails, StackPresence.of(snap));
+        List<String> selected = profile.roleDetails(componentId, details.getOrDefault(componentId, List.of()));
+        return RoleScript.load(componentId, selected);
+    }
+
+    /** Cœur de {@link #apply} avec un snapshot frais et une pile explicite (SaaS). CHANGE déjà approuvé en amont. */
+    public ApplyResult applyResolved(String componentId, SshTarget target, ServerSnapshot snap, Set<String> wanted,
+                                     Map<String, List<String>> intentDetails, ServerProfile profile) throws IOException {
+        actionGuard.assertConfirmedChange(actionName(componentId), true);
+        forbiddenTargetGuard.assertAllowed(target.host());
+        Map<String, List<String>> details = StackPresence.subtract(intentDetails, StackPresence.of(snap));
+        // Pas d'ajout implicite : la console locale refuse un composant non coché (comportement d'origine).
+        InstallPlan plan = InstallPlanBuilder.build(snap, new LinkedHashSet<>(wanted), details, profile);
         InstallPlan.InstallAction action = plan.actions().stream()
                 .filter(a -> a.id().equals(componentId))
                 .findFirst()

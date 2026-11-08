@@ -5,6 +5,7 @@ import com.nebdev.devopsagent.discovery.model.LiveSnapshot;
 import com.nebdev.devopsagent.discovery.model.ServerSnapshot;
 import com.nebdev.devopsagent.risk.ActionGuard;
 import com.nebdev.devopsagent.risk.ForbiddenTargetGuard;
+import com.nebdev.devopsagent.ssh.LongJobTracker;
 import com.nebdev.devopsagent.ssh.RemoteJobRunner;
 import com.nebdev.devopsagent.ssh.SshTarget;
 import com.nebdev.devopsagent.state.StateStore;
@@ -29,6 +30,7 @@ public class PlatformDeployService {
     private final ActionGuard actionGuard;
     private final ForbiddenTargetGuard forbiddenTargetGuard;
     private final RemoteJobRunner jobRunner;
+    private final LongJobTracker longJobs;
     private final DiscoveryService discoveryService;
     private final GitDeployKeyStore gitDeployKeyStore;
     private final ServerProfiles serverProfiles;
@@ -40,6 +42,7 @@ public class PlatformDeployService {
             ActionGuard actionGuard,
             ForbiddenTargetGuard forbiddenTargetGuard,
             RemoteJobRunner jobRunner,
+            LongJobTracker longJobs,
             DiscoveryService discoveryService,
             GitDeployKeyStore gitDeployKeyStore,
             ServerProfiles serverProfiles
@@ -51,6 +54,7 @@ public class PlatformDeployService {
         this.actionGuard = actionGuard;
         this.forbiddenTargetGuard = forbiddenTargetGuard;
         this.jobRunner = jobRunner;
+        this.longJobs = longJobs;
         this.discoveryService = discoveryService;
         this.gitDeployKeyStore = gitDeployKeyStore;
     }
@@ -59,12 +63,49 @@ public class PlatformDeployService {
         return planService.plan(platformId);
     }
 
-    public DiscoveryService.DiscoveryResult deploy(String platformId, SshTarget target, boolean confirmed)
+    public AppDeployPlan plan(String platformId, String serviceId) throws IOException {
+        return planService.plan(platformId, serviceId);
+    }
+
+    /**
+     * Résultat d’un déploiement : découverte post-déploiement + journal brut du rôle
+     * (pour le rapport d’activité : {@code CLONED=…}, services réellement poussés).
+     */
+    public record DeployOutcome(DiscoveryService.DiscoveryResult discovery, String rawLog) {}
+
+    public DeployOutcome deploy(String platformId, SshTarget target, boolean confirmed)
+            throws IOException {
+        return deploy(platformId, target, confirmed, null);
+    }
+
+    /**
+     * @param serviceId optionnel — redeploy d’un seul service (V7-07)
+     */
+    public DeployOutcome deploy(String platformId, SshTarget target, boolean confirmed, String serviceId)
             throws IOException {
         actionGuard.assertConfirmedChange("deploy-platform", confirmed);
         forbiddenTargetGuard.assertAllowed(target.host());
         ServerSnapshot snap = snapshotFor(target.host());
         ServerProfile profile = serverProfiles.of(target.host());
+        PlatformSpec platform = store.require(platformId);
+        Map<String, String> gitKeys = new LinkedHashMap<>();
+        PlatformServiceSpec only = PlatformDeployPlanService.resolveOnly(platform, serviceId);
+        List<PlatformServiceSpec> targets = only == null ? platform.services() : List.of(only);
+        for (PlatformServiceSpec s : targets) {
+            if (GitUrls.ssh(s.gitUrl())) {
+                gitKeys.put(GitDeployKeyStore.keyId(s.gitUrl()), gitDeployKeyStore.privateKeyBase64(s.gitUrl()));
+            }
+        }
+        return deployResolved(platform, snap, target, profile, serviceId, gitKeys, longJobs::reportProgress);
+    }
+
+    /**
+     * Cœur d'exécution réutilisable (console locale et moteur SaaS). Les gardes confirm/cible
+     * restent dans {@link #deploy} ; le SaaS s'appuie sur Operation/Approval.
+     */
+    public DeployOutcome deployResolved(PlatformSpec platform, ServerSnapshot snap, SshTarget target,
+                                        ServerProfile profile, String serviceId, Map<String, String> gitKeys,
+                                        java.util.function.Consumer<String> progress) throws IOException {
         if (snap == null || !LiveSnapshot.isLive(snap)) {
             throw new IllegalStateException(OperatorMessage.of(
                     "pas d’analyse SSH réelle en mémoire.",
@@ -95,54 +136,43 @@ public class PlatformDeployService {
                     "Déployer plateforme — Compte deploy",
                     "installe le compte deploy, puis Déployer."));
         }
-        PlatformSpec platform = store.require(platformId);
-        if (PlatformCompose.needsRedis(platform) && (snap.redis() == null || !snap.redis().present())) {
+        PlatformServiceSpec only = PlatformDeployPlanService.resolveOnly(platform, serviceId);
+        List<PlatformServiceSpec> targets = only == null ? platform.services() : List.of(only);
+        boolean needRedis = only != null
+                ? only.needs().contains("redis")
+                : PlatformCompose.needsRedis(platform);
+        boolean needDb = only != null
+                ? only.needs().contains("mariadb")
+                : PlatformCompose.needsDb(platform);
+        if (needRedis && (snap.redis() == null || !snap.redis().present())) {
             throw new IllegalStateException(OperatorMessage.of(
                     "cette plateforme exige Redis, absent sur le VPS.",
                     "Déployer plateforme — Redis",
                     "installe Redis (Installations), puis Déployer."));
         }
-        if (PlatformCompose.needsDb(platform) && (snap.mariadb() == null || !snap.mariadb().present())) {
+        if (needDb && (snap.mariadb() == null || !snap.mariadb().present())) {
             throw new IllegalStateException(OperatorMessage.of(
                     "cette plateforme exige MariaDB, absente sur le VPS.",
                     "Déployer plateforme — MariaDB",
                     "installe MariaDB, puis Déployer."));
         }
-        AppDeployPlan plan = planService.plan(platformId);
+        AppDeployPlan plan = planService.plan(platform, serviceId);
         if (!plan.canProceed()) {
             throw new IllegalStateException(OperatorMessage.of(
                     plan.blocker() == null ? "plan bloqué." : plan.blocker(),
                     "Popup confirmation — plateforme",
                     "corrige les Dockerfile Git, Enregistrer, puis Déployer."));
         }
-        Map<String, String> gitKeys = new LinkedHashMap<>();
-        for (PlatformServiceSpec s : platform.services()) {
-            if (GitUrls.ssh(s.gitUrl())) {
-                gitKeys.put(GitDeployKeyStore.keyId(s.gitUrl()), gitDeployKeyStore.privateKeyBase64(s.gitUrl()));
-            }
-        }
-        String script = RoleScript.loadPlatform(platform, gitKeys, profile);
+        Map<String, String> keys = gitKeys == null ? Map.of() : gitKeys;
+        String script = RoleScript.loadPlatform(platform, keys, profile, only == null ? null : only.id());
+        String onlyId = only == null ? null : only.id();
         String raw;
         try {
-            raw = jobRunner.run(script, target, DEPLOY_TIMEOUT_SECONDS);
+            raw = jobRunner.run(script, target, DEPLOY_TIMEOUT_SECONDS, progress == null ? s -> {} : progress);
         } catch (IOException e) {
-            AppSpec dummy = AppSpec.normalized(
-                    platform.id(),
-                    platform.services().get(0).gitUrl(),
-                    platform.services().get(0).gitRef(),
-                    platform.services().get(0).hostname(),
-                    platform.services().get(0).port()
-            );
-            throw AppRemoteFailure.unknown(e, dummy);
+            throw AppRemoteFailure.unknownPlatform(e, platform, onlyId);
         }
-        AppSpec dummy = AppSpec.normalized(
-                platform.id(),
-                platform.services().get(0).gitUrl(),
-                platform.services().get(0).gitRef(),
-                platform.services().get(0).hostname(),
-                platform.services().get(0).port()
-        );
-        AppRemoteFailure.throwIfKnown(raw, dummy);
+        AppRemoteFailure.throwIfKnownPlatform(raw, platform, onlyId);
         if (raw.contains("NEED_REDIS")) {
             throw new IllegalStateException(OperatorMessage.of(
                     "Redis exigé mais conteneur redis absent au moment du script.",
@@ -161,6 +191,12 @@ public class PlatformDeployService {
                     "Déployer plateforme",
                     "ré-enregistre la plateforme, puis Déployer."));
         }
+        if (raw.contains("NEED_SERVICE")) {
+            throw new IllegalStateException(OperatorMessage.of(
+                    "service ciblé absent du manifeste distant.",
+                    "Déployer plateforme — service",
+                    "vérifie l’id du service dans la fiche plateforme, Enregistrer, puis Déployer."));
+        }
         if (!raw.contains("PLATFORM_DEPLOYED")) {
             String excerpt = raw.replace('\n', ' ').strip();
             if (excerpt.length() > 180) {
@@ -168,14 +204,15 @@ public class PlatformDeployService {
             }
             throw new IllegalStateException(OperatorMessage.of(
                     "le script s’est arrêté sans PLATFORM_DEPLOYED.",
-                    "Déployer plateforme — " + platform.id(),
+                    "Déployer plateforme — " + platform.id()
+                            + (only != null ? " / " + only.id() : ""),
                     "vérifie clones et builds. Extrait : " + excerpt));
         }
         DiscoveryService.DiscoveryResult discovery = discoveryService.discoverRemote(target);
-        for (PlatformServiceSpec s : platform.services()) {
+        for (PlatformServiceSpec s : targets) {
             PublicReachability.checkHttpsUrl(PlatformCompose.publicUrl(platform, s, profile));
         }
-        return discovery;
+        return new DeployOutcome(discovery, raw);
     }
 
     public record ServiceStatus(String service, String url, int httpCode, boolean online) {}

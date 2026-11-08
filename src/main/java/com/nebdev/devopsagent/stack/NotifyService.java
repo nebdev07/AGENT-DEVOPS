@@ -64,6 +64,26 @@ public class NotifyService {
         return new Outcome("REMOVED", false, null, status(target));
     }
 
+    /**
+     * Envoi d’un message via les alertes déjà posées sur le VPS (déploiement, rapport d’activité).
+     * Ne pose aucun secret ; échoue clairement si les alertes ne sont pas configurées.
+     */
+    public Outcome announce(SshTarget target, String kind, String subject, String body) throws IOException {
+        forbiddenTargetGuard.assertAllowed(target.host());
+        String raw = run(RoleScript.loadNotify(Notifications.Mode.MESSAGE, null, kind, subject, body), target);
+        return new Outcome("MESSAGE", raw.contains("NOTIFY_SENT"), Notifications.sendError(raw), status(target));
+    }
+
+    /** Best-effort : pas d’exception si les alertes sont absentes ou si l’envoi échoue. */
+    public boolean tryAnnounce(SshTarget target, String kind, String subject, String body) {
+        try {
+            Outcome o = announce(target, kind, subject, body);
+            return o.testOk();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private String run(String script, SshTarget target) throws IOException {
         String raw;
         try {

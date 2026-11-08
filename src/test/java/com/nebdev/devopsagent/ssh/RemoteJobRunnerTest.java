@@ -159,6 +159,10 @@ class RemoteJobRunnerTest {
                 .contains("setsid nohup")
                 .contains("rm -f ./script.sh")
                 .contains("umask 077");
-        assertThat(RemoteJobRunner.load("scripts/job-poll.sh")).contains("JOB_LOST").contains("kill -0");
+        assertThat(RemoteJobRunner.load("scripts/job-poll.sh"))
+                .contains("JOB_LOST")
+                .contains("kill -0")
+                .contains("BUILD_START")
+                .contains("CLONED=");
     }
 }

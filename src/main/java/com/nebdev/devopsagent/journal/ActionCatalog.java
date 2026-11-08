@@ -59,6 +59,7 @@ public final class ActionCatalog {
             case "POST /api/v1/notify" -> new Action("Alertes e-mail configurées sur le serveur", Risk.CHANGE);
             case "POST /api/v1/notify/test" -> new Action("Alerte d’essai envoyée", Risk.CHANGE);
             case "POST /api/v1/notify/remove" -> new Action("Alertes e-mail retirées du serveur", Risk.CHANGE);
+            case "POST /api/v1/journal/mail" -> new Action("Rapport d’activité envoyé par e-mail", Risk.CHANGE);
             case "PUT /api/v1/platforms" -> new Action("Liste des plateformes enregistrée", Risk.LOCAL);
             case "DELETE /api/v1/platforms" -> new Action("Plateforme retirée de la liste", Risk.LOCAL);
             case "POST /api/v1/apps/deploy" -> new Action("Déploiement d’une application", Risk.CHANGE);

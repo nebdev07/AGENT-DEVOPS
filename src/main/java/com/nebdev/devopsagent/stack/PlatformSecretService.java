@@ -57,20 +57,35 @@ public class PlatformSecretService {
                        SshTarget target, boolean confirmed) throws IOException {
         PlatformSecrets.requireName(name);
         PlatformSecrets.requireValue(value);
-        return apply(PlatformSecrets.Mode.SET, platformId, serviceId, name, value, restart, target, confirmed);
+        actionGuard.assertConfirmedChange("set-platform-secret", confirmed);
+        forbiddenTargetGuard.assertAllowed(target.host());
+        return applyResolved(PlatformSecrets.Mode.SET, store.require(platformId), serviceId, name, value, restart, target);
     }
 
     public Outcome unset(String platformId, String serviceId, String name, boolean restart,
                          SshTarget target, boolean confirmed) throws IOException {
         PlatformSecrets.requireName(name);
-        return apply(PlatformSecrets.Mode.UNSET, platformId, serviceId, name, null, restart, target, confirmed);
-    }
-
-    private Outcome apply(PlatformSecrets.Mode mode, String platformId, String serviceId, String name, String value,
-                          boolean restart, SshTarget target, boolean confirmed) throws IOException {
         actionGuard.assertConfirmedChange("set-platform-secret", confirmed);
         forbiddenTargetGuard.assertAllowed(target.host());
-        PlatformSpec platform = store.require(platformId);
+        return applyResolved(PlatformSecrets.Mode.UNSET, store.require(platformId), serviceId, name, null, restart, target);
+    }
+
+    /** Cœur réutilisable (console locale et moteur SaaS). */
+    public Outcome setResolved(PlatformSpec platform, String serviceId, String name, String value, boolean restart,
+                               SshTarget target) throws IOException {
+        PlatformSecrets.requireName(name);
+        PlatformSecrets.requireValue(value);
+        return applyResolved(PlatformSecrets.Mode.SET, platform, serviceId, name, value, restart, target);
+    }
+
+    public Outcome unsetResolved(PlatformSpec platform, String serviceId, String name, boolean restart,
+                                 SshTarget target) throws IOException {
+        PlatformSecrets.requireName(name);
+        return applyResolved(PlatformSecrets.Mode.UNSET, platform, serviceId, name, null, restart, target);
+    }
+
+    private Outcome applyResolved(PlatformSecrets.Mode mode, PlatformSpec platform, String serviceId, String name,
+                                  String value, boolean restart, SshTarget target) throws IOException {
         String sid = serviceId == null ? "" : serviceId.strip();
         boolean known = platform.services().stream().anyMatch(s -> s.id().equals(sid));
         if (!known) {

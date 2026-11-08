@@ -40,7 +40,8 @@ public class PlatformIntentStore {
         }
         List<PlatformSpec> out = new ArrayList<>();
         for (PlatformSpec p : raw.platforms()) {
-            out.add(PlatformSpec.normalized(p.id(), p.baseDomain(), p.routing(), p.services(), p.aliases(), null));
+            out.add(PlatformSpec.normalized(p.id(), p.baseDomain(), p.routing(), p.services(), p.aliases(),
+                    p.retainSources(), null));
         }
         return List.copyOf(out);
     }
@@ -66,7 +67,8 @@ public class PlatformIntentStore {
         if (platforms != null) {
             for (PlatformSpec p : platforms) {
                 List<PlatformServiceSpec> services = unmaskSecrets(p, previous);
-                PlatformSpec n = PlatformSpec.normalized(p.id(), p.baseDomain(), p.routing(), services, p.aliases(), vpsIp);
+                PlatformSpec n = PlatformSpec.normalized(p.id(), p.baseDomain(), p.routing(), services, p.aliases(),
+                        p.retainSources(), vpsIp);
                 for (PlatformServiceSpec s : n.services()) {
                     if (n.pathRouting()) {
                         if (hosts.contains(s.hostname())) {

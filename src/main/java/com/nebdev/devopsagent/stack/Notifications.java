@@ -25,7 +25,7 @@ public final class Notifications {
     private static final Pattern USER = Pattern.compile("^[A-Za-z0-9._%+@-]{1,128}$");
 
     public enum Mode {
-        SET("set"), TEST("test"), STATUS("status"), REMOVE("remove");
+        SET("set"), TEST("test"), STATUS("status"), REMOVE("remove"), MESSAGE("message");
 
         private final String script;
 
