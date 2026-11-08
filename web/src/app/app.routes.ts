@@ -1,8 +1,9 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/api';
 
-/** Chargement différé de chaque écran (directive §4). */
+/** Accueil public d'abord ; console derrière authGuard. */
 export const routes: Routes = [
+  { path: '', pathMatch: 'full', loadComponent: () => import('./pages/home').then(m => m.HomePage) },
   { path: 'login', loadComponent: () => import('./pages/auth').then(m => m.LoginPage) },
   { path: 'register', loadComponent: () => import('./pages/auth').then(m => m.RegisterPage) },
   {
@@ -10,7 +11,6 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./layout/shell').then(m => m.Shell),
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'servers' },
       { path: 'servers', loadComponent: () => import('./pages/servers').then(m => m.ServersPage) },
       { path: 'servers/:id', loadComponent: () => import('./pages/server-detail').then(m => m.ServerDetailPage) },
       { path: 'operations', loadComponent: () => import('./pages/operations').then(m => m.OperationsPage) },

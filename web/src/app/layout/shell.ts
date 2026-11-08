@@ -8,7 +8,10 @@ import { I18n, Lang, TPipe } from '../core/i18n';
   imports: [RouterOutlet, RouterLink, RouterLinkActive, TPipe],
   template: `
     <header class="top">
-      <strong class="brand">{{ 'app.title' | t }}</strong>
+      <a class="site-brand" routerLink="/">
+        <span class="mark" aria-hidden="true"></span>
+        <strong class="brand">{{ 'app.title' | t }}</strong>
+      </a>
       @if (auth.orgs().length) {
         <select aria-label="Organization" [value]="auth.orgId()" (change)="switch($any($event.target).value)">
           @for (o of auth.orgs(); track o.id) { <option [value]="o.id">{{ o.name }}</option> }
@@ -52,7 +55,7 @@ export class Shell {
 
   async logout() {
     await this.auth.logout();
-    this.router.navigateByUrl('/login');
+    this.router.navigateByUrl('/');
   }
 }
 
