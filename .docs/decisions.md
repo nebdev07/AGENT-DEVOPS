@@ -640,4 +640,4 @@
   2. **Fail-closed** : un compte non administrateur limité à certains serveurs n'est pas repris (le rôle SaaS couvre toute l'organisation) ; il est listé pour une invitation manuelle.
   3. Serveurs depuis les rattachements ; empreinte d'hôte à reconfirmer (ancien format MD5) ; clé SSH de l'instance reprise si `AUTOPILOT_MIGRATION_SSH_PRIVATE_KEY_FILE` est fourni.
   4. Non repris : sessions, liens magiques, journaux `state/journal` (à archiver). MFA à activer par le personnel.
-- **Plan de bascule de `autopilot.inovne.com`** (à faire, avec autorisation explicite) : sauvegarde de `state/` → SaaS déployé à côté → essai à blanc → lecture du rapport → application → reconfirmation des empreintes → bascule DNS/proxy → ancienne instance gardée arrêtée, pas supprimée.
+- **Plan de bascule de `autopilot.inovne.com`** : **fait 2026-11-08** (sauvegarde `state/` → dry-run → apply → Traefik sur stack SaaS → `app-vps-autopilot` arrêtée, non supprimée). Restent : reconfirmation des empreintes SSH, MFA personnel.
