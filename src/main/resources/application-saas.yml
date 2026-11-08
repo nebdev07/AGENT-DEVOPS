@@ -52,6 +52,8 @@ autopilot:
     session-hours: 12
     max-failed-logins: 10
     lockout-minutes: 15
+    # false seulement en lab / tests manuels (profils local|manual). Prod : laisser true.
+    staff-mfa-required: ${AUTOPILOT_STAFF_MFA_REQUIRED:true}
   operations:
     approval-ttl-minutes: 60
     proposal-ttl-hours: 24

@@ -1,0 +1,52 @@
+# Production publique (Traefik déjà sur le VPS) — ADR-057.
+# Déployé sous /opt/vps-autopilot/saas/ ; ne pas utiliser compose.lab.yml.
+# Le control plane rejoint le réseau Docker « proxy » (Traefik) ; aucun port hôte publié.
+name: vps-autopilot-saas
+
+services:
+  db:
+    networks: [internal]
+
+  control-plane:
+    # Compose ≥ 2.24 : retire le bind 127.0.0.1:8080 du compose de base (Traefik uniquement).
+    ports: !reset []
+    environment:
+      SPRING_PROFILES_ACTIVE: saas
+      AUTOPILOT_RUNNER_MODE: remote
+      AUTOPILOT_PUBLIC_URL: ${AUTOPILOT_PUBLIC_URL:-https://autopilot.inovne.com}
+      AUTOPILOT_STAFF_MFA_REQUIRED: "true"
+      AUTOPILOT_ALLOW_PRIVATE_TARGETS: "false"
+      AUTOPILOT_SWAGGER_UI: "false"
+      # Migration platform → saas (retirer après bascule réussie).
+      AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR: ${AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR:-}
+      AUTOPILOT_MIGRATION_APPLY: ${AUTOPILOT_MIGRATION_APPLY:-false}
+      AUTOPILOT_MIGRATION_ORGANIZATION_NAME: ${AUTOPILOT_MIGRATION_ORGANIZATION_NAME:-INOVNE}
+      AUTOPILOT_MIGRATION_REPORT_FILE: /app/data/saas-import-report.json
+    volumes:
+      - control-data:/app/data
+      - ${AUTOPILOT_MIGRATION_HOST_DIR:-/opt/vps-autopilot/saas/migration}:/migration:ro
+    networks: [internal, proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - vps.autopilot.app=vps-autopilot-saas
+      - traefik.http.routers.vps-autopilot-saas.rule=Host(`${AUTOPILOT_TRAEFIK_HOST:-autopilot.inovne.com}`)
+      - traefik.http.routers.vps-autopilot-saas.entrypoints=web
+      - traefik.http.routers.vps-autopilot-saas-secure.rule=Host(`${AUTOPILOT_TRAEFIK_HOST:-autopilot.inovne.com}`)
+      - traefik.http.routers.vps-autopilot-saas-secure.entrypoints=websecure
+      - traefik.http.routers.vps-autopilot-saas-secure.tls=true
+      - traefik.http.routers.vps-autopilot-saas-secure.tls.certresolver=le
+      - traefik.http.services.vps-autopilot-saas.loadbalancer.server.port=8080
+
+  runner:
+    networks: [internal, proxy]
+    environment:
+      AUTOPILOT_ALLOW_PRIVATE_TARGETS: "false"
+      AUTOPILOT_AGENT_ALLOW_INSECURE_HTTP: "true"
+
+volumes:
+  control-data:
+
+networks:
+  proxy:
+    external: true

@@ -1,0 +1,20 @@
+# Profil « local » — à combiner avec saas (groupe saas-local).
+# Usage : SPRING_PROFILES_ACTIVE=saas-local
+#   ou     docker compose -f docker-compose.yml -f compose.lab.yml --env-file .env.local up -d
+# Runner embedded, cibles privées OK, MFA staff assouplie, Swagger ouvert, e-mails journalisés.
+
+server.address: ${SERVER_ADDRESS:127.0.0.1}
+server.port: ${SERVER_PORT:8080}
+
+autopilot:
+  public-url: ${AUTOPILOT_PUBLIC_URL:http://127.0.0.1:8080}
+  auth:
+    staff-mfa-required: false
+  runner:
+    mode: embedded
+  servers:
+    allow-private-targets: true
+
+springdoc:
+  swagger-ui:
+    enabled: true

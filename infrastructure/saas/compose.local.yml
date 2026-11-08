@@ -1,0 +1,18 @@
+# Tests locaux — control plane seul, runner embedded (pas de conteneur runner).
+#   docker compose -f docker-compose.yml -f compose.local.yml -f compose.lab.yml --env-file .env.local up -d --build
+# Groupe Spring : saas-local (saas + local).
+name: vps-autopilot-saas-local
+
+services:
+  control-plane:
+    environment:
+      SPRING_PROFILES_ACTIVE: saas-local
+      AUTOPILOT_RUNNER_MODE: embedded
+      AUTOPILOT_STAFF_MFA_REQUIRED: "false"
+      AUTOPILOT_ALLOW_PRIVATE_TARGETS: "true"
+      AUTOPILOT_SWAGGER_UI: "true"
+      # Pas de clé runner publique en embedded.
+      AUTOPILOT_RUNNER_PUBLIC_KEY: ""
+      AUTOPILOT_RUNNER_TOKEN: ""
+  runner:
+    profiles: ["never"]

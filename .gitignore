@@ -39,5 +39,9 @@ web/.angular/
 web/dist/
 .local/
 infrastructure/saas/.env
+infrastructure/saas/.env.local
+infrastructure/saas/.env.manual
 infrastructure/saas/*.key
+infrastructure/saas/*.pub
+infrastructure/saas/migration/
 saas-import-report.json

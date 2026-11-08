@@ -3,6 +3,11 @@ server.port: 8088
 server.address: ${SERVER_ADDRESS:127.0.0.1}
 
 spring:
+  profiles:
+    group:
+      # Raccourcis : SPRING_PROFILES_ACTIVE=saas-local | saas-manual
+      saas-local: saas,local
+      saas-manual: saas,manual
   # Base de données, Flyway et comptes Spring Security : profil saas seulement (ADR-048).
   # La console locale, cargo et platform restent sans base (fichiers state/).
   autoconfigure:

@@ -1,0 +1,19 @@
+# Tests manuels / démo — runner séparé, cibles privées, Swagger.
+#   docker compose -f docker-compose.yml -f compose.manual.yml --env-file .env.manual up -d --build
+name: vps-autopilot-saas-manual
+
+services:
+  control-plane:
+    environment:
+      SPRING_PROFILES_ACTIVE: saas-manual
+      AUTOPILOT_RUNNER_MODE: remote
+      AUTOPILOT_STAFF_MFA_REQUIRED: "false"
+      AUTOPILOT_ALLOW_PRIVATE_TARGETS: "true"
+      AUTOPILOT_SWAGGER_UI: "true"
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-host.docker.internal}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-1025}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+  runner:
+    environment:
+      AUTOPILOT_ALLOW_PRIVATE_TARGETS: "true"
+    extra_hosts: ["host.docker.internal:host-gateway"]
