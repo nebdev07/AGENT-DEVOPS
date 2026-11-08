@@ -99,14 +99,11 @@ for i in $(seq 1 40); do
   sleep 2
 done
 
-MIGRATE_COMPOSE=(docker compose -f docker-compose.yml -f compose.prod.yml -f compose.migrate.yml --env-file "$SAAS/.env")
+# Migration : docker-compose + compose.migrate seulement (réseau internal+public, hostname db OK).
+MIGRATE_COMPOSE=(docker compose -f docker-compose.yml -f compose.migrate.yml --env-file "$SAAS/.env")
 
 run_migrate() {
   local apply_flag=$1
-  export AUTOPILOT_MIGRATION_APPLY="$apply_flag"
-  export AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=/migration/platform
-  export AUTOPILOT_MIGRATION_HOST_DIR="$SAAS/migration"
-  # Injecte dans un env temporaire pour compose
   local tmpenv
   tmpenv=$(mktemp)
   cp "$SAAS/.env" "$tmpenv"
@@ -119,10 +116,10 @@ run_migrate() {
     && sed -i "s|^AUTOPILOT_MIGRATION_HOST_DIR=.*|AUTOPILOT_MIGRATION_HOST_DIR=$SAAS/migration|" "$tmpenv" \
     || echo "AUTOPILOT_MIGRATION_HOST_DIR=$SAAS/migration" >> "$tmpenv"
 
-  local mc=(docker compose -f docker-compose.yml -f compose.prod.yml -f compose.migrate.yml --env-file "$tmpenv")
+  local mc=(docker compose -f docker-compose.yml -f compose.migrate.yml --env-file "$tmpenv")
   "${mc[@]}" stop control-plane runner 2>/dev/null || true
   "${mc[@]}" rm -f control-plane 2>/dev/null || true
-  "${mc[@]}" up -d control-plane
+  "${mc[@]}" up -d db control-plane
   rm -f "$tmpenv"
 
   for i in $(seq 1 90); do
