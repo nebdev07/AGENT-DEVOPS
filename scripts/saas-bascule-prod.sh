@@ -99,39 +99,48 @@ for i in $(seq 1 40); do
   sleep 2
 done
 
-run_cp_once() {
+MIGRATE_COMPOSE=(docker compose -f docker-compose.yml -f compose.prod.yml -f compose.migrate.yml --env-file "$SAAS/.env")
+
+run_migrate() {
   local apply_flag=$1
-  local name=$2
-  docker rm -f "$name" >/dev/null 2>&1 || true
-  # Réseau interne seul + traefik.enable=false : ne pas voler autopilot.inovne.com pendant la migration.
-  docker compose -f docker-compose.yml -f compose.prod.yml --env-file "$SAAS/.env" run -d \
-    --name "$name" \
-    --network vps-autopilot-saas_internal \
-    -p 127.0.0.1:18080:8080 \
-    -l traefik.enable=false \
-    -e AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=/migration/platform \
-    -e AUTOPILOT_MIGRATION_APPLY="$apply_flag" \
-    -e AUTOPILOT_MIGRATION_REPORT_FILE=/app/data/saas-import-report.json \
-    -e AUTOPILOT_MIGRATION_ORGANIZATION_NAME=INOVNE \
-    -v "$SAAS/migration:/migration:ro" \
-    -v vps-autopilot-saas_control-data:/app/data \
-    --no-deps \
-    control-plane
+  export AUTOPILOT_MIGRATION_APPLY="$apply_flag"
+  export AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=/migration/platform
+  export AUTOPILOT_MIGRATION_HOST_DIR="$SAAS/migration"
+  # Injecte dans un env temporaire pour compose
+  local tmpenv
+  tmpenv=$(mktemp)
+  cp "$SAAS/.env" "$tmpenv"
+  grep -q '^AUTOPILOT_MIGRATION_APPLY=' "$tmpenv" && sed -i "s/^AUTOPILOT_MIGRATION_APPLY=.*/AUTOPILOT_MIGRATION_APPLY=$apply_flag/" "$tmpenv" \
+    || echo "AUTOPILOT_MIGRATION_APPLY=$apply_flag" >> "$tmpenv"
+  grep -q '^AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=' "$tmpenv" \
+    && sed -i 's|^AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=.*|AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=/migration/platform|' "$tmpenv" \
+    || echo "AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=/migration/platform" >> "$tmpenv"
+  grep -q '^AUTOPILOT_MIGRATION_HOST_DIR=' "$tmpenv" \
+    && sed -i "s|^AUTOPILOT_MIGRATION_HOST_DIR=.*|AUTOPILOT_MIGRATION_HOST_DIR=$SAAS/migration|" "$tmpenv" \
+    || echo "AUTOPILOT_MIGRATION_HOST_DIR=$SAAS/migration" >> "$tmpenv"
+
+  local mc=(docker compose -f docker-compose.yml -f compose.prod.yml -f compose.migrate.yml --env-file "$tmpenv")
+  "${mc[@]}" stop control-plane runner 2>/dev/null || true
+  "${mc[@]}" rm -f control-plane 2>/dev/null || true
+  "${mc[@]}" up -d control-plane
+  rm -f "$tmpenv"
+
   for i in $(seq 1 90); do
     if curl -sf http://127.0.0.1:18080/actuator/health 2>/dev/null | grep -q UP; then
       return 0
     fi
     sleep 2
   done
-  echo "Timeout santé $name"
-  docker logs "$name" 2>&1 | tail -100
+  echo "Timeout santé control-plane (migrate)"
+  "${MIGRATE_COMPOSE[@]}" logs --tail=100 control-plane || true
   return 1
 }
 
 echo "==> 6. Migration essai à blanc"
-run_cp_once false saas-migrate-cp
-sleep 3
-docker cp saas-migrate-cp:/app/data/saas-import-report.json "$BACKUP/saas-import-report-dry.json" 2>/dev/null || \
+run_migrate false
+sleep 4
+CP_ID=$("${MIGRATE_COMPOSE[@]}" ps -q control-plane)
+docker cp "$CP_ID:/app/data/saas-import-report.json" "$BACKUP/saas-import-report-dry.json" 2>/dev/null || \
   echo "    (rapport dry-run absent — vérifier les logs)"
 if [[ -f "$BACKUP/saas-import-report-dry.json" ]]; then
   echo "    Rapport : $BACKUP/saas-import-report-dry.json"
@@ -146,22 +155,21 @@ if [[ "$APPLY" != "true" ]]; then
 fi
 
 echo "==> 7. Migration APPLY"
-docker rm -f saas-migrate-cp >/dev/null 2>&1 || true
-run_cp_once true saas-migrate-cp
-sleep 3
-docker cp saas-migrate-cp:/app/data/saas-import-report.json "$BACKUP/saas-import-report-apply.json" 2>/dev/null || true
-docker rm -f saas-migrate-cp >/dev/null 2>&1 || true
+run_migrate true
+sleep 4
+CP_ID=$("${MIGRATE_COMPOSE[@]}" ps -q control-plane)
+docker cp "$CP_ID:/app/data/saas-import-report.json" "$BACKUP/saas-import-report-apply.json" 2>/dev/null || true
+"${MIGRATE_COMPOSE[@]}" stop control-plane 2>/dev/null || true
+"${MIGRATE_COMPOSE[@]}" rm -f control-plane 2>/dev/null || true
 
 echo "==> 8. Stop ancienne instance platform (conservée, restart désactivé)"
 docker update --restart=no "$OLD" >/dev/null
 docker stop "$OLD"
 
 echo "==> 9. Démarre SaaS derrière Traefik"
-# Pas de variables migration sur le service long-running
-sed -i 's/^AUTOPILOT_MIGRATION_APPLY=.*/AUTOPILOT_MIGRATION_APPLY=false/' .env
-sed -i 's|^AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=.*|AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=|' .env
+sed -i 's/^AUTOPILOT_MIGRATION_APPLY=.*/AUTOPILOT_MIGRATION_APPLY=false/' "$SAAS/.env"
+sed -i 's|^AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=.*|AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR=|' "$SAAS/.env"
 "${COMPOSE[@]}" up -d
-
 echo "    Attente https://autopilot.inovne.com …"
 for i in $(seq 1 60); do
   if curl -sf https://autopilot.inovne.com/actuator/health 2>/dev/null | grep -q UP; then break; fi

@@ -1,0 +1,18 @@
+# One-shot migration (dry-run / apply) — pas de Traefik, port local seulement.
+#   docker compose -f docker-compose.yml -f compose.prod.yml -f compose.migrate.yml --env-file .env up -d control-plane
+services:
+  control-plane:
+    ports: !reset
+      - "127.0.0.1:18080:8080"
+    networks: !reset
+      - internal
+    labels: !reset
+      - traefik.enable=false
+    environment:
+      AUTOPILOT_MIGRATION_PLATFORM_STATE_DIR: /migration/platform
+      AUTOPILOT_MIGRATION_REPORT_FILE: /app/data/saas-import-report.json
+    volumes:
+      - ${AUTOPILOT_MIGRATION_HOST_DIR:-./migration}:/migration:ro
+      - control-data:/app/data
+  runner:
+    profiles: ["never"]
