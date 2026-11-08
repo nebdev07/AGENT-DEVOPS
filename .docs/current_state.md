@@ -1,7 +1,7 @@
 # État actuel — VPS Autopilot
 
 > Distinguer spécifié vs implémenté.  
-> Dernière mise à jour : 2026-11-07
+> Dernière mise à jour : 2026-11-08
 
 ## Spécifié
 
@@ -63,7 +63,8 @@ Spécifié par la directive SaaS et l'audit `saas/audit-trajectoire-saas.md` ; d
 - **2026-11-08 (suite 2)** : Deploy keys Git (`git_credential` V4 + API + runner scellé) ; `PLATFORM_SQL_READ` / `PLATFORM_SQL_WRITE` + UI.
 - **2026-11-08 (suite 3)** : staging one-shot (`operation_staging` V5) ; `RESTORE_PLATFORM` / `SET_PLATFORM_SECRET` / `UNSET_PLATFORM_SECRET` ; UI restore + secrets.
 - **Testé en réel (2026-11-08)** sur le lab SSH local (`vps-autopilot-lab`, conteneur Ubuntu 24.04, port 2222) avec control plane en remote et runner dans un processus séparé : empreinte lue = empreinte du serveur, analyse réussie (B 77/100), **rotation de clé réelle** (ancienne retirée de `authorized_keys`, nouvelle posée, analyse suivante réussie avec la nouvelle), chaîne d'audit intacte, e-mails reçus par MailHog local. `INSTALL_SECURITY` échoue dans ce conteneur (`ufw-init` sans privilèges réseau) : limite du lab, échec correctement remonté.
-- **Pas encore fait** : deploy / restore réels BIZ-02 ; bascule `autopilot.inovne.com` → `saas` (autorisation) ; paiement réel ; CI GitHub jamais exécutée sur remote ; e2e navigateur. Prod publique = toujours profil `platform`.
+- **Bascule prod (2026-11-08)** : `https://autopilot.inovne.com` sert le profil **`saas`** (health UP, `/app/` 200, OpenAPI `/api/v2/openapi` 200). Stack Docker `vps-autopilot-saas` (PostgreSQL + control-plane + runner) derrière Traefik ; `app-vps-autopilot` (platform) Exited, conservée. Import ADR-057 appliqué (org INOVNE, owner `nebdev07@gmail.com`). Profils de test : `saas-local` / `saas-manual` + scripts `saas-*-up.ps1`.
+- **Pas encore fait** : deploy / restore réels BIZ-02 ; MFA personnel post-migration ; reconfirmation empreintes SSH ; paiement réel ; e2e navigateur.
 
 ## Non implémenté
 
